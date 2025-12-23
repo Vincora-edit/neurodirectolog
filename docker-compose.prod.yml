@@ -12,8 +12,8 @@ services:
       - clickhouse_data:/var/lib/clickhouse
       - ./clickhouse/migrations:/docker-entrypoint-initdb.d
     ports:
-      - "8123:8123"
-      - "9000:9000"
+      - "8124:8123"
+      - "9001:9000"
     restart: unless-stopped
     networks:
       - neurodirectolog-network
