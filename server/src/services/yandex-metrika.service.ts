@@ -68,6 +68,9 @@ export const yandexMetrikaService = {
       // Parse response
       const results: MetrikaCampaignData[] = [];
 
+      // Загружаем названия целей один раз для всех данных
+      const goalNamesCache = await this.getGoalNames(metrikaToken, counterId, goalIds);
+
       data.data.forEach((row: any) => {
         const dimensions = row.dimensions;
         const metrics = row.metrics;
@@ -80,7 +83,7 @@ export const yandexMetrikaService = {
         goalIds.forEach((goalId, index) => {
           goals.push({
             goalId,
-            goalName: `Goal ${goalId}`,
+            goalName: goalNamesCache.get(goalId) || `Goal ${goalId}`,
             visits: 0,
             reaches: metrics[index + 1] || 0,
           });
@@ -119,6 +122,40 @@ export const yandexMetrikaService = {
     } catch (error: any) {
       console.error('Metrika Goals API Error:', error.response?.data || error.message);
       return [];
+    }
+  },
+
+  /**
+   * Получить названия целей по их ID
+   */
+  async getGoalNames(metrikaToken: string, counterId: string, goalIds: string[]): Promise<Map<string, string>> {
+    const goalNames = new Map<string, string>();
+
+    try {
+      const goals = await this.getCounterGoals(metrikaToken, counterId);
+
+      goals.forEach((goal: any) => {
+        const goalId = String(goal.id);
+        if (goalIds.includes(goalId)) {
+          goalNames.set(goalId, goal.name || `Goal ${goalId}`);
+        }
+      });
+
+      // Для целей, которые не нашлись, добавляем дефолтные имена
+      goalIds.forEach(goalId => {
+        if (!goalNames.has(goalId)) {
+          goalNames.set(goalId, `Goal ${goalId}`);
+        }
+      });
+
+      return goalNames;
+    } catch (error) {
+      console.error('Failed to fetch goal names:', error);
+      // Возвращаем дефолтные имена для всех целей
+      goalIds.forEach(goalId => {
+        goalNames.set(goalId, `Goal ${goalId}`);
+      });
+      return goalNames;
     }
   },
 

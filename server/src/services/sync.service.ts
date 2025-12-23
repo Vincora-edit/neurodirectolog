@@ -173,6 +173,7 @@ export const syncService = {
         ctr: parseFloat(row.Ctr) || 0,
         avgCpc: parseFloat(row.AvgCpc) || 0,
         avgCpm: parseFloat(row.AvgCpm) || 0,
+        bounceRate: parseFloat(row.BounceRate) || 0,
 
         // Измерения
         device: row.Device || undefined,
@@ -316,10 +317,33 @@ export const syncService = {
   async syncAllConnections(): Promise<void> {
     console.log('[Sync] Starting sync for all connections');
 
-    // TODO: Получить все активные подключения из БД
-    // Пока что эта функция будет вызываться из cron job
-    // и будет синхронизировать только те подключения, которые есть в БД
+    try {
+      // Получаем все активные подключения из ClickHouse
+      const connections = await clickhouseService.getAllActiveConnections();
 
-    console.log('[Sync] Sync completed for all connections');
+      if (!connections || connections.length === 0) {
+        console.log('[Sync] No active connections found');
+        return;
+      }
+
+      console.log(`[Sync] Found ${connections.length} active connection(s)`);
+
+      // Синхронизируем каждое подключение последовательно
+      for (const connection of connections) {
+        try {
+          console.log(`[Sync] Syncing connection ${connection.id} (${connection.login})`);
+          await this.syncConnection(connection.id);
+          console.log(`[Sync] Successfully synced connection ${connection.id}`);
+        } catch (error) {
+          console.error(`[Sync] Failed to sync connection ${connection.id}:`, error);
+          // Продолжаем синхронизацию других подключений даже если одно упало
+        }
+      }
+
+      console.log('[Sync] Completed sync for all connections');
+    } catch (error) {
+      console.error('[Sync] Failed to sync all connections:', error);
+      throw error;
+    }
   },
 };

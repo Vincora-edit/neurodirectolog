@@ -3,12 +3,17 @@ import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
 import fs from 'fs';
 import path from 'path';
+import Joi from 'joi';
 import { createError } from '../middleware/errorHandler';
 
 const router = Router();
 
-// JWT Secret (fallback для production)
-const JWT_SECRET = process.env.JWT_SECRET || 'neurodirectolog-secret-key-2024';
+// JWT Secret - ОБЯЗАТЕЛЬНАЯ переменная окружения
+const JWT_SECRET = process.env.JWT_SECRET;
+
+if (!JWT_SECRET) {
+  throw new Error('FATAL: JWT_SECRET environment variable must be set');
+}
 
 // Файловое хранилище пользователей
 const USERS_FILE = path.join(process.cwd(), 'data', 'users.json');
@@ -56,16 +61,29 @@ if (users.length === 0) {
   console.log('✅ Admin user created: admin@neurodirectolog.ru / admin123');
 }
 
+// Validation schemas
+const registerSchema = Joi.object({
+  email: Joi.string().email().required(),
+  password: Joi.string().min(8).max(100).required(),
+  name: Joi.string().min(2).max(100).required(),
+});
+
+const loginSchema = Joi.object({
+  email: Joi.string().email().required(),
+  password: Joi.string().required(),
+});
+
 /**
  * Регистрация нового пользователя
  */
 router.post('/register', async (req, res, next) => {
   try {
-    const { email, password, name } = req.body;
-
-    if (!email || !password || !name) {
-      throw createError('Email, password and name are required', 400);
+    const { error, value } = registerSchema.validate(req.body);
+    if (error) {
+      throw createError(error.details[0].message, 400);
     }
+
+    const { email, password, name } = value;
 
     const existingUser = users.find(u => u.email === email);
     if (existingUser) {
@@ -111,11 +129,12 @@ router.post('/register', async (req, res, next) => {
  */
 router.post('/login', async (req, res, next) => {
   try {
-    const { email, password } = req.body;
-
-    if (!email || !password) {
-      throw createError('Email and password are required', 400);
+    const { error, value } = loginSchema.validate(req.body);
+    if (error) {
+      throw createError(error.details[0].message, 400);
     }
+
+    const { email, password } = value;
 
     const user = users.find(u => u.email === email);
     if (!user) {

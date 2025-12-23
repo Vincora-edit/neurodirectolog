@@ -1,6 +1,9 @@
 import cron from 'node-cron';
 import { syncService } from '../services/sync.service';
 
+// Mutex для предотвращения параллельных синхронизаций
+let isSyncRunning = false;
+
 /**
  * Cron job для автоматической синхронизации данных из Яндекс.Директ и Метрики
  * Запускается каждые 30 минут
@@ -8,12 +11,21 @@ import { syncService } from '../services/sync.service';
 export function startSyncJob() {
   // Запуск каждые 30 минут
   cron.schedule('*/30 * * * *', async () => {
+    if (isSyncRunning) {
+      console.log('[Cron] Sync already running, skipping this run');
+      return;
+    }
+
+    isSyncRunning = true;
     console.log('[Cron] Starting scheduled sync job');
+
     try {
       await syncService.syncAllConnections();
       console.log('[Cron] Scheduled sync completed successfully');
     } catch (error) {
       console.error('[Cron] Scheduled sync failed:', error);
+    } finally {
+      isSyncRunning = false;
     }
   });
 

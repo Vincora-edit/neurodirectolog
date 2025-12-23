@@ -97,6 +97,7 @@ export interface CampaignPerformance {
   ctr: number;
   avgCpc: number;
   avgCpm: number;
+  bounceRate?: number;
   avgClickPosition?: number;
   avgImpressionPosition?: number;
 
@@ -169,7 +170,7 @@ export const clickhouseService = {
     const result = await client.query({
       query: `
         SELECT *
-        FROM yandex_direct_connections
+        FROM yandex_direct_connections FINAL
         WHERE id = {connectionId:String}
         ORDER BY created_at DESC
         LIMIT 1
@@ -198,12 +199,40 @@ export const clickhouseService = {
     };
   },
 
+  async getAllActiveConnections(): Promise<YandexDirectConnection[]> {
+    const result = await client.query({
+      query: `
+        SELECT *
+        FROM yandex_direct_connections FINAL
+        WHERE status = 'active'
+        ORDER BY created_at DESC
+      `,
+      format: 'JSONEachRow',
+    });
+
+    const rows = await result.json<any>();
+    return rows.map((row: any) => ({
+      id: row.id,
+      userId: row.user_id,
+      projectId: row.project_id,
+      login: row.login,
+      accessToken: row.access_token,
+      refreshToken: row.refresh_token,
+      metrikaCounterId: row.metrika_counter_id,
+      metrikaToken: row.metrika_token,
+      conversionGoals: row.conversion_goals,
+      status: row.status,
+      lastSyncAt: new Date(row.last_sync_at),
+      createdAt: new Date(row.created_at),
+    }));
+  },
+
   async getConnectionByProjectId(projectId: string): Promise<YandexDirectConnection | null> {
     console.log('[getConnectionByProjectId] Looking for projectId:', projectId);
     const result = await client.query({
       query: `
         SELECT *
-        FROM yandex_direct_connections
+        FROM yandex_direct_connections FINAL
         WHERE project_id = {projectId:String}
         ORDER BY created_at DESC
         LIMIT 1
@@ -235,6 +264,42 @@ export const clickhouseService = {
       lastSyncAt: new Date(row.last_sync_at),
       createdAt: new Date(row.created_at),
     };
+  },
+
+  /**
+   * Получить все подключения для проекта (поддержка мультиаккаунтности)
+   */
+  async getConnectionsByProjectId(projectId: string): Promise<YandexDirectConnection[]> {
+    console.log('[getConnectionsByProjectId] Looking for projectId:', projectId);
+    const result = await client.query({
+      query: `
+        SELECT *
+        FROM yandex_direct_connections FINAL
+        WHERE project_id = {projectId:String}
+        AND status = 'active'
+        ORDER BY created_at DESC
+      `,
+      query_params: { projectId },
+      format: 'JSONEachRow',
+    });
+
+    const rows = await result.json<any>();
+    console.log('[getConnectionsByProjectId] Found rows:', rows.length);
+
+    return rows.map((row: any) => ({
+      id: row.id,
+      userId: row.user_id,
+      projectId: row.project_id,
+      login: row.login,
+      accessToken: row.access_token,
+      refreshToken: row.refresh_token,
+      metrikaCounterId: row.metrika_counter_id,
+      metrikaToken: row.metrika_token,
+      conversionGoals: row.conversion_goals,
+      status: row.status,
+      lastSyncAt: new Date(row.last_sync_at),
+      createdAt: new Date(row.created_at),
+    }));
   },
 
   async updateConnectionTokens(connectionId: string, accessToken: string, refreshToken: string): Promise<void> {
@@ -358,6 +423,33 @@ export const clickhouseService = {
   // Campaign Stats
   async insertCampaignStats(stats: Omit<CampaignStats, 'id'>[]): Promise<void> {
     if (stats.length === 0) return;
+
+    // 1. Определяем диапазон дат и connection_id для удаления дубликатов
+    const connectionId = stats[0].connectionId;
+    const dates = stats.map(s => s.date);
+    const minDate = dates.sort()[0];
+    const maxDate = dates.sort().reverse()[0];
+
+    console.log(`[ClickHouse] Deleting existing campaign stats for ${connectionId} from ${minDate} to ${maxDate}`);
+
+    // 2. УДАЛЯЕМ старые данные перед вставкой новых (предотвращение дубликатов)
+    try {
+      await client.command({
+        query: `
+          ALTER TABLE campaign_stats
+          DELETE WHERE connection_id = {connectionId:String}
+            AND date >= {minDate:Date}
+            AND date <= {maxDate:Date}
+        `,
+        query_params: { connectionId, minDate, maxDate },
+      });
+      console.log(`[ClickHouse] Deleted old campaign stats`);
+    } catch (error) {
+      console.error(`[ClickHouse] Failed to delete old stats, continuing with insert:`, error);
+    }
+
+    // 3. Вставляем свежие данные
+    console.log(`[ClickHouse] Inserting ${stats.length} campaign stats records`);
 
     const values = stats.map(s => ({
       id: uuidv4(),
@@ -542,6 +634,34 @@ export const clickhouseService = {
   async insertCampaignPerformance(records: CampaignPerformance[]): Promise<void> {
     if (records.length === 0) return;
 
+    // 1. Определяем диапазон дат и connection_id для удаления дубликатов
+    const connectionId = records[0].connectionId;
+    const dates = records.map(r => r.date);
+    const minDate = dates.sort()[0];
+    const maxDate = dates.sort().reverse()[0];
+
+    console.log(`[ClickHouse] Deleting existing performance data for ${connectionId} from ${minDate} to ${maxDate}`);
+
+    // 2. УДАЛЯЕМ старые данные перед вставкой новых (предотвращение дубликатов)
+    try {
+      await client.command({
+        query: `
+          ALTER TABLE campaign_performance
+          DELETE WHERE connection_id = {connectionId:String}
+            AND date >= {minDate:Date}
+            AND date <= {maxDate:Date}
+        `,
+        query_params: {
+          connectionId,
+          minDate,
+          maxDate,
+        },
+      });
+      console.log(`[ClickHouse] Deleted old performance data`);
+    } catch (error) {
+      console.error(`[ClickHouse] Failed to delete old data, continuing with insert:`, error);
+    }
+
     console.log(`[ClickHouse] Inserting ${records.length} campaign performance records`);
 
     const values = records.map(r => ({
@@ -563,6 +683,7 @@ export const clickhouseService = {
       ctr: r.ctr,
       avg_cpc: r.avgCpc,
       avg_cpm: r.avgCpm,
+      bounce_rate: r.bounceRate || 0,
       avg_click_position: r.avgClickPosition || null,
       avg_impression_position: r.avgImpressionPosition || null,
 
@@ -601,6 +722,34 @@ export const clickhouseService = {
   // Campaign Conversions (новая таблица конверсий)
   async insertCampaignConversions(conversions: CampaignConversion[]): Promise<void> {
     if (conversions.length === 0) return;
+
+    // 1. Определяем диапазон дат и connection_id для удаления дубликатов
+    const connectionId = conversions[0].connectionId;
+    const dates = conversions.map(c => c.date);
+    const minDate = dates.sort()[0];
+    const maxDate = dates.sort().reverse()[0];
+
+    console.log(`[ClickHouse] Deleting existing conversion data for ${connectionId} from ${minDate} to ${maxDate}`);
+
+    // 2. УДАЛЯЕМ старые данные перед вставкой новых (предотвращение дубликатов)
+    try {
+      await client.command({
+        query: `
+          ALTER TABLE campaign_conversions
+          DELETE WHERE connection_id = {connectionId:String}
+            AND date >= {minDate:Date}
+            AND date <= {maxDate:Date}
+        `,
+        query_params: {
+          connectionId,
+          minDate,
+          maxDate,
+        },
+      });
+      console.log(`[ClickHouse] Deleted old conversion data`);
+    } catch (error) {
+      console.error(`[ClickHouse] Failed to delete old conversions, continuing with insert:`, error);
+    }
 
     console.log(`[ClickHouse] Inserting ${conversions.length} conversion records`);
 
@@ -645,7 +794,8 @@ export const clickhouseService = {
         sum(clicks) as total_clicks,
         sum(cost) as total_cost,
         avg(ctr) as avg_ctr,
-        avg(avg_cpc) as avg_cpc
+        avg(avg_cpc) as avg_cpc,
+        avg(bounce_rate) as avg_bounce_rate
       FROM campaign_performance
       WHERE connection_id = {connectionId:String}
         AND date >= {startDate:Date}
@@ -726,6 +876,7 @@ export const clickhouseService = {
         totalCost,
         avgCtr: parseFloat(row.avg_ctr),
         avgCpc: parseFloat(row.avg_cpc),
+        avgBounceRate: parseFloat(row.avg_bounce_rate) || 0,
         totalConversions,
         totalRevenue,
         conversionRate: totalConversions > 0 && parseInt(row.total_clicks) > 0
@@ -766,5 +917,101 @@ export const clickhouseService = {
     }));
     console.log('[getAvailableGoals] Returning:', result);
     return result;
+  },
+
+  // Удалить подключение
+  async deleteConnection(connectionId: string): Promise<void> {
+    console.log('[deleteConnection] Deleting connection:', connectionId);
+
+    // Удаляем связанные данные
+    await client.command({
+      query: 'DELETE FROM campaign_performance WHERE connection_id = {connectionId:String}',
+      query_params: { connectionId },
+    });
+
+    await client.command({
+      query: 'DELETE FROM campaign_conversions WHERE connection_id = {connectionId:String}',
+      query_params: { connectionId },
+    });
+
+    await client.command({
+      query: 'DELETE FROM search_queries WHERE connection_id = {connectionId:String}',
+      query_params: { connectionId },
+    });
+
+    await client.command({
+      query: 'DELETE FROM ad_contents WHERE connection_id = {connectionId:String}',
+      query_params: { connectionId },
+    });
+
+    // Удаляем само подключение
+    await client.command({
+      query: 'DELETE FROM yandex_direct_connections WHERE id = {connectionId:String}',
+      query_params: { connectionId },
+    });
+
+    console.log('[deleteConnection] Connection deleted successfully');
+  },
+
+  // Обновить подключение
+  async updateConnection(connectionId: string, updates: {
+    accessToken?: string;
+    refreshToken?: string;
+    conversionGoals?: string;
+    metrikaCounterId?: string;
+    metrikaToken?: string;
+  }): Promise<void> {
+    console.log('[updateConnection] Updating connection:', connectionId);
+
+    // Получаем текущие данные
+    const existing = await this.getConnectionById(connectionId);
+    if (!existing) {
+      throw new Error('Connection not found');
+    }
+
+    // В ReplacingMergeTree вставляем новую версию записи
+    await client.insert({
+      table: 'yandex_direct_connections',
+      values: [{
+        id: connectionId,
+        user_id: existing.userId,
+        project_id: existing.projectId,
+        login: existing.login,
+        access_token: updates.accessToken || existing.accessToken,
+        refresh_token: updates.refreshToken || existing.refreshToken,
+        metrika_counter_id: updates.metrikaCounterId !== undefined ? updates.metrikaCounterId : existing.metrikaCounterId,
+        metrika_token: updates.metrikaToken !== undefined ? updates.metrikaToken : existing.metrikaToken,
+        conversion_goals: updates.conversionGoals !== undefined ? updates.conversionGoals : existing.conversionGoals,
+        status: existing.status,
+        last_sync_at: formatDate(existing.lastSyncAt),
+        created_at: formatDate(new Date()),
+      }],
+      format: 'JSONEachRow',
+    });
+
+    console.log('[updateConnection] Connection updated successfully');
+  },
+
+  // Получить доступные цели для подключения
+  async getAvailableGoalsForConnection(connectionId: string): Promise<Array<{ id: number; name: string }>> {
+    const result = await client.query({
+      query: `
+        SELECT DISTINCT
+          goal_id as id,
+          goal_name as name
+        FROM campaign_conversions FINAL
+        WHERE connection_id = {connectionId:String}
+        AND goal_id > 0
+        ORDER BY name
+      `,
+      query_params: { connectionId },
+      format: 'JSONEachRow',
+    });
+
+    const rows = await result.json<any>();
+    return rows.map((row: any) => ({
+      id: parseInt(row.id),
+      name: row.name || `Цель ${row.id}`,
+    }));
   },
 };

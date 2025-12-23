@@ -220,12 +220,23 @@ export interface Project {
   userId: string;
   name: string;
   brief: ProjectBrief;
+  // Полные данные модулей (используются при просмотре конкретного проекта)
   semantics?: any;
   creatives?: any;
   ads?: any;
   minusWords?: any;
   campaigns?: any;
   strategy?: any;
+  // Флаги наличия данных (используются в списке проектов для быстрой загрузки)
+  hasSemantics?: boolean;
+  hasCreatives?: boolean;
+  hasAds?: boolean;
+  hasCompleteAds?: boolean;
+  hasMinusWords?: boolean;
+  hasKeywordAnalysis?: boolean;
+  hasCampaigns?: boolean;
+  hasStrategy?: boolean;
+  hasAnalytics?: boolean;
   createdAt: Date;
   updatedAt: Date;
 }

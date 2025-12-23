@@ -36,10 +36,10 @@ router.post('/create', authenticate, async (req, res, next) => {
 /**
  * Получение списка проектов пользователя
  */
-router.get('/list', authenticate, async (req, res, next) => {
+router.get('/list', async (req, res, next) => {
   try {
-    const userId = (req as AuthRequest).userId;
-    const projects = projectStore.getByUserId(userId);
+    // Возвращаем все проекты (для демо режима без авторизации)
+    const projects = projectStore.getByUserIdLightweight('system');
 
     res.json({
       success: true,
@@ -121,11 +121,15 @@ router.delete('/:projectId', authenticate, async (req, res, next) => {
       throw createError('Project not found', 404);
     }
 
-    if (project.userId !== userId) {
+    if (project.userId !== userId && project.userId !== 'system') {
       throw createError('Access denied', 403);
     }
 
-    projectStore.delete(projectId);
+    const deleted = projectStore.delete(projectId);
+
+    if (!deleted) {
+      throw createError('Cannot delete default project', 400);
+    }
 
     res.json({
       success: true,

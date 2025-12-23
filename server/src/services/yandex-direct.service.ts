@@ -269,6 +269,7 @@ export const yandexDirectService = {
       'Cost',
       'Ctr',
       'AvgCpc',
+      'BounceRate', // Процент отказов
       // AvgCpm - не поддерживается
       // AvgClickPosition, AvgImpressionPosition - не поддерживаются
 

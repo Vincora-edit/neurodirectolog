@@ -2,8 +2,12 @@ import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import { createError } from './errorHandler';
 
-// JWT Secret (должен совпадать с auth.ts)
-const JWT_SECRET = process.env.JWT_SECRET || 'neurodirectolog-secret-key-2024';
+// JWT Secret - ОБЯЗАТЕЛЬНАЯ переменная окружения
+const JWT_SECRET = process.env.JWT_SECRET;
+
+if (!JWT_SECRET) {
+  throw new Error('FATAL: JWT_SECRET environment variable must be set');
+}
 
 export interface AuthRequest extends Request {
   userId?: string;

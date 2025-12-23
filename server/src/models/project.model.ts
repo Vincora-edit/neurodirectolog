@@ -8,6 +8,9 @@ import path from 'path';
 
 const DATA_FILE = path.join(process.cwd(), 'data', 'projects.json');
 
+// ID дефолтного проекта, который нельзя удалить
+const DEFAULT_PROJECT_ID = 'default_bfl_finon';
+
 export interface ProjectBrief {
   // Основная информация
   businessName: string;
@@ -123,6 +126,7 @@ class ProjectStore {
 
   constructor() {
     this.loadFromFile();
+    this.ensureDefaultProject();
   }
 
   private loadFromFile(): void {
@@ -158,6 +162,37 @@ class ProjectStore {
     }
   }
 
+  private ensureDefaultProject(): void {
+    if (!this.projects.has(DEFAULT_PROJECT_ID)) {
+      const defaultProject: Project = {
+        id: DEFAULT_PROJECT_ID,
+        userId: 'system',
+        name: 'БФЛ Финон',
+        brief: {
+          businessName: 'БФЛ Финон',
+          niche: 'Финансовые услуги',
+          businessDescription: 'Тестовый проект для отладки и демонстрации возможностей платформы',
+          website: 'https://example.com',
+          geo: 'Россия',
+          advantages: ['Удобный интерфейс', 'Быстрая обработка заявок', 'Прозрачные условия'],
+          budget: {
+            total: 100000,
+            period: 'месяц',
+          },
+          goals: 'Увеличение количества заявок',
+          desires: 'Максимальная конверсия при минимальной стоимости лида',
+          targetCPA: 500,
+        },
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+
+      this.projects.set(DEFAULT_PROJECT_ID, defaultProject);
+      this.saveToFile();
+      console.log('✅ Created default project "БФЛ Финон"');
+    }
+  }
+
   create(userId: string, name: string, brief: ProjectBrief): Project {
     const project: Project = {
       id: this.generateId(),
@@ -178,7 +213,54 @@ class ProjectStore {
   }
 
   getByUserId(userId: string): Project[] {
-    return Array.from(this.projects.values()).filter(p => p.userId === userId);
+    // Возвращаем проекты пользователя + дефолтный проект для всех
+    return Array.from(this.projects.values()).filter(
+      p => p.userId === userId || p.id === DEFAULT_PROJECT_ID
+    );
+  }
+
+  /**
+   * Получить краткую информацию о проектах (без тяжелых данных модулей)
+   * Используется для списка проектов, чтобы избежать передачи больших объемов данных
+   */
+  getByUserIdLightweight(userId: string): Array<{
+    id: string;
+    userId: string;
+    name: string;
+    brief: ProjectBrief;
+    hasSemantics: boolean;
+    hasCreatives: boolean;
+    hasAds: boolean;
+    hasCompleteAds: boolean;
+    hasMinusWords: boolean;
+    hasKeywordAnalysis: boolean;
+    hasCampaigns: boolean;
+    hasStrategy: boolean;
+    hasAnalytics: boolean;
+    createdAt: Date;
+    updatedAt: Date;
+  }> {
+    const projects = Array.from(this.projects.values()).filter(
+      p => p.userId === userId || p.id === DEFAULT_PROJECT_ID
+    );
+
+    return projects.map(p => ({
+      id: p.id,
+      userId: p.userId,
+      name: p.name,
+      brief: p.brief,
+      hasSemantics: !!p.semantics,
+      hasCreatives: !!p.creatives,
+      hasAds: !!p.ads,
+      hasCompleteAds: !!p.completeAds,
+      hasMinusWords: !!p.minusWords,
+      hasKeywordAnalysis: !!p.keywordAnalysis,
+      hasCampaigns: !!p.campaigns,
+      hasStrategy: !!p.strategy,
+      hasAnalytics: !!p.analytics,
+      createdAt: p.createdAt,
+      updatedAt: p.updatedAt,
+    }));
   }
 
   update(id: string, updates: Partial<Project>): Project | undefined {
@@ -197,6 +279,12 @@ class ProjectStore {
   }
 
   delete(id: string): boolean {
+    // Запрещаем удаление дефолтного проекта
+    if (id === DEFAULT_PROJECT_ID) {
+      console.warn(`⚠️ Attempt to delete default project "${DEFAULT_PROJECT_ID}" blocked`);
+      return false;
+    }
+
     const result = this.projects.delete(id);
     if (result) this.saveToFile();
     return result;

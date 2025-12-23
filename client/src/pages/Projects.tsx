@@ -134,32 +134,32 @@ export default function Projects() {
 
               {/* Module Status */}
               <div className="flex items-center gap-2 flex-wrap">
-                {project.semantics && (
+                {(project.hasSemantics || project.semantics) && (
                   <span className="px-3 py-1 bg-green-100 text-green-800 rounded-full text-xs font-medium">
                     ✓ Семантика
                   </span>
                 )}
-                {project.creatives && (
+                {(project.hasCreatives || project.creatives) && (
                   <span className="px-3 py-1 bg-green-100 text-green-800 rounded-full text-xs font-medium">
                     ✓ Креативы
                   </span>
                 )}
-                {project.ads && (
+                {(project.hasAds || project.ads) && (
                   <span className="px-3 py-1 bg-green-100 text-green-800 rounded-full text-xs font-medium">
                     ✓ Объявления
                   </span>
                 )}
-                {project.minusWords && (
+                {(project.hasMinusWords || project.minusWords) && (
                   <span className="px-3 py-1 bg-green-100 text-green-800 rounded-full text-xs font-medium">
                     ✓ Минус-слова
                   </span>
                 )}
-                {project.campaigns && (
+                {(project.hasCampaigns || project.campaigns) && (
                   <span className="px-3 py-1 bg-green-100 text-green-800 rounded-full text-xs font-medium">
                     ✓ Кампании
                   </span>
                 )}
-                {project.strategy && (
+                {(project.hasStrategy || project.strategy) && (
                   <span className="px-3 py-1 bg-green-100 text-green-800 rounded-full text-xs font-medium">
                     ✓ Стратегия
                   </span>
