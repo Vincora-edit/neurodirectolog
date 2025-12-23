@@ -1,13 +1,13 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useMutation, useQuery } from '@tanstack/react-query';
-import { projectsService } from '../services/api';
+import { projectsService, API_BASE_URL } from '../services/api';
 import { Sparkles, AlertCircle, CheckCircle2, FolderOpen, Link as LinkIcon } from 'lucide-react';
 
 // API Service для Yandex подключения
 const yandexService = {
   async getAuthUrl() {
-    const response = await fetch('http://localhost:3001/api/yandex/auth-url');
+    const response = await fetch(`${API_BASE_URL}/api/yandex/auth-url`);
     return response.json();
   },
 
@@ -18,7 +18,7 @@ const yandexService = {
     metrikaToken?: string;
     conversionGoals?: string[];
   }) {
-    const response = await fetch('http://localhost:3001/api/yandex/connect', {
+    const response = await fetch(`${API_BASE_URL}/api/yandex/connect`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data),
@@ -34,7 +34,7 @@ const yandexService = {
 
   async getMetrikaGoals(counterId: string, token: string) {
     const response = await fetch(
-      `http://localhost:3001/api/yandex/metrika/goals/${counterId}?token=${encodeURIComponent(token)}`
+      `${API_BASE_URL}/api/yandex/metrika/goals/${counterId}?token=${encodeURIComponent(token)}`
     );
     return response.json();
   },

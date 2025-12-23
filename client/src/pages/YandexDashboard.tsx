@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
-import { projectsService } from '../services/api';
+import { projectsService, API_BASE_URL } from '../services/api';
 import {
   TrendingUp,
   TrendingDown,
@@ -20,23 +20,23 @@ import {
 // API Service для получения данных дашборда
 const dashboardService = {
   async getConnection(projectId: string) {
-    const response = await fetch(`http://localhost:3001/api/yandex/connection/${projectId}`);
+    const response = await fetch(`${API_BASE_URL}/api/yandex/connection/${projectId}`);
     if (!response.ok) return null;
     return response.json();
   },
 
   async getCampaigns(projectId: string) {
-    const response = await fetch(`http://localhost:3001/api/yandex/campaigns/${projectId}`);
+    const response = await fetch(`${API_BASE_URL}/api/yandex/campaigns/${projectId}`);
     return response.json();
   },
 
   async getStats(projectId: string, days: number = 30) {
-    const response = await fetch(`http://localhost:3001/api/yandex/stats/${projectId}?days=${days}`);
+    const response = await fetch(`${API_BASE_URL}/api/yandex/stats/${projectId}?days=${days}`);
     return response.json();
   },
 
   async getDetailedStats(projectId: string, days: number = 30, goalId?: string, startDate?: string, endDate?: string) {
-    let url = `http://localhost:3001/api/yandex/detailed-stats/${projectId}?`;
+    let url = `${API_BASE_URL}/api/yandex/detailed-stats/${projectId}?`;
 
     if (startDate && endDate) {
       url += `startDate=${startDate}&endDate=${endDate}`;
@@ -53,17 +53,17 @@ const dashboardService = {
   },
 
   async getAvailableGoals(projectId: string) {
-    const response = await fetch(`http://localhost:3001/api/yandex/available-goals/${projectId}`);
+    const response = await fetch(`${API_BASE_URL}/api/yandex/available-goals/${projectId}`);
     return response.json();
   },
 
   async getCampaignStats(campaignId: string, days: number = 30) {
-    const response = await fetch(`http://localhost:3001/api/yandex/campaign-stats/${campaignId}?days=${days}`);
+    const response = await fetch(`${API_BASE_URL}/api/yandex/campaign-stats/${campaignId}?days=${days}`);
     return response.json();
   },
 
   async syncManual(projectId: string) {
-    const response = await fetch(`http://localhost:3001/api/yandex/sync/${projectId}`, {
+    const response = await fetch(`${API_BASE_URL}/api/yandex/sync/${projectId}`, {
       method: 'POST',
     });
     return response.json();

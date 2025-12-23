@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useMutation, useQuery } from '@tanstack/react-query';
-import { projectsService } from '../services/api';
+import { projectsService, API_BASE_URL } from '../services/api';
 import { Sparkles, AlertCircle, CheckCircle2, FolderOpen, Key, User, ExternalLink } from 'lucide-react';
 
 const yandexService = {
@@ -11,7 +11,7 @@ const yandexService = {
     projectId: string;
     conversionGoals?: string[];
   }) {
-    const response = await fetch('http://localhost:3001/api/yandex/connect-simple', {
+    const response = await fetch(`${API_BASE_URL}/api/yandex/connect-simple`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data),

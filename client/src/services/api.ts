@@ -2,6 +2,9 @@ import axios from 'axios';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001/api';
 
+// Экспортируем базовый URL для использования в других файлах (без /api)
+export const API_BASE_URL = API_URL.replace(/\/api$/, '');
+
 export const api = axios.create({
   baseURL: API_URL,
   headers: {
