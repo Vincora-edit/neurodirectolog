@@ -1,0 +1,65 @@
+version: '3.8'
+
+services:
+  clickhouse:
+    image: clickhouse/clickhouse-server:latest
+    container_name: neurodirectolog-clickhouse
+    environment:
+      CLICKHOUSE_DB: neurodirectolog
+      CLICKHOUSE_USER: ${CLICKHOUSE_USER:-default}
+      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD}
+    volumes:
+      - clickhouse_data:/var/lib/clickhouse
+      - ./clickhouse/migrations:/docker-entrypoint-initdb.d
+    ports:
+      - "8123:8123"
+      - "9000:9000"
+    restart: unless-stopped
+    networks:
+      - neurodirectolog-network
+
+  server:
+    build:
+      context: ./server
+      dockerfile: Dockerfile
+    container_name: neurodirectolog-server
+    environment:
+      NODE_ENV: production
+      PORT: 3001
+      CLICKHOUSE_HOST: http://clickhouse:8123
+      CLICKHOUSE_USER: ${CLICKHOUSE_USER:-default}
+      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD}
+      CLICKHOUSE_DB: neurodirectolog
+      YANDEX_CLIENT_ID: ${YANDEX_CLIENT_ID}
+      YANDEX_CLIENT_SECRET: ${YANDEX_CLIENT_SECRET}
+      YANDEX_REDIRECT_URI: ${YANDEX_REDIRECT_URI}
+    ports:
+      - "3001:3001"
+    depends_on:
+      - clickhouse
+    restart: unless-stopped
+    networks:
+      - neurodirectolog-network
+
+  client:
+    build:
+      context: ./client
+      dockerfile: Dockerfile
+      args:
+        VITE_API_URL: ${VITE_API_URL:-http://localhost:3001}
+    container_name: neurodirectolog-client
+    ports:
+      - "80:80"
+    depends_on:
+      - server
+    restart: unless-stopped
+    networks:
+      - neurodirectolog-network
+
+volumes:
+  clickhouse_data:
+    driver: local
+
+networks:
+  neurodirectolog-network:
+    driver: bridge
