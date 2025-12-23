@@ -1,12 +1,60 @@
 import { Router } from 'express';
 import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
+import fs from 'fs';
+import path from 'path';
 import { createError } from '../middleware/errorHandler';
 
 const router = Router();
 
-// Временное хранилище пользователей (замените на БД)
-const users: any[] = [];
+// JWT Secret (fallback для production)
+const JWT_SECRET = process.env.JWT_SECRET || 'neurodirectolog-secret-key-2024';
+
+// Файловое хранилище пользователей
+const USERS_FILE = path.join(process.cwd(), 'data', 'users.json');
+
+// Загрузка пользователей из файла
+function loadUsers(): any[] {
+  try {
+    if (fs.existsSync(USERS_FILE)) {
+      const data = fs.readFileSync(USERS_FILE, 'utf-8');
+      return JSON.parse(data);
+    }
+  } catch (error) {
+    console.error('Error loading users:', error);
+  }
+  return [];
+}
+
+// Сохранение пользователей в файл
+function saveUsers(users: any[]): void {
+  try {
+    const dir = path.dirname(USERS_FILE);
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
+    }
+    fs.writeFileSync(USERS_FILE, JSON.stringify(users, null, 2), 'utf-8');
+  } catch (error) {
+    console.error('Error saving users:', error);
+  }
+}
+
+// Инициализация с админским пользователем
+let users = loadUsers();
+if (users.length === 0) {
+  // Создаем админа при первом запуске
+  const adminPassword = bcrypt.hashSync('admin123', 10);
+  users.push({
+    id: 'admin-1',
+    email: 'admin@neurodirectolog.ru',
+    password: adminPassword,
+    name: 'Администратор',
+    isAdmin: true,
+    createdAt: new Date()
+  });
+  saveUsers(users);
+  console.log('✅ Admin user created: admin@neurodirectolog.ru / admin123');
+}
 
 /**
  * Регистрация нового пользователя
@@ -34,10 +82,11 @@ router.post('/register', async (req, res, next) => {
     };
 
     users.push(user);
+    saveUsers(users);
 
     const token = jwt.sign(
       { userId: user.id },
-      process.env.JWT_SECRET!,
+      JWT_SECRET,
       { expiresIn: '7d' }
     );
 
@@ -80,7 +129,7 @@ router.post('/login', async (req, res, next) => {
 
     const token = jwt.sign(
       { userId: user.id },
-      process.env.JWT_SECRET!,
+      JWT_SECRET,
       { expiresIn: '7d' }
     );
 
