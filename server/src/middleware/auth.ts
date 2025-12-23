@@ -2,6 +2,9 @@ import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import { createError } from './errorHandler';
 
+// JWT Secret (должен совпадать с auth.ts)
+const JWT_SECRET = process.env.JWT_SECRET || 'neurodirectolog-secret-key-2024';
+
 export interface AuthRequest extends Request {
   userId?: string;
 }
@@ -18,7 +21,7 @@ export const authenticate = (
       throw createError('Authentication required', 401);
     }
 
-    const decoded = jwt.verify(token, process.env.JWT_SECRET!) as { userId: string };
+    const decoded = jwt.verify(token, JWT_SECRET) as { userId: string };
     req.userId = decoded.userId;
     next();
   } catch (error) {
