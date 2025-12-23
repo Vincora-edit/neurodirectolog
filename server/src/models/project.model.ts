@@ -277,7 +277,7 @@ class ProjectStore {
     this.saveToFile();
   }
 
-  saveAnalytics(projectId: string, analytics: { competitorAnalysis?: any; targetAudienceAnalysis?: any }): void {
+  saveAnalytics(projectId: string, analytics: any): void {
     const project = this.projects.get(projectId);
     if (!project) return;
 
