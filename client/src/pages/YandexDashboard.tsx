@@ -350,14 +350,14 @@ export default function YandexDashboard() {
     );
   }
 
-  // Вычисляем общую статистику
-  const totalStats = stats.reduce(
+  // Вычисляем общую статистику из hierarchical данных (campaigns)
+  const totalStats = campaigns.reduce(
     (acc: any, campaign: any) => ({
-      impressions: acc.impressions + campaign.totalImpressions,
-      clicks: acc.clicks + campaign.totalClicks,
-      cost: acc.cost + campaign.totalCost,
-      conversions: acc.conversions + campaign.totalConversions,
-      revenue: acc.revenue + campaign.totalRevenue,
+      impressions: acc.impressions + (campaign.totalImpressions || 0),
+      clicks: acc.clicks + (campaign.totalClicks || 0),
+      cost: acc.cost + (campaign.totalCost || 0),
+      conversions: acc.conversions + (campaign.totalConversions || 0),
+      revenue: acc.revenue + (campaign.totalRevenue || 0),
     }),
     { impressions: 0, clicks: 0, cost: 0, conversions: 0, revenue: 0 }
   );
