@@ -36,10 +36,13 @@ router.post('/create', authenticate, async (req, res, next) => {
 /**
  * Получение списка проектов пользователя
  */
-router.get('/list', async (req, res, next) => {
+router.get('/list', authenticate, async (req, res, next) => {
   try {
-    // Возвращаем все проекты (для демо режима без авторизации)
-    const projects = projectStore.getByUserIdLightweight('system');
+    const authReq = req as AuthRequest;
+    const userId = authReq.userId;
+    const isAdmin = authReq.isAdmin || false;
+    // Возвращаем проекты пользователя (админы видят все)
+    const projects = projectStore.getByUserIdLightweight(userId!, isAdmin);
 
     res.json({
       success: true,
@@ -128,7 +131,7 @@ router.delete('/:projectId', authenticate, async (req, res, next) => {
     const deleted = projectStore.delete(projectId);
 
     if (!deleted) {
-      throw createError('Cannot delete default project', 400);
+      throw createError('Project not found', 404);
     }
 
     res.json({

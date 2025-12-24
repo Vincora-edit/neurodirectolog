@@ -126,7 +126,8 @@ class ProjectStore {
 
   constructor() {
     this.loadFromFile();
-    this.ensureDefaultProject();
+    // Больше не создаём дефолтный проект автоматически
+    // this.ensureDefaultProject();
   }
 
   private loadFromFile(): void {
@@ -223,7 +224,7 @@ class ProjectStore {
    * Получить краткую информацию о проектах (без тяжелых данных модулей)
    * Используется для списка проектов, чтобы избежать передачи больших объемов данных
    */
-  getByUserIdLightweight(userId: string): Array<{
+  getByUserIdLightweight(userId: string, isAdmin: boolean = false): Array<{
     id: string;
     userId: string;
     name: string;
@@ -240,8 +241,9 @@ class ProjectStore {
     createdAt: Date;
     updatedAt: Date;
   }> {
+    // Админы видят все проекты, обычные пользователи - только свои
     const projects = Array.from(this.projects.values()).filter(
-      p => p.userId === userId || p.id === DEFAULT_PROJECT_ID
+      p => isAdmin || p.userId === userId || p.id === DEFAULT_PROJECT_ID
     );
 
     return projects.map(p => ({
@@ -279,12 +281,6 @@ class ProjectStore {
   }
 
   delete(id: string): boolean {
-    // Запрещаем удаление дефолтного проекта
-    if (id === DEFAULT_PROJECT_ID) {
-      console.warn(`⚠️ Attempt to delete default project "${DEFAULT_PROJECT_ID}" blocked`);
-      return false;
-    }
-
     const result = this.projects.delete(id);
     if (result) this.saveToFile();
     return result;

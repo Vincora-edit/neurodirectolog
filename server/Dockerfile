@@ -17,13 +17,11 @@ RUN npm run build
 # Удаляем devDependencies после сборки
 RUN npm prune --production
 
-# Создаем непривилегированного пользователя
-RUN addgroup -g 1000 appuser && \
-    adduser -D -u 1000 -G appuser appuser && \
-    chown -R appuser:appuser /app
+# Создаем непривилегированного пользователя (используем существующего node)
+RUN chown -R node:node /app
 
 # Переключаемся на непривилегированного пользователя
-USER appuser
+USER node
 
 # Открываем порт
 EXPOSE 3001

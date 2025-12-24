@@ -147,7 +147,7 @@ router.post('/login', async (req, res, next) => {
     }
 
     const token = jwt.sign(
-      { userId: user.id },
+      { userId: user.id, isAdmin: user.isAdmin || false },
       JWT_SECRET,
       { expiresIn: '7d' }
     );
@@ -158,7 +158,8 @@ router.post('/login', async (req, res, next) => {
         user: {
           id: user.id,
           email: user.email,
-          name: user.name
+          name: user.name,
+          isAdmin: user.isAdmin || false
         },
         token
       }

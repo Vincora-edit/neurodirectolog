@@ -3,6 +3,17 @@ import dotenv from 'dotenv';
 // ВАЖНО: Загружаем переменные окружения ПЕРВЫМ делом
 dotenv.config();
 
+// Graceful error handling - предотвращает падение сервера
+process.on('uncaughtException', (error) => {
+  console.error('❌ Uncaught Exception:', error);
+  // Даем время на логирование, потом перезапускаемся (Docker restart policy подхватит)
+  setTimeout(() => process.exit(1), 1000);
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('❌ Unhandled Rejection at:', promise, 'reason:', reason);
+});
+
 import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
@@ -23,6 +34,11 @@ import { startSyncJob } from './jobs/sync.job';
 
 const app = express();
 const PORT = process.env.PORT || 3001;
+
+// Health check - до всех middleware, чтобы работал без CORS
+app.get('/health', (req, res) => {
+  res.json({ status: 'ok', message: 'Neurodirectolog API is running', timestamp: new Date().toISOString() });
+});
 
 // Middleware
 const allowedOrigins = [
@@ -63,8 +79,8 @@ const apiLimiter = rateLimit({
 
 app.use(cors({
   origin: function(origin, callback) {
-    // Разрешаем запросы без origin только в development (например, curl, postman)
-    if (!origin && process.env.NODE_ENV === 'development') {
+    // Разрешаем запросы без origin (curl, cron jobs, внутренние вызовы)
+    if (!origin) {
       return callback(null, true);
     }
 
@@ -92,11 +108,6 @@ app.use('/api/ads', apiLimiter, adsRouter);
 app.use('/api/strategy', apiLimiter, strategyRouter);
 app.use('/api/minus-words', apiLimiter, minusWordsRouter);
 app.use('/api/yandex', apiLimiter, yandexRouter);
-
-// Health check
-app.get('/health', (req, res) => {
-  res.json({ status: 'ok', message: 'Neurodirectolog API is running' });
-});
 
 // Error handling
 app.use(errorHandler);
