@@ -244,20 +244,85 @@ export const aiAnalysisService = {
 
   /**
    * Анализировать все кампании подключения
+   * ОПТИМИЗАЦИЯ: Анализируем только активные кампании с данными за последние 7 дней
    */
   async analyzeAllCampaigns(connectionId: string): Promise<void> {
-    console.log(`[AI Analysis] Analyzing all campaigns for connection ${connectionId}`);
+    console.log(`[AI Analysis] Starting analysis for connection ${connectionId}`);
 
+    // 1. Получаем статистику один раз для всех кампаний
+    const endDate = new Date();
+    const startDate = new Date();
+    startDate.setDate(startDate.getDate() - 7); // Только последние 7 дней
+
+    const aggregatedStats = await clickhouseService.getAggregatedStats(
+      connectionId,
+      startDate,
+      endDate
+    );
+
+    // 2. Фильтруем: только кампании с активностью (показы > 100 или клики > 10)
+    const activeCampaigns = aggregatedStats.filter(
+      s => s.totalImpressions > 100 || s.totalClicks > 10
+    );
+
+    console.log(`[AI Analysis] Found ${activeCampaigns.length} active campaigns out of ${aggregatedStats.length} total`);
+
+    if (activeCampaigns.length === 0) {
+      console.log(`[AI Analysis] No active campaigns to analyze`);
+      return;
+    }
+
+    // 3. Ограничиваем количество анализируемых кампаний (максимум 20)
+    const campaignsToAnalyze = activeCampaigns.slice(0, 20);
+
+    // 4. Получаем информацию о кампаниях один раз
     const campaigns = await clickhouseService.getCampaignsByConnectionId(connectionId);
+    const campaignMap = new Map(campaigns.map(c => [c.externalId, c]));
 
-    for (const campaign of campaigns) {
+    // 5. Анализируем выбранные кампании
+    let analyzedCount = 0;
+    for (const stats of campaignsToAnalyze) {
       try {
-        await this.analyzeCampaign(campaign.externalId, connectionId);
+        const campaign = campaignMap.get(stats.campaignId);
+        if (!campaign) continue;
+
+        const recommendations = await this.generateRecommendations({
+          campaignId: stats.campaignId,
+          campaignName: campaign.name,
+          stats: {
+            totalImpressions: stats.totalImpressions,
+            totalClicks: stats.totalClicks,
+            totalCost: stats.totalCost,
+            avgCtr: stats.avgCtr,
+            avgCpc: stats.avgCpc,
+            totalConversions: stats.totalConversions,
+            avgConversionRate: stats.avgConversionRate,
+            roi: stats.roi,
+          },
+        });
+
+        // Сохраняем только если есть рекомендации и они не дублируются
+        for (const rec of recommendations) {
+          await clickhouseService.createRecommendation({
+            campaignId: stats.campaignId,
+            type: rec.type,
+            category: rec.category,
+            title: rec.title,
+            description: rec.description,
+            actionText: rec.actionText,
+            isApplied: false,
+            isDismissed: false,
+          });
+        }
+
+        if (recommendations.length > 0) {
+          analyzedCount++;
+        }
       } catch (error) {
-        console.error(`[AI Analysis] Failed to analyze campaign ${campaign.externalId}:`, error);
+        console.error(`[AI Analysis] Failed to analyze campaign ${stats.campaignId}:`, error);
       }
     }
 
-    console.log(`[AI Analysis] Completed analysis for ${campaigns.length} campaigns`);
+    console.log(`[AI Analysis] Completed: analyzed ${analyzedCount} campaigns with recommendations`);
   },
 };
