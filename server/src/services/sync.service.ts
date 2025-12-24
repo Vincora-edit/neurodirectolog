@@ -225,6 +225,200 @@ export const syncService = {
         await clickhouseService.insertCampaignConversions(conversionRecords);
       }
 
+      // 9.5. Получаем и сохраняем статистику по группам объявлений (с реальными конверсиями из API)
+      console.log(`[Sync] Fetching ad group performance report with ${goalIds.length} goals...`);
+      try {
+        const adGroupData = await yandexDirectService.getAdGroupPerformanceReport(
+          accessToken,
+          connection.login,
+          campaignIds,
+          dateFrom,
+          dateTo,
+          goalIds.length > 0 ? goalIds : undefined
+        );
+        console.log(`[Sync] Fetched ${adGroupData.length} ad group records`);
+
+        if (adGroupData.length > 0) {
+          const crypto = require('crypto');
+
+          const adGroupRecords = adGroupData.map(row => {
+            const idString = `${connection.id}_${row.CampaignId}_${row.AdGroupId}_${row.Date}`;
+            const id = crypto.createHash('md5').update(idString).digest('hex');
+
+            return {
+              id,
+              connectionId: connection.id,
+              campaignId: String(row.CampaignId || ''),
+              campaignName: row.CampaignName || '',
+              adGroupId: String(row.AdGroupId || ''),
+              adGroupName: row.AdGroupName || '',
+              date: row.Date,
+              impressions: parseInt(row.Impressions) || 0,
+              clicks: parseInt(row.Clicks) || 0,
+              cost: parseFloat(row.Cost) || 0,
+              ctr: parseFloat(row.Ctr) || 0,
+              avgCpc: parseFloat(row.AvgCpc) || 0,
+              bounceRate: parseFloat(row.BounceRate) || 0,
+              conversions: row.TotalConversions || 0,
+              revenue: 0,
+            };
+          });
+          await clickhouseService.insertAdGroupPerformance(adGroupRecords);
+          console.log(`[Sync] Inserted ${adGroupRecords.length} ad group records with real conversions`);
+        }
+
+        // 9.5.1. Сохраняем конверсии по группам с разбивкой по целям
+        if (goalIds.length > 0) {
+          const adGroupConversionsData = await yandexDirectService.getAdGroupConversionsReport(
+            accessToken,
+            connection.login,
+            campaignIds,
+            goalIds,
+            dateFrom,
+            dateTo
+          );
+
+          if (adGroupConversionsData.length > 0) {
+            const crypto = require('crypto');
+            const adGroupConvRecords = adGroupConversionsData.map(row => {
+              const idString = `${connection.id}_${row.CampaignId}_${row.AdGroupId}_${row.GoalId}_${row.Date}`;
+              const id = crypto.createHash('md5').update(idString).digest('hex');
+              return {
+                id,
+                connectionId: connection.id,
+                campaignId: String(row.CampaignId || ''),
+                adGroupId: String(row.AdGroupId || ''),
+                date: row.Date,
+                goalId: String(row.GoalId || ''),
+                conversions: row.Conversions || 0,
+                revenue: row.Revenue || 0,
+              };
+            });
+            await clickhouseService.insertAdGroupConversions(adGroupConvRecords);
+            console.log(`[Sync] Inserted ${adGroupConvRecords.length} ad group conversion records by goal`);
+          }
+        }
+      } catch (adGroupError) {
+        console.error(`[Sync] Failed to fetch ad group data, continuing:`, adGroupError);
+      }
+
+      // 9.6. Получаем и сохраняем статистику по объявлениям (с реальными конверсиями из API)
+      console.log(`[Sync] Fetching ad performance report with ${goalIds.length} goals...`);
+      try {
+        const adData = await yandexDirectService.getAdPerformanceReport(
+          accessToken,
+          connection.login,
+          campaignIds,
+          dateFrom,
+          dateTo,
+          goalIds.length > 0 ? goalIds : undefined
+        );
+        console.log(`[Sync] Fetched ${adData.length} ad records`);
+
+        if (adData.length > 0) {
+          const crypto = require('crypto');
+
+          const adRecords = adData.map(row => {
+            const idString = `${connection.id}_${row.CampaignId}_${row.AdGroupId}_${row.AdId}_${row.Date}`;
+            const id = crypto.createHash('md5').update(idString).digest('hex');
+
+            return {
+              id,
+              connectionId: connection.id,
+              campaignId: String(row.CampaignId || ''),
+              campaignName: row.CampaignName || '',
+              adGroupId: String(row.AdGroupId || ''),
+              adGroupName: row.AdGroupName || '',
+              adId: String(row.AdId || ''),
+              date: row.Date,
+              impressions: parseInt(row.Impressions) || 0,
+              clicks: parseInt(row.Clicks) || 0,
+              cost: parseFloat(row.Cost) || 0,
+              ctr: parseFloat(row.Ctr) || 0,
+              avgCpc: parseFloat(row.AvgCpc) || 0,
+              bounceRate: parseFloat(row.BounceRate) || 0,
+              conversions: row.TotalConversions || 0,
+              revenue: 0,
+            };
+          });
+          await clickhouseService.insertAdPerformance(adRecords);
+          console.log(`[Sync] Inserted ${adRecords.length} ad records with real conversions`);
+
+          // 9.7. Получаем заголовки объявлений через Ads API
+          console.log(`[Sync] Fetching ad titles...`);
+          const uniqueAdIds = [...new Set(adRecords.map(r => r.adId))];
+          try {
+            const adTitles = await yandexDirectService.getAdTitles(
+              accessToken,
+              connection.login,
+              uniqueAdIds
+            );
+
+            if (adTitles.size > 0) {
+              // Создаём мапу adId -> {adGroupId, campaignId} из adRecords
+              const adInfoMap = new Map<string, { adGroupId: string; campaignId: string }>();
+              adRecords.forEach(r => {
+                if (!adInfoMap.has(r.adId)) {
+                  adInfoMap.set(r.adId, { adGroupId: r.adGroupId, campaignId: r.campaignId });
+                }
+              });
+
+              const adContentRecords = Array.from(adTitles.entries()).map(([adId, titles]) => {
+                const adInfo = adInfoMap.get(adId) || { adGroupId: '', campaignId: '' };
+                return {
+                  connectionId: connection.id,
+                  accountName: connection.login,
+                  adId,
+                  adGroupId: adInfo.adGroupId,
+                  campaignId: adInfo.campaignId,
+                  title: titles.title,
+                  title2: titles.title2,
+                };
+              });
+              await clickhouseService.upsertAdContents(adContentRecords);
+              console.log(`[Sync] Saved ${adContentRecords.length} ad titles`);
+            }
+          } catch (adTitlesError) {
+            console.error(`[Sync] Failed to fetch ad titles, continuing:`, adTitlesError);
+          }
+        }
+
+        // 9.6.1. Сохраняем конверсии по объявлениям с разбивкой по целям
+        if (goalIds.length > 0) {
+          const adConversionsData = await yandexDirectService.getAdConversionsReport(
+            accessToken,
+            connection.login,
+            campaignIds,
+            goalIds,
+            dateFrom,
+            dateTo
+          );
+
+          if (adConversionsData.length > 0) {
+            const crypto = require('crypto');
+            const adConvRecords = adConversionsData.map(row => {
+              const idString = `${connection.id}_${row.CampaignId}_${row.AdGroupId}_${row.AdId}_${row.GoalId}_${row.Date}`;
+              const id = crypto.createHash('md5').update(idString).digest('hex');
+              return {
+                id,
+                connectionId: connection.id,
+                campaignId: String(row.CampaignId || ''),
+                adGroupId: String(row.AdGroupId || ''),
+                adId: String(row.AdId || ''),
+                date: row.Date,
+                goalId: String(row.GoalId || ''),
+                conversions: row.Conversions || 0,
+                revenue: row.Revenue || 0,
+              };
+            });
+            await clickhouseService.insertAdConversions(adConvRecords);
+            console.log(`[Sync] Inserted ${adConvRecords.length} ad conversion records by goal`);
+          }
+        }
+      } catch (adError) {
+        console.error(`[Sync] Failed to fetch ad data, continuing:`, adError);
+      }
+
       // 10. Создаем мапу конверсий по campaign_id + date для старой таблицы
       const conversionsMap = new Map<string, { conversions: number; revenue: number }>();
       conversionsData.forEach(row => {

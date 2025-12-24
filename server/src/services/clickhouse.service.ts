@@ -781,7 +781,7 @@ export const clickhouseService = {
   },
 
   // Получить агрегированную статистику по кампаниям с конверсиями
-  async getDetailedCampaignStats(connectionId: string, startDate: Date, endDate: Date, goalId?: string) {
+  async getDetailedCampaignStats(connectionId: string, startDate: Date, endDate: Date, goalIds?: string[]) {
     const dateFrom = startDate.toISOString().split('T')[0];
     const dateTo = endDate.toISOString().split('T')[0];
 
@@ -803,9 +803,14 @@ export const clickhouseService = {
       GROUP BY campaign_id, campaign_name
     `;
 
-    // Конверсии с опциональным фильтром по цели
-    const conversionQuery = goalId
-      ? `
+    // Конверсии с опциональным фильтром по целям (поддержка массива)
+    let conversionQuery: string;
+    let conversionParams: Record<string, any>;
+
+    if (goalIds && goalIds.length > 0) {
+      // Фильтр по выбранным целям (IN clause)
+      const goalIdsString = goalIds.map(id => `'${id}'`).join(',');
+      conversionQuery = `
         SELECT
           campaign_id,
           sum(conversions) as total_conversions,
@@ -814,10 +819,13 @@ export const clickhouseService = {
         WHERE connection_id = {connectionId:String}
           AND date >= {startDate:Date}
           AND date <= {endDate:Date}
-          AND goal_id = {goalId:String}
+          AND goal_id IN (${goalIdsString})
         GROUP BY campaign_id
-      `
-      : `
+      `;
+      conversionParams = { connectionId, startDate: dateFrom, endDate: dateTo };
+    } else {
+      // Без фильтра - все цели
+      conversionQuery = `
         SELECT
           campaign_id,
           sum(conversions) as total_conversions,
@@ -828,6 +836,8 @@ export const clickhouseService = {
           AND date <= {endDate:Date}
         GROUP BY campaign_id
       `;
+      conversionParams = { connectionId, startDate: dateFrom, endDate: dateTo };
+    }
 
     const [performanceResult, conversionResult] = await Promise.all([
       client.query({
@@ -837,9 +847,7 @@ export const clickhouseService = {
       }),
       client.query({
         query: conversionQuery,
-        query_params: goalId
-          ? { connectionId, startDate: dateFrom, endDate: dateTo, goalId }
-          : { connectionId, startDate: dateFrom, endDate: dateTo },
+        query_params: conversionParams,
         format: 'JSONEachRow',
       }),
     ]);
@@ -1013,5 +1021,421 @@ export const clickhouseService = {
       id: parseInt(row.id),
       name: row.name || `Цель ${row.id}`,
     }));
+  },
+
+  // Вставка статистики по группам объявлений
+  async insertAdGroupPerformance(records: any[]): Promise<void> {
+    if (records.length === 0) return;
+
+    const values = records.map((r) => ({
+      id: r.id,
+      connection_id: r.connectionId,
+      campaign_id: r.campaignId,
+      campaign_name: r.campaignName,
+      ad_group_id: r.adGroupId,
+      ad_group_name: r.adGroupName,
+      date: r.date,
+      impressions: r.impressions,
+      clicks: r.clicks,
+      cost: r.cost,
+      ctr: r.ctr,
+      avg_cpc: r.avgCpc,
+      bounce_rate: r.bounceRate,
+      conversions: r.conversions || 0,
+      revenue: r.revenue || 0,
+    }));
+
+    await client.insert({
+      table: 'ad_group_performance',
+      values,
+      format: 'JSONEachRow',
+    });
+
+    console.log(`[ClickHouse] Inserted ${records.length} ad group performance records`);
+  },
+
+  // Вставка статистики по объявлениям
+  async insertAdPerformance(records: any[]): Promise<void> {
+    if (records.length === 0) return;
+
+    const values = records.map((r) => ({
+      id: r.id,
+      connection_id: r.connectionId,
+      campaign_id: r.campaignId,
+      campaign_name: r.campaignName,
+      ad_group_id: r.adGroupId,
+      ad_group_name: r.adGroupName,
+      ad_id: r.adId,
+      date: r.date,
+      impressions: r.impressions,
+      clicks: r.clicks,
+      cost: r.cost,
+      ctr: r.ctr,
+      avg_cpc: r.avgCpc,
+      bounce_rate: r.bounceRate,
+      conversions: r.conversions || 0,
+      revenue: r.revenue || 0,
+    }));
+
+    await client.insert({
+      table: 'ad_performance',
+      values,
+      format: 'JSONEachRow',
+    });
+
+    console.log(`[ClickHouse] Inserted ${records.length} ad performance records`);
+  },
+
+  // Вставка/обновление содержимого объявлений (заголовки)
+  async upsertAdContents(records: Array<{
+    connectionId: string;
+    accountName: string;
+    adId: string;
+    adGroupId?: string;
+    campaignId?: string;
+    title?: string;
+    title2?: string;
+    text?: string;
+  }>): Promise<void> {
+    if (records.length === 0) return;
+
+    const now = new Date().toISOString().slice(0, 19).replace('T', ' ');
+    const values = records.map((r) => ({
+      id: `${r.connectionId}_${r.adId}`,
+      connection_id: r.connectionId,
+      account_name: r.accountName,
+      ad_id: r.adId,
+      ad_group_id: r.adGroupId || '',
+      campaign_id: r.campaignId || '',
+      title: r.title || null,
+      title2: r.title2 || null,
+      text: r.text || null,
+      updated_at: now,
+    }));
+
+    await client.insert({
+      table: 'ad_contents',
+      values,
+      format: 'JSONEachRow',
+    });
+
+    console.log(`[ClickHouse] Upserted ${records.length} ad content records`);
+  },
+
+  // Вставка конверсий по группам с разбивкой по целям
+  async insertAdGroupConversions(records: any[]): Promise<void> {
+    if (records.length === 0) return;
+
+    const values = records.map((r) => ({
+      id: r.id,
+      connection_id: r.connectionId,
+      campaign_id: r.campaignId,
+      ad_group_id: r.adGroupId,
+      date: r.date,
+      goal_id: r.goalId,
+      conversions: r.conversions || 0,
+      revenue: r.revenue || 0,
+    }));
+
+    await client.insert({
+      table: 'ad_group_conversions',
+      values,
+      format: 'JSONEachRow',
+    });
+
+    console.log(`[ClickHouse] Inserted ${records.length} ad group conversion records`);
+  },
+
+  // Вставка конверсий по объявлениям с разбивкой по целям
+  async insertAdConversions(records: any[]): Promise<void> {
+    if (records.length === 0) return;
+
+    const values = records.map((r) => ({
+      id: r.id,
+      connection_id: r.connectionId,
+      campaign_id: r.campaignId,
+      ad_group_id: r.adGroupId,
+      ad_id: r.adId,
+      date: r.date,
+      goal_id: r.goalId,
+      conversions: r.conversions || 0,
+      revenue: r.revenue || 0,
+    }));
+
+    await client.insert({
+      table: 'ad_conversions',
+      values,
+      format: 'JSONEachRow',
+    });
+
+    console.log(`[ClickHouse] Inserted ${records.length} ad conversion records`);
+  },
+
+  // Получить заголовки объявлений
+  async getAdTitlesFromDb(connectionId: string, adIds: string[]): Promise<Map<string, { title: string; title2?: string }>> {
+    if (adIds.length === 0) return new Map();
+
+    const adIdsStr = adIds.map(id => `'${id}'`).join(',');
+    const query = `
+      SELECT ad_id, title, title2
+      FROM ad_contents
+      WHERE connection_id = {connectionId:String}
+        AND ad_id IN (${adIdsStr})
+    `;
+
+    const result = await client.query({
+      query,
+      query_params: { connectionId },
+      format: 'JSONEachRow',
+    });
+
+    const rows = await result.json<any>();
+    const map = new Map<string, { title: string; title2?: string }>();
+    rows.forEach((row: any) => {
+      map.set(row.ad_id, {
+        title: row.title || '',
+        title2: row.title2 || undefined,
+      });
+    });
+
+    return map;
+  },
+
+  // Получить иерархическую статистику: кампании -> группы -> объявления
+  async getHierarchicalStats(connectionId: string, startDate: Date, endDate: Date, goalIds?: string[]) {
+    const dateFrom = startDate.toISOString().split('T')[0];
+    const dateTo = endDate.toISOString().split('T')[0];
+
+    // Определяем фильтр по целям
+    const hasGoalFilter = goalIds && goalIds.length > 0;
+    const goalIdsString = hasGoalFilter ? goalIds!.map(id => `'${id}'`).join(',') : '';
+
+    // Статистика по кампаниям
+    const campaignQuery = `
+      SELECT
+        campaign_id,
+        campaign_name,
+        sum(impressions) as total_impressions,
+        sum(clicks) as total_clicks,
+        sum(cost) as total_cost,
+        avg(ctr) as avg_ctr,
+        avg(avg_cpc) as avg_cpc,
+        avg(bounce_rate) as avg_bounce_rate
+      FROM campaign_performance
+      WHERE connection_id = {connectionId:String}
+        AND date >= {startDate:Date}
+        AND date <= {endDate:Date}
+      GROUP BY campaign_id, campaign_name
+      ORDER BY total_cost DESC
+    `;
+
+    // Статистика по группам (без конверсий - они берутся отдельно)
+    const adGroupQuery = `
+      SELECT
+        campaign_id,
+        ad_group_id,
+        ad_group_name,
+        sum(impressions) as total_impressions,
+        sum(clicks) as total_clicks,
+        sum(cost) as total_cost,
+        avg(ctr) as avg_ctr,
+        avg(avg_cpc) as avg_cpc,
+        avg(bounce_rate) as avg_bounce_rate
+      FROM ad_group_performance
+      WHERE connection_id = {connectionId:String}
+        AND date >= {startDate:Date}
+        AND date <= {endDate:Date}
+      GROUP BY campaign_id, ad_group_id, ad_group_name
+      ORDER BY total_cost DESC
+    `;
+
+    // Статистика по объявлениям (без конверсий - они берутся отдельно)
+    const adQuery = `
+      SELECT
+        campaign_id,
+        ad_group_id,
+        ad_id,
+        sum(impressions) as total_impressions,
+        sum(clicks) as total_clicks,
+        sum(cost) as total_cost,
+        avg(ctr) as avg_ctr,
+        avg(avg_cpc) as avg_cpc,
+        avg(bounce_rate) as avg_bounce_rate
+      FROM ad_performance
+      WHERE connection_id = {connectionId:String}
+        AND date >= {startDate:Date}
+        AND date <= {endDate:Date}
+      GROUP BY campaign_id, ad_group_id, ad_id
+      ORDER BY total_cost DESC
+    `;
+
+    // Конверсии по группам объявлений (с фильтрацией по целям если указаны)
+    const adGroupConvQuery = hasGoalFilter ? `
+      SELECT
+        campaign_id,
+        ad_group_id,
+        sum(conversions) as total_conversions,
+        sum(revenue) as total_revenue
+      FROM ad_group_conversions
+      WHERE connection_id = {connectionId:String}
+        AND date >= {startDate:Date}
+        AND date <= {endDate:Date}
+        AND goal_id IN (${goalIdsString})
+      GROUP BY campaign_id, ad_group_id
+    ` : `
+      SELECT
+        campaign_id,
+        ad_group_id,
+        sum(conversions) as total_conversions,
+        sum(revenue) as total_revenue
+      FROM ad_group_performance
+      WHERE connection_id = {connectionId:String}
+        AND date >= {startDate:Date}
+        AND date <= {endDate:Date}
+      GROUP BY campaign_id, ad_group_id
+    `;
+
+    // Конверсии по объявлениям (с фильтрацией по целям если указаны)
+    const adConvQuery = hasGoalFilter ? `
+      SELECT
+        campaign_id,
+        ad_group_id,
+        ad_id,
+        sum(conversions) as total_conversions,
+        sum(revenue) as total_revenue
+      FROM ad_conversions
+      WHERE connection_id = {connectionId:String}
+        AND date >= {startDate:Date}
+        AND date <= {endDate:Date}
+        AND goal_id IN (${goalIdsString})
+      GROUP BY campaign_id, ad_group_id, ad_id
+    ` : `
+      SELECT
+        campaign_id,
+        ad_group_id,
+        ad_id,
+        sum(conversions) as total_conversions,
+        sum(revenue) as total_revenue
+      FROM ad_performance
+      WHERE connection_id = {connectionId:String}
+        AND date >= {startDate:Date}
+        AND date <= {endDate:Date}
+      GROUP BY campaign_id, ad_group_id, ad_id
+    `;
+
+    const [campaignResult, adGroupResult, adResult, adGroupConvResult, adConvResult] = await Promise.all([
+      client.query({ query: campaignQuery, query_params: { connectionId, startDate: dateFrom, endDate: dateTo }, format: 'JSONEachRow' }),
+      client.query({ query: adGroupQuery, query_params: { connectionId, startDate: dateFrom, endDate: dateTo }, format: 'JSONEachRow' }),
+      client.query({ query: adQuery, query_params: { connectionId, startDate: dateFrom, endDate: dateTo }, format: 'JSONEachRow' }),
+      client.query({ query: adGroupConvQuery, query_params: { connectionId, startDate: dateFrom, endDate: dateTo }, format: 'JSONEachRow' }),
+      client.query({ query: adConvQuery, query_params: { connectionId, startDate: dateFrom, endDate: dateTo }, format: 'JSONEachRow' }),
+    ]);
+
+    const campaigns = await campaignResult.json<any>();
+    const adGroups = await adGroupResult.json<any>();
+    const ads = await adResult.json<any>();
+    const adGroupConversions = await adGroupConvResult.json<any>();
+    const adConversions = await adConvResult.json<any>();
+
+    // Создаём карту конверсий по группам: campaign_id_ad_group_id -> { conversions, revenue }
+    const adGroupConvMap = new Map<string, { conversions: number; revenue: number }>();
+    adGroupConversions.forEach((c: any) => {
+      const key = `${c.campaign_id}_${c.ad_group_id}`;
+      adGroupConvMap.set(key, {
+        conversions: parseInt(c.total_conversions) || 0,
+        revenue: parseFloat(c.total_revenue) || 0,
+      });
+    });
+
+    // Создаём карту конверсий по объявлениям: campaign_id_ad_group_id_ad_id -> { conversions, revenue }
+    const adConvMap = new Map<string, { conversions: number; revenue: number }>();
+    adConversions.forEach((c: any) => {
+      const key = `${c.campaign_id}_${c.ad_group_id}_${c.ad_id}`;
+      adConvMap.set(key, {
+        conversions: parseInt(c.total_conversions) || 0,
+        revenue: parseFloat(c.total_revenue) || 0,
+      });
+    });
+
+    // Получаем заголовки объявлений из таблицы ad_contents
+    const adIds = ads.map((ad: any) => ad.ad_id);
+    const adTitlesMap = await this.getAdTitlesFromDb(connectionId, adIds);
+
+    // Группируем объявления по группам - используем данные с учётом фильтра по целям
+    const adsMap = new Map<string, any[]>();
+    ads.forEach((ad: any) => {
+      const groupKey = `${ad.campaign_id}_${ad.ad_group_id}`;
+      const adKey = `${ad.campaign_id}_${ad.ad_group_id}_${ad.ad_id}`;
+      if (!adsMap.has(groupKey)) adsMap.set(groupKey, []);
+      const adTitles = adTitlesMap.get(ad.ad_id);
+
+      // Берём конверсии из карты конверсий (отфильтрованы по целям если указаны)
+      const adConv = adConvMap.get(adKey) || { conversions: 0, revenue: 0 };
+
+      adsMap.get(groupKey)!.push({
+        adId: ad.ad_id,
+        adTitle: adTitles?.title || null,
+        adTitle2: adTitles?.title2 || null,
+        totalImpressions: parseInt(ad.total_impressions) || 0,
+        totalClicks: parseInt(ad.total_clicks) || 0,
+        totalCost: parseFloat(ad.total_cost) || 0,
+        avgCtr: parseFloat(ad.avg_ctr) || 0,
+        avgCpc: parseFloat(ad.avg_cpc) || 0,
+        avgBounceRate: parseFloat(ad.avg_bounce_rate) || 0,
+        totalConversions: adConv.conversions,
+        totalRevenue: adConv.revenue,
+      });
+    });
+
+    // Группируем группы по кампаниям - используем данные с учётом фильтра по целям
+    const adGroupsMap = new Map<string, any[]>();
+    adGroups.forEach((ag: any) => {
+      const campaignId = ag.campaign_id;
+      if (!adGroupsMap.has(campaignId)) adGroupsMap.set(campaignId, []);
+
+      const adGroupKey = `${ag.campaign_id}_${ag.ad_group_id}`;
+      const groupAds = adsMap.get(adGroupKey) || [];
+
+      // Берём конверсии из карты конверсий по группам (отфильтрованы по целям если указаны)
+      const groupConv = adGroupConvMap.get(adGroupKey) || { conversions: 0, revenue: 0 };
+
+      adGroupsMap.get(campaignId)!.push({
+        adGroupId: ag.ad_group_id,
+        adGroupName: ag.ad_group_name,
+        totalImpressions: parseInt(ag.total_impressions) || 0,
+        totalClicks: parseInt(ag.total_clicks) || 0,
+        totalCost: parseFloat(ag.total_cost) || 0,
+        avgCtr: parseFloat(ag.avg_ctr) || 0,
+        avgCpc: parseFloat(ag.avg_cpc) || 0,
+        avgBounceRate: parseFloat(ag.avg_bounce_rate) || 0,
+        totalConversions: groupConv.conversions,
+        totalRevenue: groupConv.revenue,
+        ads: groupAds,
+      });
+    });
+
+    // Формируем итоговую структуру
+    // Конверсии кампании = сумма конверсий её групп (для точного совпадения данных)
+    return campaigns.map((c: any) => {
+      const campaignAdGroups = adGroupsMap.get(c.campaign_id) || [];
+
+      // Суммируем конверсии из групп для точного соответствия
+      const campaignConversions = campaignAdGroups.reduce((sum: number, ag: any) => sum + (ag.totalConversions || 0), 0);
+      const campaignRevenue = campaignAdGroups.reduce((sum: number, ag: any) => sum + (ag.totalRevenue || 0), 0);
+
+      return {
+        campaignId: c.campaign_id,
+        campaignName: c.campaign_name,
+        totalImpressions: parseInt(c.total_impressions) || 0,
+        totalClicks: parseInt(c.total_clicks) || 0,
+        totalCost: parseFloat(c.total_cost) || 0,
+        avgCtr: parseFloat(c.avg_ctr) || 0,
+        avgCpc: parseFloat(c.avg_cpc) || 0,
+        avgBounceRate: parseFloat(c.avg_bounce_rate) || 0,
+        totalConversions: campaignConversions,
+        totalRevenue: campaignRevenue,
+        adGroups: campaignAdGroups,
+      };
+    });
   },
 };

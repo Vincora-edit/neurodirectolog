@@ -4,6 +4,7 @@ import { yandexDirectService } from '../services/yandex-direct.service';
 import { yandexMetrikaService } from '../services/yandex-metrika.service';
 import { clickhouseService } from '../services/clickhouse.service';
 import { runManualSync } from '../jobs/sync.job';
+import { syncService } from '../services/sync.service';
 import { authenticate, AuthRequest } from '../middleware/auth';
 import { createError } from '../middleware/errorHandler';
 
@@ -311,6 +312,24 @@ router.post('/sync/:projectId', async (req, res) => {
 });
 
 /**
+ * POST /api/yandex/sync-all
+ * Запустить синхронизацию всех подключений вручную
+ */
+router.post('/sync-all', async (req, res) => {
+  try {
+    // Запускаем синхронизацию асинхронно
+    syncService.syncAllConnections().catch(err => {
+      console.error('Sync all failed:', err);
+    });
+
+    res.json({ success: true, message: 'Sync all started' });
+  } catch (error: any) {
+    console.error('Failed to start sync all:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
  * POST /api/yandex/load-goals
  * Загрузить цели из кампаний Яндекс.Директ (упрощенная версия - просто дает ввести ID вручную)
  */
@@ -344,13 +363,14 @@ router.post('/load-goals', async (req, res) => {
 
 /**
  * GET /api/yandex/detailed-stats/:projectId
- * Получить детальную статистику с фильтром по цели
+ * Получить детальную статистику с фильтром по целям
  * Поддерживает параметр connectionId для мультиаккаунтности
+ * Поддерживает множественный выбор целей через goalIds (через запятую)
  */
 router.get('/detailed-stats/:projectId', async (req, res) => {
   try {
     const { projectId } = req.params;
-    const { days, goalId, startDate: startDateParam, endDate: endDateParam, connectionId } = req.query;
+    const { days, goalId, goalIds, startDate: startDateParam, endDate: endDateParam, connectionId } = req.query;
 
     // Если указан connectionId - используем его, иначе берем первое подключение
     let connection;
@@ -377,16 +397,76 @@ router.get('/detailed-stats/:projectId', async (req, res) => {
       startDate.setDate(startDate.getDate() - parseInt((days as string) || '30'));
     }
 
+    // Поддержка множественных целей (goalIds через запятую) или одной цели (goalId)
+    let goalIdsArray: string[] | undefined;
+    if (goalIds) {
+      goalIdsArray = (goalIds as string).split(',').map(id => id.trim()).filter(id => id);
+    } else if (goalId) {
+      goalIdsArray = [goalId as string];
+    }
+
     const stats = await clickhouseService.getDetailedCampaignStats(
       connection.id,
       startDate,
       endDate,
-      goalId as string | undefined
+      goalIdsArray
     );
 
     res.json(stats);
   } catch (error: any) {
     console.error('Failed to get detailed stats:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * GET /api/yandex/hierarchical-stats/:projectId
+ * Получить иерархическую статистику: Кампании → Группы → Объявления
+ * Поддерживает connectionId для мультиаккаунтности
+ */
+router.get('/hierarchical-stats/:projectId', async (req, res) => {
+  try {
+    const { projectId } = req.params;
+    const { days, goalIds, startDate: startDateParam, endDate: endDateParam, connectionId } = req.query;
+
+    let connection;
+    if (connectionId) {
+      connection = await clickhouseService.getConnectionById(connectionId as string);
+    } else {
+      connection = await clickhouseService.getConnectionByProjectId(projectId);
+    }
+
+    if (!connection) {
+      return res.status(404).json({ error: 'Connection not found' });
+    }
+
+    let startDate: Date;
+    let endDate: Date;
+
+    if (startDateParam && endDateParam) {
+      startDate = new Date(startDateParam as string);
+      endDate = new Date(endDateParam as string);
+    } else {
+      endDate = new Date();
+      startDate = new Date();
+      startDate.setDate(startDate.getDate() - parseInt((days as string) || '30'));
+    }
+
+    let goalIdsArray: string[] | undefined;
+    if (goalIds) {
+      goalIdsArray = (goalIds as string).split(',').map(id => id.trim()).filter(id => id);
+    }
+
+    const stats = await clickhouseService.getHierarchicalStats(
+      connection.id,
+      startDate,
+      endDate,
+      goalIdsArray
+    );
+
+    res.json(stats);
+  } catch (error: any) {
+    console.error('Failed to get hierarchical stats:', error);
     res.status(500).json({ error: error.message });
   }
 });
