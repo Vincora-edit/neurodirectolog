@@ -780,6 +780,168 @@ export const clickhouseService = {
     console.log(`[ClickHouse] Successfully inserted ${conversions.length} conversion records`);
   },
 
+  // Получить статистику по дням для графиков и таблицы
+  // Поддерживает фильтрацию по кампании, группе, объявлению
+  async getDailyStats(
+    connectionId: string,
+    startDate: Date,
+    endDate: Date,
+    goalIds?: string[],
+    campaignId?: string,
+    adGroupId?: string,
+    adId?: string
+  ) {
+    const dateFrom = startDate.toISOString().split('T')[0];
+    const dateTo = endDate.toISOString().split('T')[0];
+
+    // Определяем какую таблицу использовать в зависимости от уровня фильтрации
+    let performanceTable: string;
+    let conversionsTable: string;
+    let additionalFilters = '';
+    const queryParams: Record<string, any> = {
+      connectionId,
+      startDate: dateFrom,
+      endDate: dateTo,
+    };
+
+    if (adId && adGroupId && campaignId) {
+      // Фильтр по объявлению
+      performanceTable = 'ad_performance';
+      conversionsTable = 'ad_conversions';
+      additionalFilters = `
+        AND campaign_id = {campaignId:String}
+        AND ad_group_id = {adGroupId:String}
+        AND ad_id = {adId:String}
+      `;
+      queryParams.campaignId = campaignId;
+      queryParams.adGroupId = adGroupId;
+      queryParams.adId = adId;
+    } else if (adGroupId && campaignId) {
+      // Фильтр по группе
+      performanceTable = 'ad_group_performance';
+      conversionsTable = 'ad_group_conversions';
+      additionalFilters = `
+        AND campaign_id = {campaignId:String}
+        AND ad_group_id = {adGroupId:String}
+      `;
+      queryParams.campaignId = campaignId;
+      queryParams.adGroupId = adGroupId;
+    } else if (campaignId) {
+      // Фильтр по кампании
+      performanceTable = 'campaign_performance';
+      conversionsTable = 'campaign_conversions';
+      additionalFilters = `
+        AND campaign_id = {campaignId:String}
+      `;
+      queryParams.campaignId = campaignId;
+    } else {
+      // Без фильтра - агрегация по всем кампаниям
+      performanceTable = 'campaign_performance';
+      conversionsTable = 'campaign_conversions';
+    }
+
+    // Базовая статистика по дням
+    const performanceQuery = `
+      SELECT
+        date,
+        sum(impressions) as total_impressions,
+        sum(clicks) as total_clicks,
+        sum(cost) as total_cost,
+        avg(ctr) as avg_ctr,
+        avg(avg_cpc) as avg_cpc,
+        avg(bounce_rate) as avg_bounce_rate
+      FROM ${performanceTable}
+      WHERE connection_id = {connectionId:String}
+        AND date >= {startDate:Date}
+        AND date <= {endDate:Date}
+        ${additionalFilters}
+      GROUP BY date
+      ORDER BY date ASC
+    `;
+
+    const performanceResult = await client.query({
+      query: performanceQuery,
+      query_params: queryParams,
+      format: 'JSONEachRow',
+    });
+    const performanceRows = await performanceResult.json<any>();
+
+    // Конверсии по дням с опциональным фильтром по целям
+    let conversionQuery: string;
+    const conversionParams = { ...queryParams };
+
+    if (goalIds && goalIds.length > 0) {
+      conversionParams.goalIds = goalIds;
+      conversionQuery = `
+        SELECT
+          date,
+          sum(conversions) as total_conversions,
+          sum(revenue) as total_revenue
+        FROM ${conversionsTable}
+        WHERE connection_id = {connectionId:String}
+          AND date >= {startDate:Date}
+          AND date <= {endDate:Date}
+          AND goal_id IN ({goalIds:Array(String)})
+          ${additionalFilters}
+        GROUP BY date
+        ORDER BY date ASC
+      `;
+    } else {
+      conversionQuery = `
+        SELECT
+          date,
+          sum(conversions) as total_conversions,
+          sum(revenue) as total_revenue
+        FROM ${conversionsTable}
+        WHERE connection_id = {connectionId:String}
+          AND date >= {startDate:Date}
+          AND date <= {endDate:Date}
+          ${additionalFilters}
+        GROUP BY date
+        ORDER BY date ASC
+      `;
+    }
+
+    const conversionResult = await client.query({
+      query: conversionQuery,
+      query_params: conversionParams,
+      format: 'JSONEachRow',
+    });
+    const conversionRows = await conversionResult.json<any>();
+
+    // Создаём карту конверсий по датам
+    const conversionMap = new Map<string, { conversions: number; revenue: number }>();
+    conversionRows.forEach((row: any) => {
+      conversionMap.set(row.date, {
+        conversions: parseInt(row.total_conversions) || 0,
+        revenue: parseFloat(row.total_revenue) || 0,
+      });
+    });
+
+    // Объединяем данные
+    return performanceRows.map((row: any) => {
+      const conv = conversionMap.get(row.date) || { conversions: 0, revenue: 0 };
+      const cost = parseFloat(row.total_cost) || 0;
+      const conversions = conv.conversions;
+      const cpl = conversions > 0 ? cost / conversions : 0;
+      const cr = parseInt(row.total_clicks) > 0 ? (conversions / parseInt(row.total_clicks)) * 100 : 0;
+
+      return {
+        date: row.date,
+        impressions: parseInt(row.total_impressions) || 0,
+        clicks: parseInt(row.total_clicks) || 0,
+        cost: cost,
+        ctr: parseFloat(row.avg_ctr) || 0,
+        cpc: parseFloat(row.avg_cpc) || 0,
+        bounceRate: parseFloat(row.avg_bounce_rate) || 0,
+        conversions: conversions,
+        revenue: conv.revenue,
+        cpl: cpl,
+        cr: cr,
+      };
+    });
+  },
+
   // Получить агрегированную статистику по кампаниям с конверсиями
   async getDetailedCampaignStats(connectionId: string, startDate: Date, endDate: Date, goalIds?: string[]) {
     const dateFrom = startDate.toISOString().split('T')[0];
@@ -1027,6 +1189,28 @@ export const clickhouseService = {
   async insertAdGroupPerformance(records: any[]): Promise<void> {
     if (records.length === 0) return;
 
+    // Определяем диапазон дат и connection_id для удаления дубликатов
+    const connectionId = records[0].connectionId;
+    const dates = records.map(r => r.date);
+    const minDate = dates.sort()[0];
+    const maxDate = [...dates].sort().reverse()[0];
+
+    // Удаляем старые данные перед вставкой
+    try {
+      await client.command({
+        query: `
+          ALTER TABLE ad_group_performance
+          DELETE WHERE connection_id = {connectionId:String}
+            AND date >= {minDate:Date}
+            AND date <= {maxDate:Date}
+        `,
+        query_params: { connectionId, minDate, maxDate },
+      });
+      console.log(`[ClickHouse] Deleted old ad_group_performance for ${connectionId} from ${minDate} to ${maxDate}`);
+    } catch (error) {
+      console.error(`[ClickHouse] Failed to delete old ad_group_performance:`, error);
+    }
+
     const values = records.map((r) => ({
       id: r.id,
       connection_id: r.connectionId,
@@ -1058,6 +1242,28 @@ export const clickhouseService = {
   async insertAdPerformance(records: any[]): Promise<void> {
     if (records.length === 0) return;
 
+    // Определяем диапазон дат и connection_id для удаления дубликатов
+    const connectionId = records[0].connectionId;
+    const dates = records.map(r => r.date);
+    const minDate = dates.sort()[0];
+    const maxDate = [...dates].sort().reverse()[0];
+
+    // Удаляем старые данные перед вставкой
+    try {
+      await client.command({
+        query: `
+          ALTER TABLE ad_performance
+          DELETE WHERE connection_id = {connectionId:String}
+            AND date >= {minDate:Date}
+            AND date <= {maxDate:Date}
+        `,
+        query_params: { connectionId, minDate, maxDate },
+      });
+      console.log(`[ClickHouse] Deleted old ad_performance for ${connectionId} from ${minDate} to ${maxDate}`);
+    } catch (error) {
+      console.error(`[ClickHouse] Failed to delete old ad_performance:`, error);
+    }
+
     const values = records.map((r) => ({
       id: r.id,
       connection_id: r.connectionId,
@@ -1086,7 +1292,7 @@ export const clickhouseService = {
     console.log(`[ClickHouse] Inserted ${records.length} ad performance records`);
   },
 
-  // Вставка/обновление содержимого объявлений (заголовки)
+  // Вставка/обновление содержимого объявлений (заголовки и ссылки)
   async upsertAdContents(records: Array<{
     connectionId: string;
     accountName: string;
@@ -1096,6 +1302,7 @@ export const clickhouseService = {
     title?: string;
     title2?: string;
     text?: string;
+    href?: string;
   }>): Promise<void> {
     if (records.length === 0) return;
 
@@ -1110,6 +1317,7 @@ export const clickhouseService = {
       title: r.title || null,
       title2: r.title2 || null,
       text: r.text || null,
+      href: r.href || null,
       updated_at: now,
     }));
 
@@ -1479,6 +1687,286 @@ export const clickhouseService = {
         totalConversions: campaignConversions,
         totalRevenue: campaignRevenue,
         adGroups: campaignAdGroups,
+      };
+    });
+  },
+
+  // ==================== KPI Functions ====================
+
+  // Получить KPI для аккаунта на указанный месяц
+  async getAccountKpi(connectionId: string, month: string) {
+    const query = `
+      SELECT
+        id,
+        connection_id,
+        month,
+        target_cost,
+        target_cpl,
+        target_leads,
+        goal_ids,
+        created_at,
+        updated_at
+      FROM account_kpi FINAL
+      WHERE connection_id = {connectionId:String}
+        AND month = {month:String}
+      LIMIT 1
+    `;
+
+    const result = await client.query({
+      query,
+      query_params: { connectionId, month },
+      format: 'JSONEachRow',
+    });
+
+    const rows = await result.json<any>();
+    if (rows.length === 0) {
+      return null;
+    }
+
+    // Парсим goal_ids из JSON строки
+    let goalIds: string[] = [];
+    try {
+      if (rows[0].goal_ids) {
+        goalIds = JSON.parse(rows[0].goal_ids);
+      }
+    } catch (e) {
+      console.error('[getAccountKpi] Failed to parse goal_ids:', e);
+    }
+
+    return {
+      id: rows[0].id,
+      connectionId: rows[0].connection_id,
+      month: rows[0].month,
+      targetCost: parseFloat(rows[0].target_cost) || 0,
+      targetCpl: parseFloat(rows[0].target_cpl) || 0,
+      targetLeads: parseInt(rows[0].target_leads) || 0,
+      goalIds: goalIds,
+      createdAt: rows[0].created_at,
+      updatedAt: rows[0].updated_at,
+    };
+  },
+
+  // Сохранить/обновить KPI для аккаунта
+  async saveAccountKpi(connectionId: string, month: string, kpi: {
+    targetCost: number;
+    targetCpl: number;
+    targetLeads: number;
+    goalIds?: string[];
+  }) {
+    const values = [{
+      connection_id: connectionId,
+      month: month,
+      target_cost: kpi.targetCost,
+      target_cpl: kpi.targetCpl,
+      target_leads: kpi.targetLeads,
+      goal_ids: JSON.stringify(kpi.goalIds || []),
+      updated_at: formatDate(new Date()),
+    }];
+
+    await client.insert({
+      table: 'account_kpi',
+      values,
+      format: 'JSONEachRow',
+    });
+
+    console.log(`[ClickHouse] Saved KPI for connection ${connectionId} month ${month} with goals: ${kpi.goalIds?.join(',')}`);
+    return this.getAccountKpi(connectionId, month);
+  },
+
+  // Получить статистику за текущий месяц для расчёта прогресса KPI
+  async getMonthStats(connectionId: string, goalIds?: string[]) {
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = now.getMonth(); // 0-indexed
+    const startOfMonth = new Date(year, month, 1);
+    const endOfMonth = new Date(year, month + 1, 0); // последний день месяца
+    const today = new Date(year, month, now.getDate());
+
+    const dateFrom = startOfMonth.toISOString().split('T')[0];
+    const dateTo = today.toISOString().split('T')[0];
+
+    // Получаем статистику расходов за месяц
+    const performanceQuery = `
+      SELECT
+        sum(cost) as total_cost,
+        sum(clicks) as total_clicks
+      FROM campaign_performance
+      WHERE connection_id = {connectionId:String}
+        AND date >= {dateFrom:Date}
+        AND date <= {dateTo:Date}
+    `;
+
+    const performanceResult = await client.query({
+      query: performanceQuery,
+      query_params: { connectionId, dateFrom, dateTo },
+      format: 'JSONEachRow',
+    });
+    const perfRows = await performanceResult.json<any>();
+
+    // Получаем конверсии за месяц
+    let conversionQuery: string;
+    const convParams: Record<string, any> = { connectionId, dateFrom, dateTo };
+
+    if (goalIds && goalIds.length > 0) {
+      convParams.goalIds = goalIds;
+      conversionQuery = `
+        SELECT sum(conversions) as total_conversions
+        FROM campaign_conversions
+        WHERE connection_id = {connectionId:String}
+          AND date >= {dateFrom:Date}
+          AND date <= {dateTo:Date}
+          AND goal_id IN ({goalIds:Array(String)})
+      `;
+    } else {
+      conversionQuery = `
+        SELECT sum(conversions) as total_conversions
+        FROM campaign_conversions
+        WHERE connection_id = {connectionId:String}
+          AND date >= {dateFrom:Date}
+          AND date <= {dateTo:Date}
+      `;
+    }
+
+    const convResult = await client.query({
+      query: conversionQuery,
+      query_params: convParams,
+      format: 'JSONEachRow',
+    });
+    const convRows = await convResult.json<any>();
+
+    const totalCost = parseFloat(perfRows[0]?.total_cost) || 0;
+    const totalClicks = parseInt(perfRows[0]?.total_clicks) || 0;
+    const totalConversions = parseInt(convRows[0]?.total_conversions) || 0;
+    const currentCpl = totalConversions > 0 ? totalCost / totalConversions : 0;
+
+    // Рассчитываем прогресс по дням
+    const daysInMonth = endOfMonth.getDate();
+    const currentDay = now.getDate();
+    const dayProgress = currentDay / daysInMonth; // процент прошедших дней
+
+    return {
+      currentCost: totalCost,
+      currentLeads: totalConversions,
+      currentCpl: currentCpl,
+      currentClicks: totalClicks,
+      daysInMonth,
+      currentDay,
+      dayProgress, // 0-1
+      monthKey: `${year}-${String(month + 1).padStart(2, '0')}`,
+    };
+  },
+
+  // Получить статистику по посадочным страницам
+  // Нормализуем URL - убираем query параметры (UTM метки и т.д.)
+  async getLandingPageStats(connectionId: string, startDate: Date, endDate: Date, goalIds?: string[]) {
+    const dateFrom = startDate.toISOString().split('T')[0];
+    const dateTo = endDate.toISOString().split('T')[0];
+
+    // Получаем статистику по объявлениям с группировкой по нормализованному href
+    const hasGoalFilter = goalIds && goalIds.length > 0;
+    const goalIdsString = hasGoalFilter ? goalIds!.map(id => `'${id}'`).join(',') : '';
+
+    // Функция нормализации URL - убираем query string (?...)
+    // cutQueryString убирает всё после ? включительно
+    const normalizeUrl = `cutQueryString(ac.href)`;
+
+    // Базовая статистика - группируем по нормализованному URL
+    const performanceQuery = `
+      SELECT
+        ${normalizeUrl} as landing_page,
+        sum(ap.impressions) as total_impressions,
+        sum(ap.clicks) as total_clicks,
+        sum(ap.cost) as total_cost,
+        avg(ap.ctr) as avg_ctr,
+        avg(ap.avg_cpc) as avg_cpc,
+        avg(ap.bounce_rate) as avg_bounce_rate,
+        count(DISTINCT ap.ad_id) as ads_count
+      FROM ad_performance ap
+      JOIN ad_contents ac ON ap.connection_id = ac.connection_id AND ap.ad_id = ac.ad_id
+      WHERE ap.connection_id = {connectionId:String}
+        AND ap.date >= {dateFrom:Date}
+        AND ap.date <= {dateTo:Date}
+        AND ac.href IS NOT NULL
+        AND ac.href != ''
+      GROUP BY landing_page
+      ORDER BY total_cost DESC
+    `;
+
+    // Конверсии с группировкой по нормализованной посадочной
+    const conversionsQuery = hasGoalFilter ? `
+      SELECT
+        ${normalizeUrl} as landing_page,
+        sum(aconv.conversions) as total_conversions,
+        sum(aconv.revenue) as total_revenue
+      FROM ad_conversions aconv
+      JOIN ad_contents ac ON aconv.connection_id = ac.connection_id AND aconv.ad_id = ac.ad_id
+      WHERE aconv.connection_id = {connectionId:String}
+        AND aconv.date >= {dateFrom:Date}
+        AND aconv.date <= {dateTo:Date}
+        AND aconv.goal_id IN (${goalIdsString})
+        AND ac.href IS NOT NULL
+        AND ac.href != ''
+      GROUP BY landing_page
+    ` : `
+      SELECT
+        ${normalizeUrl} as landing_page,
+        sum(ap.conversions) as total_conversions,
+        sum(ap.revenue) as total_revenue
+      FROM ad_performance ap
+      JOIN ad_contents ac ON ap.connection_id = ac.connection_id AND ap.ad_id = ac.ad_id
+      WHERE ap.connection_id = {connectionId:String}
+        AND ap.date >= {dateFrom:Date}
+        AND ap.date <= {dateTo:Date}
+        AND ac.href IS NOT NULL
+        AND ac.href != ''
+      GROUP BY landing_page
+    `;
+
+    const [perfResult, convResult] = await Promise.all([
+      client.query({
+        query: performanceQuery,
+        query_params: { connectionId, dateFrom, dateTo },
+        format: 'JSONEachRow',
+      }),
+      client.query({
+        query: conversionsQuery,
+        query_params: { connectionId, dateFrom, dateTo },
+        format: 'JSONEachRow',
+      }),
+    ]);
+
+    const perfRows = await perfResult.json<any>();
+    const convRows = await convResult.json<any>();
+
+    // Создаём карту конверсий
+    const convMap = new Map<string, { conversions: number; revenue: number }>();
+    convRows.forEach((row: any) => {
+      convMap.set(row.landing_page, {
+        conversions: parseInt(row.total_conversions) || 0,
+        revenue: parseFloat(row.total_revenue) || 0,
+      });
+    });
+
+    // Объединяем данные
+    return perfRows.map((row: any) => {
+      const conv = convMap.get(row.landing_page) || { conversions: 0, revenue: 0 };
+      const cost = parseFloat(row.total_cost) || 0;
+      const clicks = parseInt(row.total_clicks) || 0;
+      const conversions = conv.conversions;
+
+      return {
+        landingPage: row.landing_page,
+        impressions: parseInt(row.total_impressions) || 0,
+        clicks,
+        cost,
+        ctr: parseFloat(row.avg_ctr) || 0,
+        cpc: parseFloat(row.avg_cpc) || 0,
+        bounceRate: parseFloat(row.avg_bounce_rate) || 0,
+        conversions,
+        revenue: conv.revenue,
+        cpl: conversions > 0 ? cost / conversions : 0,
+        cr: clicks > 0 ? (conversions / clicks) * 100 : 0,
+        adsCount: parseInt(row.ads_count) || 0,
       };
     });
   },

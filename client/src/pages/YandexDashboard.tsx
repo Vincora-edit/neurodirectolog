@@ -1,7 +1,17 @@
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { projectsService, API_BASE_URL } from '../services/api';
+import {
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+  Legend,
+} from 'recharts';
 import {
   TrendingUp,
   TrendingDown,
@@ -33,6 +43,20 @@ import {
   Plus,
   MoreVertical,
   ArrowUpDown,
+  FileText,
+  Users,
+  Monitor,
+  Smartphone,
+  Tablet,
+  Filter,
+  Search,
+  MapPin,
+  Layout,
+  Tag,
+  Type,
+  Megaphone,
+  Gauge,
+  TrendingUp as TrendUp,
 } from 'lucide-react';
 
 // API Service для получения данных дашборда
@@ -111,6 +135,174 @@ const dashboardService = {
     const response = await fetch(url);
     return response.json();
   },
+
+  async getDailyStats(
+    projectId: string,
+    days: number = 30,
+    goalIds?: string[],
+    startDate?: string,
+    endDate?: string,
+    connectionId?: string,
+    campaignId?: string | null,
+    adGroupId?: string | null,
+    adId?: string | null
+  ) {
+    let url = `${API_BASE_URL}/api/yandex/daily-stats/${projectId}?`;
+
+    if (startDate && endDate) {
+      url += `startDate=${startDate}&endDate=${endDate}`;
+    } else {
+      url += `days=${days}`;
+    }
+
+    if (goalIds && goalIds.length > 0) {
+      url += `&goalIds=${goalIds.join(',')}`;
+    }
+
+    if (connectionId) {
+      url += `&connectionId=${connectionId}`;
+    }
+
+    if (campaignId) {
+      url += `&campaignId=${campaignId}`;
+    }
+
+    if (adGroupId) {
+      url += `&adGroupId=${adGroupId}`;
+    }
+
+    if (adId) {
+      url += `&adId=${adId}`;
+    }
+
+    const response = await fetch(url);
+    return response.json();
+  },
+
+  // KPI API
+  async getKpi(connectionId: string, goalIds?: string[]) {
+    let url = `${API_BASE_URL}/api/yandex/kpi/${connectionId}`;
+    if (goalIds && goalIds.length > 0) {
+      url += `?goalIds=${goalIds.join(',')}`;
+    }
+    const response = await fetch(url);
+    return response.json();
+  },
+
+  async saveKpi(connectionId: string, kpi: { targetCost: number; targetCpl: number; targetLeads: number; goalIds?: string[]; month?: string }) {
+    const response = await fetch(`${API_BASE_URL}/api/yandex/kpi/${connectionId}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(kpi),
+    });
+    return response.json();
+  },
+
+  async getLandingPages(projectId: string, days: number = 30, goalIds?: string[], startDate?: string, endDate?: string, connectionId?: string) {
+    let url = `${API_BASE_URL}/api/yandex/landing-pages/${projectId}?`;
+
+    if (startDate && endDate) {
+      url += `startDate=${startDate}&endDate=${endDate}`;
+    } else {
+      url += `days=${days}`;
+    }
+
+    if (goalIds && goalIds.length > 0) {
+      url += `&goalIds=${goalIds.join(',')}`;
+    }
+
+    if (connectionId) {
+      url += `&connectionId=${connectionId}`;
+    }
+
+    const response = await fetch(url);
+    return response.json();
+  },
+};
+
+// Компонент круговой прогресс-бар
+const CircularProgress = ({
+  value,
+  dayValue,
+  size = 100,
+  strokeWidth = 8,
+  color = '#3b82f6',
+  dayColor = '#93c5fd',
+  label,
+  sublabel,
+}: {
+  value: number;
+  dayValue?: number;
+  size?: number;
+  strokeWidth?: number;
+  color?: string;
+  dayColor?: string;
+  label: string;
+  sublabel?: string;
+}) => {
+  const radius = (size - strokeWidth * 2) / 2;
+  const circumference = radius * 2 * Math.PI;
+  const progress = Math.min(value, 100);
+  const dayProgress = dayValue !== undefined ? Math.min(dayValue, 100) : 0;
+  const offset = circumference - (progress / 100) * circumference;
+  const dayOffset = circumference - (dayProgress / 100) * circumference;
+
+  return (
+    <div className="flex flex-col items-center">
+      <div className="relative" style={{ width: size, height: size }}>
+        {/* Background circle */}
+        <svg className="transform -rotate-90" width={size} height={size}>
+          <circle
+            cx={size / 2}
+            cy={size / 2}
+            r={radius}
+            fill="none"
+            stroke="#e5e7eb"
+            strokeWidth={strokeWidth}
+          />
+          {/* Day progress (outer thin ring) */}
+          {dayValue !== undefined && (
+            <circle
+              cx={size / 2}
+              cy={size / 2}
+              r={radius + strokeWidth + 2}
+              fill="none"
+              stroke={dayColor}
+              strokeWidth={3}
+              strokeLinecap="round"
+              strokeDasharray={`${(radius + strokeWidth + 2) * 2 * Math.PI}`}
+              strokeDashoffset={(radius + strokeWidth + 2) * 2 * Math.PI - (dayProgress / 100) * (radius + strokeWidth + 2) * 2 * Math.PI}
+              className="transition-all duration-500"
+            />
+          )}
+          {/* Main progress */}
+          <circle
+            cx={size / 2}
+            cy={size / 2}
+            r={radius}
+            fill="none"
+            stroke={color}
+            strokeWidth={strokeWidth}
+            strokeLinecap="round"
+            strokeDasharray={circumference}
+            strokeDashoffset={offset}
+            className="transition-all duration-500"
+          />
+        </svg>
+        {/* Center text */}
+        <div className="absolute inset-0 flex flex-col items-center justify-center">
+          <span className="text-lg font-bold text-gray-900">{label}</span>
+          {sublabel && <span className="text-xs text-gray-500">{sublabel}</span>}
+        </div>
+      </div>
+      <div className="mt-2 text-center">
+        <div className="text-sm font-medium text-gray-700">{Math.round(value)}%</div>
+        {dayValue !== undefined && (
+          <div className="text-xs text-gray-500">к дню: {Math.round(dayValue)}%</div>
+        )}
+      </div>
+    </div>
+  );
 };
 
 export default function YandexDashboard() {
@@ -139,6 +331,72 @@ export default function YandexDashboard() {
   const [expandedAdGroups, setExpandedAdGroups] = useState<Set<string>>(new Set());
   const [sortColumn, setSortColumn] = useState<string>('totalCost');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
+
+  // Состояние для главных аккордеонов отчётов
+  const [openReportSections, setOpenReportSections] = useState<Set<string>>(new Set());
+
+  // Активный таб внутри каждой секции
+  const [audienceReportTab, setAudienceReportTab] = useState<string>('search');
+  const [technicalReportTab, setTechnicalReportTab] = useState<string>('categories');
+
+  // Фильтр по кампании/группе для отчётов
+  const [reportFilterCampaignId, setReportFilterCampaignId] = useState<string | null>(null);
+  const [reportFilterAdGroupId, setReportFilterAdGroupId] = useState<string | null>(null);
+
+  // Выбранные метрики для графика
+  const [selectedChartMetrics, setSelectedChartMetrics] = useState<Set<string>>(new Set(['cost', 'clicks']));
+
+  // Глобальные фильтры по кампании/группе/объявлению
+  const [globalFilterCampaignId, setGlobalFilterCampaignId] = useState<string | null>(null);
+  const [globalFilterAdGroupId, setGlobalFilterAdGroupId] = useState<string | null>(null);
+  const [globalFilterAdId, setGlobalFilterAdId] = useState<string | null>(null);
+
+  // Состояние для компактной шапки при скролле и полного сворачивания
+  const [isScrolled, setIsScrolled] = useState(false);
+  const [isHeaderCollapsed, setIsHeaderCollapsed] = useState(false);
+  const headerRef = useRef<HTMLDivElement>(null);
+
+  // KPI состояния
+  const [showKpiModal, setShowKpiModal] = useState(false);
+  const [isKpiCollapsed, setIsKpiCollapsed] = useState(false);
+  const [kpiForm, setKpiForm] = useState({
+    targetCost: 0,
+    targetCpl: 0,
+    targetLeads: 0,
+    goalIds: [] as string[],
+  });
+  const [isSavingKpi, setIsSavingKpi] = useState(false);
+  const [showKpiGoalsDropdown, setShowKpiGoalsDropdown] = useState(false);
+
+  // Landing pages state
+  const [landingPages, setLandingPages] = useState<any[]>([]);
+  const [isLoadingLandingPages, setIsLoadingLandingPages] = useState(false);
+  const [isLandingPagesOpen, setIsLandingPagesOpen] = useState(false);
+
+  // Dynamics section state
+  const [isDynamicsOpen, setIsDynamicsOpen] = useState(true);
+
+  // Отслеживаем скролл для компактного режима
+  useEffect(() => {
+    const handleScroll = () => {
+      setIsScrolled(window.scrollY > 50);
+    };
+    window.addEventListener('scroll', handleScroll);
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, []);
+
+  // Функция переключения главного аккордеона
+  const toggleReportSection = (sectionId: string) => {
+    setOpenReportSections(prev => {
+      const next = new Set(prev);
+      if (next.has(sectionId)) {
+        next.delete(sectionId);
+      } else {
+        next.add(sectionId);
+      }
+      return next;
+    });
+  };
 
   // Загрузка проектов
   const { data: projects = [], isLoading: projectsLoading, isError: projectsError } = useQuery({
@@ -204,6 +462,132 @@ export default function YandexDashboard() {
     enabled: !!activeProjectId && !!activeConnectionId,
   });
 
+  // Статистика по дням для графиков и таблицы (с глобальными фильтрами)
+  const { data: dailyStatsData } = useQuery({
+    queryKey: ['yandex-daily-stats', activeProjectId, activeConnectionId, dateRange, selectedGoalIds, customDateMode, customStartDate, customEndDate, globalFilterCampaignId, globalFilterAdGroupId, globalFilterAdId],
+    queryFn: () => dashboardService.getDailyStats(
+      activeProjectId,
+      dateRange,
+      selectedGoalIds.length > 0 ? selectedGoalIds : undefined,
+      customDateMode ? customStartDate : undefined,
+      customDateMode ? customEndDate : undefined,
+      activeConnectionId,
+      globalFilterCampaignId,
+      globalFilterAdGroupId,
+      globalFilterAdId
+    ),
+    enabled: !!activeProjectId && !!activeConnectionId,
+  });
+
+  // Загрузка KPI для аккаунта
+  // KPI использует свои собственные привязанные цели (настраиваются в KPI модале)
+  const { data: kpiData, refetch: refetchKpi } = useQuery({
+    queryKey: ['yandex-kpi', activeConnectionId],
+    queryFn: () => dashboardService.getKpi(activeConnectionId),
+    enabled: !!activeConnectionId,
+  });
+
+  // Загрузка посадочных страниц при открытии секции
+  const loadLandingPages = async () => {
+    if (!activeProjectId || !activeConnectionId) return;
+    setIsLoadingLandingPages(true);
+    try {
+      const data = await dashboardService.getLandingPages(
+        activeProjectId,
+        dateRange,
+        selectedGoalIds.length > 0 ? selectedGoalIds : undefined,
+        customDateMode ? customStartDate : undefined,
+        customDateMode ? customEndDate : undefined,
+        activeConnectionId
+      );
+      setLandingPages(Array.isArray(data) ? data : []);
+    } catch (error) {
+      console.error('Failed to load landing pages:', error);
+      setLandingPages([]);
+    }
+    setIsLoadingLandingPages(false);
+  };
+
+  const rawDailyStats = Array.isArray(dailyStatsData) ? dailyStatsData : [];
+
+  // Функция группировки данных по периоду
+  const groupDataByPeriod = (data: any[], period: string) => {
+    if (period === 'day' || data.length === 0) return data;
+
+    const grouped = new Map<string, any>();
+
+    data.forEach((item) => {
+      const date = new Date(item.date);
+      let key: string;
+      let displayDate: string;
+
+      if (period === '3days') {
+        // Группировка по 3 дня
+        const dayOfYear = Math.floor((date.getTime() - new Date(date.getFullYear(), 0, 0).getTime()) / (1000 * 60 * 60 * 24));
+        const periodIndex = Math.floor(dayOfYear / 3);
+        key = `${date.getFullYear()}-${periodIndex}`;
+        displayDate = item.date;
+      } else if (period === 'week') {
+        // Группировка по неделе (ISO week)
+        const d = new Date(date);
+        d.setHours(0, 0, 0, 0);
+        d.setDate(d.getDate() + 4 - (d.getDay() || 7));
+        const yearStart = new Date(d.getFullYear(), 0, 1);
+        const weekNumber = Math.ceil((((d.getTime() - yearStart.getTime()) / 86400000) + 1) / 7);
+        key = `${d.getFullYear()}-W${weekNumber}`;
+        // Для отображения берём понедельник недели
+        const monday = new Date(date);
+        monday.setDate(date.getDate() - (date.getDay() === 0 ? 6 : date.getDay() - 1));
+        displayDate = monday.toISOString().split('T')[0];
+      } else if (period === 'month') {
+        key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+        displayDate = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-01`;
+      } else {
+        key = item.date;
+        displayDate = item.date;
+      }
+
+      if (!grouped.has(key)) {
+        grouped.set(key, {
+          date: displayDate,
+          impressions: 0,
+          clicks: 0,
+          cost: 0,
+          conversions: 0,
+          revenue: 0,
+          bounceWeighted: 0,
+          daysCount: 0,
+        });
+      }
+
+      const g = grouped.get(key)!;
+      g.impressions += item.impressions || 0;
+      g.clicks += item.clicks || 0;
+      g.cost += item.cost || 0;
+      g.conversions += item.conversions || 0;
+      g.revenue += item.revenue || 0;
+      g.bounceWeighted += (item.bounceRate || 0) * (item.clicks || 0);
+      g.daysCount += 1;
+    });
+
+    // Вычисляем средние значения
+    return Array.from(grouped.values()).map((g) => ({
+      date: g.date,
+      impressions: g.impressions,
+      clicks: g.clicks,
+      cost: g.cost,
+      conversions: g.conversions,
+      revenue: g.revenue,
+      ctr: g.impressions > 0 ? (g.clicks / g.impressions) * 100 : 0,
+      cpc: g.clicks > 0 ? g.cost / g.clicks : 0,
+      bounceRate: g.clicks > 0 ? g.bounceWeighted / g.clicks : 0,
+      cpl: g.conversions > 0 ? g.cost / g.conversions : 0,
+      cr: g.clicks > 0 ? (g.conversions / g.clicks) * 100 : 0,
+    }));
+  };
+
+  const dailyStats = groupDataByPeriod(rawDailyStats, groupBy);
+
   const stats = Array.isArray(statsData) ? statsData : [];
   const rawCampaigns = Array.isArray(hierarchicalData) ? hierarchicalData : (hierarchicalData?.campaigns || []);
 
@@ -234,20 +618,239 @@ export default function YandexDashboard() {
   };
 
   // Сортированные кампании
-  const campaigns = [...rawCampaigns].sort((a: any, b: any) => {
+  const sortedCampaigns = [...rawCampaigns].sort((a: any, b: any) => {
     const aVal = getSortValue(a, sortColumn);
     const bVal = getSortValue(b, sortColumn);
     return sortDirection === 'desc' ? bVal - aVal : aVal - bVal;
   });
+
+  // Применяем глобальный фильтр к кампаниям и группам (для таблицы)
+  // Если есть фильтр по группе/объявлению - пересчитываем статистику кампании
+  const campaigns = (() => {
+    if (!globalFilterCampaignId) {
+      return sortedCampaigns;
+    }
+
+    // Фильтруем по кампании
+    let filtered = sortedCampaigns.filter((c: any) => c.campaignId === globalFilterCampaignId);
+
+    // Если выбрана группа - фильтруем группы внутри кампании и пересчитываем статистику
+    if (globalFilterAdGroupId) {
+      filtered = filtered.map((c: any) => {
+        let filteredGroups = (c.adGroups || []).filter((ag: any) => ag.adGroupId === globalFilterAdGroupId);
+
+        // Если выбрано объявление - фильтруем объявления внутри групп
+        if (globalFilterAdId) {
+          filteredGroups = filteredGroups.map((ag: any) => ({
+            ...ag,
+            ads: (ag.ads || []).filter((ad: any) => ad.adId === globalFilterAdId),
+          }));
+        }
+
+        // Пересчитываем статистику кампании на основе отфильтрованных групп
+        const recalculatedStats = filteredGroups.reduce((acc: any, g: any) => {
+          if (globalFilterAdId) {
+            // Считаем по отфильтрованным объявлениям
+            const adStats = (g.ads || []).reduce((aAcc: any, a: any) => ({
+              impressions: aAcc.impressions + (a.totalImpressions || 0),
+              clicks: aAcc.clicks + (a.totalClicks || 0),
+              cost: aAcc.cost + (a.totalCost || 0),
+              conversions: aAcc.conversions + (a.totalConversions || 0),
+              bounceWeighted: aAcc.bounceWeighted + ((a.avgBounceRate || 0) * (a.totalClicks || 0)),
+            }), { impressions: 0, clicks: 0, cost: 0, conversions: 0, bounceWeighted: 0 });
+            return {
+              impressions: acc.impressions + adStats.impressions,
+              clicks: acc.clicks + adStats.clicks,
+              cost: acc.cost + adStats.cost,
+              conversions: acc.conversions + adStats.conversions,
+              bounceWeighted: acc.bounceWeighted + adStats.bounceWeighted,
+            };
+          }
+          return {
+            impressions: acc.impressions + (g.totalImpressions || 0),
+            clicks: acc.clicks + (g.totalClicks || 0),
+            cost: acc.cost + (g.totalCost || 0),
+            conversions: acc.conversions + (g.totalConversions || 0),
+            bounceWeighted: acc.bounceWeighted + ((g.avgBounceRate || 0) * (g.totalClicks || 0)),
+          };
+        }, { impressions: 0, clicks: 0, cost: 0, conversions: 0, bounceWeighted: 0 });
+
+        const avgCtr = recalculatedStats.impressions > 0
+          ? (recalculatedStats.clicks / recalculatedStats.impressions) * 100
+          : 0;
+        const avgCpc = recalculatedStats.clicks > 0
+          ? recalculatedStats.cost / recalculatedStats.clicks
+          : 0;
+        const avgBounce = recalculatedStats.clicks > 0
+          ? recalculatedStats.bounceWeighted / recalculatedStats.clicks
+          : 0;
+
+        return {
+          ...c,
+          adGroups: filteredGroups,
+          // Пересчитанные значения для строки кампании
+          totalImpressions: recalculatedStats.impressions,
+          totalClicks: recalculatedStats.clicks,
+          totalCost: recalculatedStats.cost,
+          totalConversions: recalculatedStats.conversions,
+          avgCtr: avgCtr,
+          avgCpc: avgCpc,
+          avgBounceRate: avgBounce,
+        };
+      });
+    }
+
+    return filtered;
+  })();
+
+  // Вычисляем отфильтрованную статистику на основе глобальных фильтров
+  const getFilteredStats = () => {
+    // Если нет фильтров - суммируем все кампании
+    if (!globalFilterCampaignId) {
+      return rawCampaigns.reduce(
+        (acc: any, campaign: any) => ({
+          impressions: acc.impressions + (campaign.totalImpressions || 0),
+          clicks: acc.clicks + (campaign.totalClicks || 0),
+          cost: acc.cost + (campaign.totalCost || 0),
+          conversions: acc.conversions + (campaign.totalConversions || 0),
+          revenue: acc.revenue + (campaign.totalRevenue || 0),
+          bounceRate: acc.bounceRate + (campaign.avgBounceRate || 0),
+        }),
+        { impressions: 0, clicks: 0, cost: 0, conversions: 0, revenue: 0, bounceRate: 0 }
+      );
+    }
+
+    // Ищем выбранную кампанию
+    const campaign = rawCampaigns.find((c: any) => c.campaignId === globalFilterCampaignId);
+    if (!campaign) {
+      return { impressions: 0, clicks: 0, cost: 0, conversions: 0, revenue: 0, bounceRate: 0 };
+    }
+
+    // Если выбрана только кампания без группы
+    if (!globalFilterAdGroupId) {
+      return {
+        impressions: campaign.totalImpressions || 0,
+        clicks: campaign.totalClicks || 0,
+        cost: campaign.totalCost || 0,
+        conversions: campaign.totalConversions || 0,
+        revenue: campaign.totalRevenue || 0,
+        bounceRate: campaign.avgBounceRate || 0,
+      };
+    }
+
+    // Ищем выбранную группу
+    const adGroup = campaign.adGroups?.find((g: any) => g.adGroupId === globalFilterAdGroupId);
+    if (!adGroup) {
+      return { impressions: 0, clicks: 0, cost: 0, conversions: 0, revenue: 0, bounceRate: 0 };
+    }
+
+    // Если выбрана группа без объявления
+    if (!globalFilterAdId) {
+      return {
+        impressions: adGroup.totalImpressions || 0,
+        clicks: adGroup.totalClicks || 0,
+        cost: adGroup.totalCost || 0,
+        conversions: adGroup.totalConversions || 0,
+        revenue: adGroup.totalRevenue || 0,
+        bounceRate: adGroup.avgBounceRate || 0,
+      };
+    }
+
+    // Ищем выбранное объявление
+    const ad = adGroup.ads?.find((a: any) => a.adId === globalFilterAdId);
+    if (!ad) {
+      return { impressions: 0, clicks: 0, cost: 0, conversions: 0, revenue: 0, bounceRate: 0 };
+    }
+
+    return {
+      impressions: ad.totalImpressions || 0,
+      clicks: ad.totalClicks || 0,
+      cost: ad.totalCost || 0,
+      conversions: ad.totalConversions || 0,
+      revenue: ad.totalRevenue || 0,
+      bounceRate: ad.avgBounceRate || 0,
+    };
+  };
+
+  // Получаем списки для селекторов фильтров
+  const filterCampaignOptions = rawCampaigns.map((c: any) => ({
+    id: c.campaignId,
+    name: c.campaignName,
+  }));
+
+  const filterAdGroupOptions = globalFilterCampaignId
+    ? (rawCampaigns.find((c: any) => c.campaignId === globalFilterCampaignId)?.adGroups || []).map((g: any) => ({
+        id: g.adGroupId,
+        name: g.adGroupName,
+      }))
+    : [];
+
+  const filterAdOptions = globalFilterAdGroupId
+    ? (rawCampaigns
+        .find((c: any) => c.campaignId === globalFilterCampaignId)
+        ?.adGroups?.find((g: any) => g.adGroupId === globalFilterAdGroupId)
+        ?.ads || []
+      ).map((a: any) => ({
+        id: a.adId,
+        title: a.adTitle || a.adTitle2 || `Объявление ${a.adId}`,
+      }))
+    : [];
+
+  // Сброс зависимых фильтров при изменении родительского
+  const handleCampaignFilterChange = (campaignId: string | null) => {
+    setGlobalFilterCampaignId(campaignId);
+    setGlobalFilterAdGroupId(null);
+    setGlobalFilterAdId(null);
+  };
+
+  const handleAdGroupFilterChange = (adGroupId: string | null) => {
+    setGlobalFilterAdGroupId(adGroupId);
+    setGlobalFilterAdId(null);
+  };
 
   // Синхронизация данных
   const handleSync = async () => {
     setIsSyncing(true);
     try {
       await dashboardService.syncManual(activeProjectId);
-      await Promise.all([refetchStats(), refetchHierarchical()]);
+      await Promise.all([refetchStats(), refetchHierarchical(), refetchKpi()]);
     } finally {
       setIsSyncing(false);
+    }
+  };
+
+  // Открыть модалку KPI с текущими значениями
+  const openKpiModal = () => {
+    if (kpiData?.kpi) {
+      setKpiForm({
+        targetCost: kpiData.kpi.targetCost || 0,
+        targetCpl: kpiData.kpi.targetCpl || 0,
+        targetLeads: kpiData.kpi.targetLeads || 0,
+        goalIds: kpiData.kpi.goalIds || [],
+      });
+    } else {
+      setKpiForm({
+        targetCost: 0,
+        targetCpl: 0,
+        targetLeads: 0,
+        goalIds: [],
+      });
+    }
+    setShowKpiGoalsDropdown(false);
+    setShowKpiModal(true);
+  };
+
+  // Сохранить KPI
+  const handleSaveKpi = async () => {
+    setIsSavingKpi(true);
+    try {
+      await dashboardService.saveKpi(activeConnectionId, kpiForm);
+      await refetchKpi();
+      setShowKpiModal(false);
+    } catch (error) {
+      console.error('Failed to save KPI:', error);
+    } finally {
+      setIsSavingKpi(false);
     }
   };
 
@@ -350,17 +953,8 @@ export default function YandexDashboard() {
     );
   }
 
-  // Вычисляем общую статистику из hierarchical данных (campaigns)
-  const totalStats = campaigns.reduce(
-    (acc: any, campaign: any) => ({
-      impressions: acc.impressions + (campaign.totalImpressions || 0),
-      clicks: acc.clicks + (campaign.totalClicks || 0),
-      cost: acc.cost + (campaign.totalCost || 0),
-      conversions: acc.conversions + (campaign.totalConversions || 0),
-      revenue: acc.revenue + (campaign.totalRevenue || 0),
-    }),
-    { impressions: 0, clicks: 0, cost: 0, conversions: 0, revenue: 0 }
-  );
+  // Вычисляем общую статистику на основе глобальных фильтров
+  const totalStats = getFilteredStats();
 
   const avgCtr = totalStats.clicks > 0 ? (totalStats.clicks / totalStats.impressions) * 100 : 0;
   const avgCpc = totalStats.clicks > 0 ? totalStats.cost / totalStats.clicks : 0;
@@ -373,12 +967,15 @@ export default function YandexDashboard() {
   const isLoading = statsLoading || connectionsLoading || goalsLoading || hierarchicalLoading;
 
   return (
-    <div className="max-w-7xl">
-      {/* Улучшенная шапка */}
-      <div className="mb-6">
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-          {/* Первая строка: Заголовок и кнопка обновления */}
-          <div className="flex items-start justify-between mb-6">
+    <div className="w-full">
+      {/* Улучшенная шапка (sticky при скролле) */}
+      <div
+        ref={headerRef}
+        className={`sticky top-[41px] z-20 mb-6 -mx-8 px-8 -mt-8 pt-4 pb-2 bg-gray-50 transition-all duration-300 ${isHeaderCollapsed ? 'translate-y-[-100%] opacity-0 pointer-events-none' : ''}`}
+      >
+        <div className={`bg-white rounded-xl shadow-sm border border-gray-200 transition-all duration-300 ${isScrolled ? 'p-3' : 'p-6'}`}>
+          {/* Первая строка: Заголовок и кнопка обновления (скрывается при скролле) */}
+          <div className={`flex items-start justify-between transition-all duration-300 overflow-hidden ${isScrolled ? 'max-h-0 mb-0 opacity-0' : 'max-h-24 mb-6 opacity-100'}`}>
             <div>
               <h1 className="text-3xl font-bold text-gray-900 mb-2">
                 {activeProject?.name || 'Аналитика Яндекс.Директ'}
@@ -406,7 +1003,7 @@ export default function YandexDashboard() {
             </button>
           </div>
 
-          {/* Вторая строка: Селекторы */}
+          {/* Вторая строка: Селекторы (всегда видны) */}
           <div className="flex items-start gap-4 flex-wrap">
             {/* Селектор аккаунтов с меню управления */}
             {connections.length > 0 && (
@@ -660,8 +1257,125 @@ export default function YandexDashboard() {
               </select>
             </div>
           </div>
+
+          {/* Глобальные фильтры по кампании/группе/объявлению */}
+          {filterCampaignOptions.length > 0 && (
+            <div className="flex items-start gap-4 flex-wrap mt-4 pt-4 border-t border-gray-200">
+              {/* Фильтр по кампании */}
+              <div className="flex flex-col gap-1.5">
+                <label className="text-xs font-medium text-gray-600 flex items-center gap-1.5">
+                  <Megaphone size={14} className="text-gray-500" />
+                  Кампания
+                </label>
+                <select
+                  value={globalFilterCampaignId || ''}
+                  onChange={(e) => handleCampaignFilterChange(e.target.value || null)}
+                  className="bg-white border border-gray-300 rounded-lg px-3 py-2 text-sm font-medium focus:ring-2 focus:ring-blue-400 focus:border-transparent min-w-[200px]"
+                >
+                  <option value="">Все кампании</option>
+                  {filterCampaignOptions.map((c: any) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Фильтр по группе (только если выбрана кампания) */}
+              {globalFilterCampaignId && filterAdGroupOptions.length > 0 && (
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-xs font-medium text-gray-600 flex items-center gap-1.5">
+                    <Folder size={14} className="text-gray-500" />
+                    Группа объявлений
+                  </label>
+                  <select
+                    value={globalFilterAdGroupId || ''}
+                    onChange={(e) => handleAdGroupFilterChange(e.target.value || null)}
+                    className="bg-purple-50 border border-purple-200 rounded-lg px-3 py-2 text-sm font-medium text-purple-900 focus:ring-2 focus:ring-purple-400 focus:border-transparent min-w-[200px]"
+                  >
+                    <option value="">Все группы</option>
+                    {filterAdGroupOptions.map((g: any) => (
+                      <option key={g.id} value={g.id}>
+                        {g.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              {/* Фильтр по объявлению (только если выбрана группа) */}
+              {globalFilterAdGroupId && filterAdOptions.length > 0 && (
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-xs font-medium text-gray-600 flex items-center gap-1.5">
+                    <FileText size={14} className="text-gray-500" />
+                    Объявление
+                  </label>
+                  <select
+                    value={globalFilterAdId || ''}
+                    onChange={(e) => setGlobalFilterAdId(e.target.value || null)}
+                    className="bg-orange-50 border border-orange-200 rounded-lg px-3 py-2 text-sm font-medium text-orange-900 focus:ring-2 focus:ring-orange-400 focus:border-transparent min-w-[200px]"
+                  >
+                    <option value="">Все объявления</option>
+                    {filterAdOptions.map((a: any) => (
+                      <option key={a.id} value={a.id}>
+                        {a.title}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              {/* Кнопка сброса фильтров */}
+              {(globalFilterCampaignId || globalFilterAdGroupId || globalFilterAdId) && (
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-xs font-medium text-transparent">Сбросить</label>
+                  <button
+                    onClick={() => {
+                      setGlobalFilterCampaignId(null);
+                      setGlobalFilterAdGroupId(null);
+                      setGlobalFilterAdId(null);
+                    }}
+                    className="px-3 py-2 text-sm font-medium text-gray-600 hover:text-gray-900 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors flex items-center gap-1.5"
+                  >
+                    <X size={14} />
+                    Сбросить
+                  </button>
+                </div>
+              )}
+
+              {/* Кнопка сворачивания шапки */}
+              <div className="flex flex-col gap-1.5 ml-auto">
+                <label className="text-xs font-medium text-transparent">Скрыть</label>
+                <button
+                  onClick={() => setIsHeaderCollapsed(true)}
+                  className="px-3 py-2 text-sm font-medium text-gray-500 hover:text-gray-700 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors flex items-center gap-1.5"
+                  title="Свернуть фильтры"
+                >
+                  <ChevronUp size={14} />
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       </div>
+
+      {/* Кнопка разворачивания шапки (показывается когда шапка свёрнута) */}
+      {isHeaderCollapsed && (
+        <div className="sticky top-[41px] z-20 mb-4 -mx-8 px-8 -mt-8 pt-2">
+          <button
+            onClick={() => setIsHeaderCollapsed(false)}
+            className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-200 rounded-lg shadow-sm hover:bg-gray-50 transition-colors text-sm text-gray-600"
+          >
+            <ChevronDown size={16} />
+            <span>Показать фильтры</span>
+            {globalFilterCampaignId && (
+              <span className="ml-2 px-2 py-0.5 bg-blue-100 text-blue-700 rounded text-xs">
+                Фильтр активен
+              </span>
+            )}
+          </button>
+        </div>
+      )}
 
       {/* Индикатор загрузки */}
       {isLoading && (
@@ -669,6 +1383,289 @@ export default function YandexDashboard() {
           <Loader2 className="animate-spin text-blue-600" size={20} />
           <span className="text-sm text-blue-900 font-medium">Загрузка данных...</span>
         </div>
+      )}
+
+      {/* KPI Виджет (Аккордеон) */}
+      {activeConnectionId && (
+        <div className="bg-white rounded-xl shadow-sm border border-gray-200 mb-6 overflow-hidden">
+          {/* Заголовок аккордеона */}
+          <div
+            className="flex items-center justify-between p-4 cursor-pointer hover:bg-gray-50 transition-colors"
+            onClick={() => setIsKpiCollapsed(!isKpiCollapsed)}
+          >
+            <div className="flex items-center gap-3">
+              <ChevronDown
+                size={20}
+                className={`text-gray-400 transition-transform ${isKpiCollapsed ? '-rotate-90' : ''}`}
+              />
+              <Gauge size={20} className="text-blue-600" />
+              <h3 className="text-lg font-semibold text-gray-900">
+                KPI {kpiData?.month ? new Date(kpiData.month + '-01').toLocaleString('ru-RU', { month: 'long', year: 'numeric' }) : ''}
+              </h3>
+              {kpiData?.stats && (
+                <span className="text-sm text-gray-500">
+                  (день {kpiData.stats.currentDay} из {kpiData.stats.daysInMonth})
+                </span>
+              )}
+              {/* Отображаем выбранные цели для KPI */}
+              {kpiData?.kpi?.goalIds && kpiData.kpi.goalIds.length > 0 && (
+                <div className="flex items-center gap-1.5 text-xs text-gray-500 ml-2">
+                  <Target size={12} />
+                  {kpiData.kpi.goalIds.length <= 2 ? (
+                    kpiData.kpi.goalIds.map((goalId: string) => (
+                      <span key={goalId} className="px-1.5 py-0.5 bg-blue-50 text-blue-600 rounded">
+                        {availableGoals.find((g: any) => g.goalId === goalId)?.goalName || goalId}
+                      </span>
+                    ))
+                  ) : (
+                    <span className="px-1.5 py-0.5 bg-blue-50 text-blue-600 rounded">
+                      {kpiData.kpi.goalIds.length} целей
+                    </span>
+                  )}
+                </div>
+              )}
+            </div>
+            <button
+              onClick={(e) => { e.stopPropagation(); openKpiModal(); }}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-blue-600 hover:text-blue-700 border border-blue-200 rounded-lg hover:bg-blue-50 transition-colors"
+            >
+              <Settings size={14} />
+              Настроить
+            </button>
+          </div>
+
+          {/* Содержимое аккордеона */}
+          {!isKpiCollapsed && (
+            <div className="px-6 pb-6 pt-2">
+
+          {kpiData?.kpi?.targetCost > 0 || kpiData?.kpi?.targetLeads > 0 ? (
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+              {/* Расход */}
+              <div className="flex flex-col items-center">
+                <CircularProgress
+                  value={kpiData?.progress?.costProgress || 0}
+                  dayValue={kpiData?.progress?.costDayProgress || 0}
+                  size={120}
+                  color="#ef4444"
+                  dayColor="#fca5a5"
+                  label={`${Math.round((kpiData?.stats?.currentCost || 0) / 1000)}K`}
+                  sublabel="₽"
+                />
+                <div className="mt-3 text-center">
+                  <div className="text-sm font-medium text-gray-700">Расход</div>
+                  <div className="text-xs text-gray-500">
+                    {((kpiData?.stats?.currentCost || 0)).toLocaleString('ru-RU')} / {((kpiData?.kpi?.targetCost || 0)).toLocaleString('ru-RU')} ₽
+                  </div>
+                </div>
+              </div>
+
+              {/* CPL */}
+              <div className="flex flex-col items-center">
+                <div className="relative" style={{ width: 120, height: 120 }}>
+                  <div className={`w-full h-full rounded-full flex flex-col items-center justify-center border-8 ${
+                    kpiData?.progress?.cplStatus === 'good' ? 'border-green-500 bg-green-50' :
+                    kpiData?.progress?.cplStatus === 'warning' ? 'border-yellow-500 bg-yellow-50' :
+                    'border-red-500 bg-red-50'
+                  }`}>
+                    <span className="text-2xl font-bold text-gray-900">
+                      {Math.round(kpiData?.stats?.currentCpl || 0).toLocaleString('ru-RU')}
+                    </span>
+                    <span className="text-xs text-gray-500">₽</span>
+                  </div>
+                </div>
+                <div className="mt-3 text-center">
+                  <div className="text-sm font-medium text-gray-700">CPL</div>
+                  <div className="text-xs text-gray-500">
+                    Цель: {((kpiData?.kpi?.targetCpl || 0)).toLocaleString('ru-RU')} ₽
+                  </div>
+                  <div className={`text-xs font-medium ${
+                    kpiData?.progress?.cplStatus === 'good' ? 'text-green-600' :
+                    kpiData?.progress?.cplStatus === 'warning' ? 'text-yellow-600' :
+                    'text-red-600'
+                  }`}>
+                    {kpiData?.progress?.cplStatus === 'good' ? 'В норме' :
+                     kpiData?.progress?.cplStatus === 'warning' ? 'Внимание' : 'Превышен'}
+                  </div>
+                </div>
+              </div>
+
+              {/* Лиды */}
+              <div className="flex flex-col items-center">
+                <CircularProgress
+                  value={kpiData?.progress?.leadsProgress || 0}
+                  dayValue={kpiData?.progress?.leadsDayProgress || 0}
+                  size={120}
+                  color="#22c55e"
+                  dayColor="#86efac"
+                  label={`${kpiData?.stats?.currentLeads || 0}`}
+                  sublabel="лидов"
+                />
+                <div className="mt-3 text-center">
+                  <div className="text-sm font-medium text-gray-700">Лиды</div>
+                  <div className="text-xs text-gray-500">
+                    {kpiData?.stats?.currentLeads || 0} / {kpiData?.kpi?.targetLeads || 0}
+                  </div>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div className="text-center py-8 text-gray-500">
+              <Gauge size={48} className="mx-auto mb-3 text-gray-300" />
+              <p className="text-sm">KPI не настроены</p>
+              <p className="text-xs mt-1">Нажмите "Настроить" чтобы задать цели на месяц</p>
+            </div>
+          )}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Модальное окно настройки KPI */}
+      {showKpiModal && (
+        <>
+          <div className="fixed inset-0 bg-black/50 z-50" onClick={() => setShowKpiModal(false)} />
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <div className="bg-white rounded-xl shadow-xl max-w-md w-full p-6" onClick={(e) => e.stopPropagation()}>
+              <div className="flex items-center justify-between mb-6">
+                <h3 className="text-lg font-semibold text-gray-900">Настройка KPI на месяц</h3>
+                <button
+                  onClick={() => setShowKpiModal(false)}
+                  className="p-1 hover:bg-gray-100 rounded-lg transition-colors"
+                >
+                  <X size={20} className="text-gray-500" />
+                </button>
+              </div>
+
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Целевой расход (₽/месяц)
+                  </label>
+                  <input
+                    type="number"
+                    value={kpiForm.targetCost}
+                    onChange={(e) => setKpiForm({ ...kpiForm, targetCost: parseFloat(e.target.value) || 0 })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-400 focus:border-transparent"
+                    placeholder="900000"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Целевой CPL (₽)
+                  </label>
+                  <input
+                    type="number"
+                    value={kpiForm.targetCpl}
+                    onChange={(e) => setKpiForm({ ...kpiForm, targetCpl: parseFloat(e.target.value) || 0 })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-400 focus:border-transparent"
+                    placeholder="4000"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Целевое количество лидов
+                  </label>
+                  <input
+                    type="number"
+                    value={kpiForm.targetLeads}
+                    onChange={(e) => setKpiForm({ ...kpiForm, targetLeads: parseInt(e.target.value) || 0 })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-400 focus:border-transparent"
+                    placeholder="225"
+                  />
+                </div>
+
+                {/* Селектор целей для KPI */}
+                {availableGoals.length > 0 && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Цели для расчёта CPL
+                    </label>
+                    <p className="text-xs text-gray-500 mb-2">
+                      Выберите цели, по которым будут считаться лиды и CPL для KPI
+                    </p>
+                    <div className="relative">
+                      <button
+                        type="button"
+                        onClick={() => setShowKpiGoalsDropdown(!showKpiGoalsDropdown)}
+                        className="w-full bg-white border border-gray-300 rounded-lg px-3 py-2 text-sm font-medium focus:ring-2 focus:ring-blue-400 focus:border-transparent text-left flex items-center justify-between gap-2"
+                      >
+                        <span className="truncate">
+                          {kpiForm.goalIds.length === 0
+                            ? 'Все цели'
+                            : kpiForm.goalIds.length === 1
+                            ? availableGoals.find((g: any) => g.goalId === kpiForm.goalIds[0])?.goalName || `Цель ${kpiForm.goalIds[0]}`
+                            : `${kpiForm.goalIds.length} целей`}
+                        </span>
+                        <svg className={`w-4 h-4 transition-transform ${showKpiGoalsDropdown ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                        </svg>
+                      </button>
+                      {showKpiGoalsDropdown && (
+                        <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-300 rounded-lg shadow-lg z-50 max-h-48 overflow-y-auto">
+                          <div
+                            className="px-3 py-2 hover:bg-gray-50 cursor-pointer flex items-center gap-2 border-b border-gray-200"
+                            onClick={() => {
+                              setKpiForm({ ...kpiForm, goalIds: [] });
+                              setShowKpiGoalsDropdown(false);
+                            }}
+                          >
+                            <input
+                              type="radio"
+                              checked={kpiForm.goalIds.length === 0}
+                              readOnly
+                              className="w-4 h-4 text-blue-600"
+                            />
+                            <span className="text-sm">Все цели</span>
+                          </div>
+                          {availableGoals.map((goal: any) => (
+                            <div
+                              key={goal.goalId}
+                              className="px-3 py-2 hover:bg-gray-50 cursor-pointer flex items-center gap-2"
+                              onClick={() => {
+                                if (kpiForm.goalIds.includes(goal.goalId)) {
+                                  setKpiForm({ ...kpiForm, goalIds: kpiForm.goalIds.filter(id => id !== goal.goalId) });
+                                } else {
+                                  setKpiForm({ ...kpiForm, goalIds: [...kpiForm.goalIds, goal.goalId] });
+                                }
+                              }}
+                            >
+                              <input
+                                type="checkbox"
+                                checked={kpiForm.goalIds.includes(goal.goalId)}
+                                readOnly
+                                className="w-4 h-4 text-blue-600 rounded"
+                              />
+                              <span className="text-sm">{goal.goalName || `Цель ${goal.goalId}`}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <div className="flex gap-3 mt-6">
+                <button
+                  onClick={() => setShowKpiModal(false)}
+                  className="flex-1 px-4 py-2 text-sm font-medium text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+                >
+                  Отмена
+                </button>
+                <button
+                  onClick={handleSaveKpi}
+                  disabled={isSavingKpi}
+                  className="flex-1 px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+                >
+                  {isSavingKpi && <Loader2 size={16} className="animate-spin" />}
+                  Сохранить
+                </button>
+              </div>
+            </div>
+          </div>
+        </>
       )}
 
       {/* Ключевые метрики */}
@@ -883,6 +1880,27 @@ export default function YandexDashboard() {
                           {adGroups.length > 0 && (
                             <span className="text-xs text-gray-400">({adGroups.length} групп)</span>
                           )}
+                          {/* Кнопка глобального фильтра */}
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              if (globalFilterCampaignId === campaignId && !globalFilterAdGroupId) {
+                                // Сбросить глобальный фильтр
+                                handleCampaignFilterChange(null);
+                              } else {
+                                // Установить глобальный фильтр по кампании
+                                handleCampaignFilterChange(campaignId);
+                              }
+                            }}
+                            className={`p-1 rounded transition-colors ${
+                              globalFilterCampaignId === campaignId && !globalFilterAdGroupId
+                                ? 'bg-blue-100 text-blue-600'
+                                : 'text-gray-400 hover:text-blue-600 hover:bg-blue-50'
+                            }`}
+                            title={globalFilterCampaignId === campaignId ? 'Убрать фильтр' : 'Фильтровать по этой кампании'}
+                          >
+                            <Filter size={14} />
+                          </button>
                         </div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-right text-sm text-gray-900">
@@ -969,6 +1987,28 @@ export default function YandexDashboard() {
                                 {ads.length > 0 && (
                                   <span className="text-xs text-gray-400">({ads.length} объявл.)</span>
                                 )}
+                                {/* Кнопка глобального фильтра по группе */}
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    if (globalFilterAdGroupId === adGroup.adGroupId) {
+                                      // Сбросить до уровня кампании
+                                      handleAdGroupFilterChange(null);
+                                    } else {
+                                      // Установить глобальный фильтр по группе (и по кампании)
+                                      setGlobalFilterCampaignId(campaignId);
+                                      handleAdGroupFilterChange(adGroup.adGroupId);
+                                    }
+                                  }}
+                                  className={`p-1 rounded transition-colors ${
+                                    globalFilterAdGroupId === adGroup.adGroupId
+                                      ? 'bg-purple-100 text-purple-600'
+                                      : 'text-gray-400 hover:text-purple-600 hover:bg-purple-50'
+                                  }`}
+                                  title={globalFilterAdGroupId === adGroup.adGroupId ? 'Убрать фильтр' : 'Фильтровать по этой группе'}
+                                >
+                                  <Filter size={12} />
+                                </button>
                               </div>
                             </td>
                             <td className="px-6 py-3 whitespace-nowrap text-right text-sm text-gray-700">
@@ -1070,13 +2110,55 @@ export default function YandexDashboard() {
 
               {/* Строка ИТОГО */}
               {campaigns.length > 0 && (() => {
-                const totals = campaigns.reduce((acc: any, c: any) => ({
-                  impressions: acc.impressions + (c.totalImpressions || 0),
-                  clicks: acc.clicks + (c.totalClicks || 0),
-                  cost: acc.cost + (c.totalCost || 0),
-                  conversions: acc.conversions + (c.totalConversions || 0),
-                  bounceWeighted: acc.bounceWeighted + ((c.avgBounceRate || 0) * (c.totalClicks || 0)),
-                }), { impressions: 0, clicks: 0, cost: 0, conversions: 0, bounceWeighted: 0 });
+                // Если выбран фильтр по группе или объявлению - считаем по группам/объявлениям
+                let totals;
+                if (globalFilterAdGroupId) {
+                  // Считаем по группам (которые уже отфильтрованы)
+                  totals = campaigns.reduce((acc: any, c: any) => {
+                    const groupTotals = (c.adGroups || []).reduce((gAcc: any, g: any) => {
+                      if (globalFilterAdId) {
+                        // Считаем по объявлениям
+                        const adTotals = (g.ads || []).reduce((aAcc: any, a: any) => ({
+                          impressions: aAcc.impressions + (a.totalImpressions || 0),
+                          clicks: aAcc.clicks + (a.totalClicks || 0),
+                          cost: aAcc.cost + (a.totalCost || 0),
+                          conversions: aAcc.conversions + (a.totalConversions || 0),
+                          bounceWeighted: aAcc.bounceWeighted + ((a.avgBounceRate || 0) * (a.totalClicks || 0)),
+                        }), { impressions: 0, clicks: 0, cost: 0, conversions: 0, bounceWeighted: 0 });
+                        return {
+                          impressions: gAcc.impressions + adTotals.impressions,
+                          clicks: gAcc.clicks + adTotals.clicks,
+                          cost: gAcc.cost + adTotals.cost,
+                          conversions: gAcc.conversions + adTotals.conversions,
+                          bounceWeighted: gAcc.bounceWeighted + adTotals.bounceWeighted,
+                        };
+                      }
+                      return {
+                        impressions: gAcc.impressions + (g.totalImpressions || 0),
+                        clicks: gAcc.clicks + (g.totalClicks || 0),
+                        cost: gAcc.cost + (g.totalCost || 0),
+                        conversions: gAcc.conversions + (g.totalConversions || 0),
+                        bounceWeighted: gAcc.bounceWeighted + ((g.avgBounceRate || 0) * (g.totalClicks || 0)),
+                      };
+                    }, { impressions: 0, clicks: 0, cost: 0, conversions: 0, bounceWeighted: 0 });
+                    return {
+                      impressions: acc.impressions + groupTotals.impressions,
+                      clicks: acc.clicks + groupTotals.clicks,
+                      cost: acc.cost + groupTotals.cost,
+                      conversions: acc.conversions + groupTotals.conversions,
+                      bounceWeighted: acc.bounceWeighted + groupTotals.bounceWeighted,
+                    };
+                  }, { impressions: 0, clicks: 0, cost: 0, conversions: 0, bounceWeighted: 0 });
+                } else {
+                  // Считаем по кампаниям
+                  totals = campaigns.reduce((acc: any, c: any) => ({
+                    impressions: acc.impressions + (c.totalImpressions || 0),
+                    clicks: acc.clicks + (c.totalClicks || 0),
+                    cost: acc.cost + (c.totalCost || 0),
+                    conversions: acc.conversions + (c.totalConversions || 0),
+                    bounceWeighted: acc.bounceWeighted + ((c.avgBounceRate || 0) * (c.totalClicks || 0)),
+                  }), { impressions: 0, clicks: 0, cost: 0, conversions: 0, bounceWeighted: 0 });
+                }
 
                 const avgCtr = totals.impressions > 0 ? (totals.clicks / totals.impressions) * 100 : 0;
                 const avgCpc = totals.clicks > 0 ? totals.cost / totals.clicks : 0;
@@ -1136,6 +2218,800 @@ export default function YandexDashboard() {
           </div>
         )}
       </div>
+
+      {/* Секция графиков и статистики по дням */}
+      {dailyStats.length > 0 && (
+        <div className="mb-8">
+          {/* Заголовок - кликабельный аккордеон */}
+          <button
+            onClick={() => setIsDynamicsOpen(!isDynamicsOpen)}
+            className="w-full flex items-center justify-between py-3 hover:bg-gray-50 rounded-lg transition-colors mb-4"
+          >
+            <div className="flex items-center gap-3">
+              <Calendar size={22} className="text-primary-600" />
+              <h2 className="text-xl font-bold text-gray-900">Динамика</h2>
+            </div>
+            {isDynamicsOpen ? (
+              <ChevronUp size={20} className="text-gray-400" />
+            ) : (
+              <ChevronDown size={20} className="text-gray-400" />
+            )}
+          </button>
+
+          {isDynamicsOpen && (
+          <div className="space-y-6">
+          {/* Один график с чекбоксами для выбора метрик */}
+          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4">
+            {/* Чекбоксы метрик */}
+            <div className="flex flex-wrap gap-4 mb-4">
+              {[
+                { id: 'impressions', label: 'Показы', color: '#8b5cf6' },
+                { id: 'clicks', label: 'Клики', color: '#10b981' },
+                { id: 'cost', label: 'Расход', color: '#3b82f6' },
+                { id: 'conversions', label: 'Конверсии', color: '#ef4444' },
+                { id: 'cpl', label: 'CPL', color: '#f59e0b' },
+                { id: 'ctr', label: 'CTR %', color: '#06b6d4' },
+                { id: 'bounceRate', label: 'Отказы %', color: '#f97316' },
+              ].map((metric) => (
+                <label
+                  key={metric.id}
+                  className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border cursor-pointer transition-all ${
+                    selectedChartMetrics.has(metric.id)
+                      ? 'border-gray-400 bg-gray-50'
+                      : 'border-gray-200 hover:border-gray-300'
+                  }`}
+                >
+                  <input
+                    type="checkbox"
+                    checked={selectedChartMetrics.has(metric.id)}
+                    onChange={() => {
+                      setSelectedChartMetrics(prev => {
+                        const next = new Set(prev);
+                        if (next.has(metric.id)) {
+                          next.delete(metric.id);
+                        } else {
+                          next.add(metric.id);
+                        }
+                        return next;
+                      });
+                    }}
+                    className="sr-only"
+                  />
+                  <span
+                    className="w-3 h-3 rounded-full"
+                    style={{ backgroundColor: selectedChartMetrics.has(metric.id) ? metric.color : '#d1d5db' }}
+                  />
+                  <span className={`text-sm ${selectedChartMetrics.has(metric.id) ? 'text-gray-900 font-medium' : 'text-gray-500'}`}>
+                    {metric.label}
+                  </span>
+                </label>
+              ))}
+            </div>
+
+            {/* График */}
+            <ResponsiveContainer width="100%" height={300}>
+              <LineChart data={dailyStats}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                <XAxis
+                  dataKey="date"
+                  tick={{ fontSize: 11 }}
+                  tickFormatter={(value) => {
+                    const d = new Date(value);
+                    return `${d.getDate()}.${d.getMonth() + 1}`;
+                  }}
+                />
+                <YAxis
+                  yAxisId="left"
+                  tick={{ fontSize: 11 }}
+                  tickFormatter={(v) => v >= 1000 ? `${(v / 1000).toFixed(0)}K` : v}
+                />
+                <YAxis
+                  yAxisId="right"
+                  orientation="right"
+                  tick={{ fontSize: 11 }}
+                  tickFormatter={(v) => v >= 1000 ? `${(v / 1000).toFixed(0)}K` : v}
+                />
+                <Tooltip
+                  formatter={(value: any, name: string) => {
+                    if (name === 'Расход' || name === 'CPL') return [`${Math.round(value).toLocaleString('ru-RU')} ₽`, name];
+                    if (name === 'CTR %' || name === 'Отказы %') return [`${Number(value).toFixed(2)}%`, name];
+                    return [Math.round(value).toLocaleString('ru-RU'), name];
+                  }}
+                  labelFormatter={(label) => {
+                    const d = new Date(label);
+                    return d.toLocaleDateString('ru-RU');
+                  }}
+                />
+                <Legend />
+                {selectedChartMetrics.has('impressions') && (
+                  <Line yAxisId="left" type="monotone" dataKey="impressions" name="Показы" stroke="#8b5cf6" strokeWidth={2} dot={false} />
+                )}
+                {selectedChartMetrics.has('clicks') && (
+                  <Line yAxisId="left" type="monotone" dataKey="clicks" name="Клики" stroke="#10b981" strokeWidth={2} dot={false} />
+                )}
+                {selectedChartMetrics.has('cost') && (
+                  <Line yAxisId="left" type="monotone" dataKey="cost" name="Расход" stroke="#3b82f6" strokeWidth={2} dot={false} />
+                )}
+                {selectedChartMetrics.has('conversions') && (
+                  <Line yAxisId="right" type="monotone" dataKey="conversions" name="Конверсии" stroke="#ef4444" strokeWidth={2} dot={false} />
+                )}
+                {selectedChartMetrics.has('cpl') && (
+                  <Line yAxisId="right" type="monotone" dataKey="cpl" name="CPL" stroke="#f59e0b" strokeWidth={2} dot={false} />
+                )}
+                {selectedChartMetrics.has('ctr') && (
+                  <Line yAxisId="right" type="monotone" dataKey="ctr" name="CTR %" stroke="#06b6d4" strokeWidth={2} dot={false} />
+                )}
+                {selectedChartMetrics.has('bounceRate') && (
+                  <Line yAxisId="right" type="monotone" dataKey="bounceRate" name="Отказы %" stroke="#f97316" strokeWidth={2} dot={false} />
+                )}
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+
+          {/* Таблица статистики по дням */}
+          <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+            <div className="px-4 py-3 border-b border-gray-200 bg-gray-50">
+              <h3 className="text-sm font-medium text-gray-700">Статистика по дням</h3>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="bg-gray-50 border-b border-gray-200">
+                  <tr>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Дата</th>
+                    <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Показы</th>
+                    <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Клики</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase w-32">Расход</th>
+                    <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Цена клика</th>
+                    <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">CTR</th>
+                    <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Отказы</th>
+                    <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Конверсии</th>
+                    <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">CR %</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase w-32">CPL</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {(() => {
+                    // Вычисляем max значения для цветных баров
+                    const maxCost = Math.max(...dailyStats.map((d: any) => d.cost || 0));
+                    const maxCpl = Math.max(...dailyStats.map((d: any) => d.cpl || 0));
+
+                    return dailyStats.map((day: any, idx: number) => {
+                      const costPercent = maxCost > 0 ? (day.cost / maxCost) * 100 : 0;
+                      const cplPercent = maxCpl > 0 ? (day.cpl / maxCpl) * 100 : 0;
+
+                      // Цвет бара расхода: от зелёного (низкий) до красного (высокий)
+                      const getCostColor = (percent: number) => {
+                        if (percent < 33) return 'bg-green-400';
+                        if (percent < 66) return 'bg-yellow-400';
+                        return 'bg-red-400';
+                      };
+
+                      // Цвет бара CPL: от зелёного (низкий) до красного (высокий)
+                      const getCplColor = (percent: number) => {
+                        if (percent < 33) return 'bg-green-400';
+                        if (percent < 66) return 'bg-yellow-400';
+                        return 'bg-red-400';
+                      };
+
+                      // Форматирование даты в зависимости от группировки
+                      const formatPeriodDate = (dateStr: string) => {
+                        const d = new Date(dateStr);
+                        if (groupBy === 'month') {
+                          return d.toLocaleDateString('ru-RU', { month: 'long', year: 'numeric' });
+                        } else if (groupBy === 'week') {
+                          const endOfWeek = new Date(d);
+                          endOfWeek.setDate(d.getDate() + 6);
+                          return `${d.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit' })} - ${endOfWeek.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit' })}`;
+                        } else if (groupBy === '3days') {
+                          return `${d.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit' })} (3д)`;
+                        }
+                        return d.toLocaleDateString('ru-RU');
+                      };
+
+                      return (
+                        <tr key={idx} className="hover:bg-gray-50">
+                          <td className="px-4 py-3 text-gray-900 font-medium">
+                            {formatPeriodDate(day.date)}
+                          </td>
+                          <td className="px-4 py-3 text-right text-gray-600">
+                            {(day.impressions || 0).toLocaleString('ru-RU')}
+                          </td>
+                          <td className="px-4 py-3 text-right text-gray-600">
+                            {(day.clicks || 0).toLocaleString('ru-RU')}
+                          </td>
+                          <td className="px-4 py-3">
+                            <div className="flex items-center gap-2">
+                              <div className="flex-1 h-5 bg-gray-100 rounded-sm overflow-hidden">
+                                <div
+                                  className={`h-full ${getCostColor(costPercent)} transition-all`}
+                                  style={{ width: `${costPercent}%` }}
+                                />
+                              </div>
+                              <span className="text-xs text-gray-700 w-16 text-right">
+                                {Math.round(day.cost || 0).toLocaleString('ru-RU')}
+                              </span>
+                            </div>
+                          </td>
+                          <td className="px-4 py-3 text-right text-gray-600">
+                            {(day.cpc || 0).toFixed(1)}
+                          </td>
+                          <td className="px-4 py-3 text-right text-gray-600">
+                            {(day.ctr || 0).toFixed(2)}%
+                          </td>
+                          <td className="px-4 py-3 text-right">
+                            <span className={`px-2 py-0.5 rounded text-xs ${
+                              (day.bounceRate || 0) > 50 ? 'bg-red-100 text-red-700' :
+                              (day.bounceRate || 0) > 30 ? 'bg-yellow-100 text-yellow-700' :
+                              'bg-green-100 text-green-700'
+                            }`}>
+                              {(day.bounceRate || 0).toFixed(1)}%
+                            </span>
+                          </td>
+                          <td className="px-4 py-3 text-right text-gray-900 font-medium">
+                            {(day.conversions || 0).toLocaleString('ru-RU')}
+                          </td>
+                          <td className="px-4 py-3 text-right text-gray-600">
+                            {(day.cr || 0).toFixed(2)}%
+                          </td>
+                          <td className="px-4 py-3">
+                            {day.cpl > 0 ? (
+                              <div className="flex items-center gap-2">
+                                <div className="flex-1 h-5 bg-gray-100 rounded-sm overflow-hidden">
+                                  <div
+                                    className={`h-full ${getCplColor(cplPercent)} transition-all`}
+                                    style={{ width: `${cplPercent}%` }}
+                                  />
+                                </div>
+                                <span className="text-xs text-gray-700 w-16 text-right">
+                                  {Math.round(day.cpl).toLocaleString('ru-RU')}
+                                </span>
+                              </div>
+                            ) : (
+                              <span className="text-gray-400">—</span>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    });
+                  })()}
+                </tbody>
+              </table>
+            </div>
+          </div>
+          </div>
+          )}
+        </div>
+      )}
+
+      {/* Секция отчётов - два аккордеона с табами */}
+      {campaigns.length > 0 && (
+        <div className="mb-8 space-y-4">
+          {/* Заголовок с индикатором глобального фильтра */}
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <BarChart3 size={22} className="text-primary-600" />
+              <h2 className="text-xl font-bold text-gray-900">Отчёты</h2>
+            </div>
+            {(globalFilterCampaignId || globalFilterAdGroupId) && (
+              <div className="flex items-center gap-2">
+                {globalFilterCampaignId && !globalFilterAdGroupId && (
+                  <div className="flex items-center gap-2 bg-blue-50 border border-blue-200 rounded-lg px-3 py-1.5">
+                    <Filter size={14} className="text-blue-600" />
+                    <span className="text-sm text-blue-800 max-w-[200px] truncate">
+                      {rawCampaigns.find((c: any) => c.campaignId === globalFilterCampaignId)?.campaignName || 'Кампания'}
+                    </span>
+                    <button
+                      onClick={() => handleCampaignFilterChange(null)}
+                      className="text-blue-600 hover:text-blue-800"
+                    >
+                      <X size={14} />
+                    </button>
+                  </div>
+                )}
+                {globalFilterAdGroupId && (
+                  <div className="flex items-center gap-2 bg-purple-50 border border-purple-200 rounded-lg px-3 py-1.5">
+                    <Filter size={14} className="text-purple-600" />
+                    <span className="text-sm text-purple-800 max-w-[300px] truncate">
+                      {(() => {
+                        const campaign = rawCampaigns.find((c: any) => c.campaignId === globalFilterCampaignId);
+                        const adGroup = campaign?.adGroups?.find((ag: any) => ag.adGroupId === globalFilterAdGroupId);
+                        return adGroup?.adGroupName || 'Группа';
+                      })()}
+                    </span>
+                    <button
+                      onClick={() => {
+                        handleAdGroupFilterChange(null);
+                        handleCampaignFilterChange(null);
+                      }}
+                      className="text-purple-600 hover:text-purple-800"
+                    >
+                      <X size={14} />
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* Два аккордеона с табами */}
+          {(() => {
+            // Используем глобальные фильтры для отчётов
+            let filteredCampaigns = campaigns;
+            if (globalFilterAdGroupId && globalFilterCampaignId) {
+              // Фильтр по конкретной группе
+              filteredCampaigns = rawCampaigns
+                .filter((c: any) => c.campaignId === globalFilterCampaignId)
+                .map((c: any) => ({
+                  ...c,
+                  adGroups: (c.adGroups || []).filter((ag: any) => ag.adGroupId === globalFilterAdGroupId),
+                }));
+            } else if (globalFilterCampaignId) {
+              // Фильтр только по кампании
+              filteredCampaigns = rawCampaigns.filter((c: any) => c.campaignId === globalFilterCampaignId);
+            }
+
+            const filteredStats = filteredCampaigns.reduce(
+              (acc: any, c: any) => {
+                // Если есть фильтр по группе, считаем статистику только по отфильтрованным группам
+                const groups = c.adGroups || [];
+                const groupStats = groups.reduce((gAcc: any, ag: any) => ({
+                  impressions: gAcc.impressions + (ag.totalImpressions || 0),
+                  clicks: gAcc.clicks + (ag.totalClicks || 0),
+                  cost: gAcc.cost + (ag.totalCost || 0),
+                  conversions: gAcc.conversions + (ag.totalConversions || 0),
+                }), { impressions: 0, clicks: 0, cost: 0, conversions: 0 });
+
+                return {
+                  impressions: acc.impressions + groupStats.impressions,
+                  clicks: acc.clicks + groupStats.clicks,
+                  cost: acc.cost + groupStats.cost,
+                  conversions: acc.conversions + groupStats.conversions,
+                };
+              },
+              { impressions: 0, clicks: 0, cost: 0, conversions: 0 }
+            );
+
+            // Данные для заголовков
+            const titlesMap = new Map<string, { impressions: number; clicks: number; cost: number; conversions: number }>();
+            filteredCampaigns.forEach((campaign: any) => {
+              campaign.adGroups?.forEach((adGroup: any) => {
+                adGroup.ads?.forEach((ad: any) => {
+                  const title = ad.adTitle || `Объявление ${ad.adId}`;
+                  const existing = titlesMap.get(title) || { impressions: 0, clicks: 0, cost: 0, conversions: 0 };
+                  titlesMap.set(title, {
+                    impressions: existing.impressions + (ad.totalImpressions || 0),
+                    clicks: existing.clicks + (ad.totalClicks || 0),
+                    cost: existing.cost + (ad.totalCost || 0),
+                    conversions: existing.conversions + (ad.totalConversions || 0),
+                  });
+                });
+              });
+            });
+
+            // Табы для секции "Показатели аудитории"
+            const audienceTabs = [
+              { id: 'search', label: 'Поисковые запросы', icon: Search, isMock: true },
+              { id: 'demographics', label: 'Пол / Возраст', icon: Users, isMock: true },
+              { id: 'devices', label: 'Устройства', icon: Smartphone, isMock: true },
+              { id: 'income', label: 'Платежеспособность', icon: DollarSign, isMock: true },
+              { id: 'region', label: 'Регион', icon: MapPin, isMock: true },
+            ];
+
+            // Табы для секции "Технические показатели"
+            const technicalTabs = [
+              { id: 'categories', label: 'Категории таргетинга', icon: Tag, isMock: true },
+              { id: 'titles', label: 'Заголовок', icon: FileText, isMock: false },
+              { id: 'text', label: 'Текст', icon: Type, isMock: true },
+              { id: 'criteria', label: 'Условия показа', icon: Target, isMock: false },
+              { id: 'placements', label: 'Площадки', icon: Layout, isMock: true },
+            ];
+
+            // Данные для разных отчётов
+            const getReportData = (reportId: string) => {
+              switch (reportId) {
+                case 'titles':
+                  return {
+                    columnName: 'Заголовок',
+                    data: Array.from(titlesMap.entries())
+                      .map(([name, d]) => ({ name, ...d }))
+                      .sort((a, b) => b.cost - a.cost)
+                      .slice(0, 10),
+                  };
+                case 'criteria':
+                  return {
+                    columnName: 'Условие показа',
+                    data: filteredCampaigns.flatMap((campaign: any) =>
+                      (campaign.adGroups || []).map((adGroup: any) => ({
+                        name: adGroup.adGroupName || `Группа ${adGroup.adGroupId}`,
+                        impressions: adGroup.totalImpressions || 0,
+                        clicks: adGroup.totalClicks || 0,
+                        cost: adGroup.totalCost || 0,
+                        conversions: adGroup.totalConversions || 0,
+                      }))
+                    ).sort((a: any, b: any) => b.cost - a.cost).slice(0, 10),
+                  };
+                case 'devices':
+                  return {
+                    columnName: 'Устройство',
+                    data: [
+                      { name: 'Телефон', icon: Smartphone, impressions: filteredStats.impressions * 0.65, clicks: filteredStats.clicks * 0.70, cost: filteredStats.cost * 0.68, conversions: Math.round(filteredStats.conversions * 0.72) },
+                      { name: 'Десктоп', icon: Monitor, impressions: filteredStats.impressions * 0.30, clicks: filteredStats.clicks * 0.25, cost: filteredStats.cost * 0.27, conversions: Math.round(filteredStats.conversions * 0.23) },
+                      { name: 'Планшет', icon: Tablet, impressions: filteredStats.impressions * 0.05, clicks: filteredStats.clicks * 0.05, cost: filteredStats.cost * 0.05, conversions: Math.round(filteredStats.conversions * 0.05) },
+                    ],
+                  };
+                case 'demographics':
+                  return {
+                    columnName: 'Сегмент',
+                    data: [
+                      { name: 'Женщины 25-34', impressions: filteredStats.impressions * 0.25, clicks: filteredStats.clicks * 0.28, cost: filteredStats.cost * 0.27, conversions: Math.round(filteredStats.conversions * 0.30) },
+                      { name: 'Женщины 35-44', impressions: filteredStats.impressions * 0.20, clicks: filteredStats.clicks * 0.22, cost: filteredStats.cost * 0.21, conversions: Math.round(filteredStats.conversions * 0.25) },
+                      { name: 'Мужчины 25-34', impressions: filteredStats.impressions * 0.18, clicks: filteredStats.clicks * 0.17, cost: filteredStats.cost * 0.18, conversions: Math.round(filteredStats.conversions * 0.15) },
+                      { name: 'Женщины 45-54', impressions: filteredStats.impressions * 0.15, clicks: filteredStats.clicks * 0.14, cost: filteredStats.cost * 0.15, conversions: Math.round(filteredStats.conversions * 0.12) },
+                      { name: 'Мужчины 35-44', impressions: filteredStats.impressions * 0.12, clicks: filteredStats.clicks * 0.11, cost: filteredStats.cost * 0.11, conversions: Math.round(filteredStats.conversions * 0.10) },
+                    ],
+                  };
+                case 'search':
+                  return {
+                    columnName: 'Поисковый запрос',
+                    data: [
+                      { name: 'нейродиректолог москва', impressions: filteredStats.impressions * 0.15, clicks: filteredStats.clicks * 0.18, cost: filteredStats.cost * 0.17, conversions: Math.round(filteredStats.conversions * 0.20) },
+                      { name: 'настройка яндекс директ', impressions: filteredStats.impressions * 0.12, clicks: filteredStats.clicks * 0.14, cost: filteredStats.cost * 0.13, conversions: Math.round(filteredStats.conversions * 0.15) },
+                      { name: 'контекстная реклама', impressions: filteredStats.impressions * 0.10, clicks: filteredStats.clicks * 0.11, cost: filteredStats.cost * 0.10, conversions: Math.round(filteredStats.conversions * 0.12) },
+                      { name: 'директолог цена', impressions: filteredStats.impressions * 0.08, clicks: filteredStats.clicks * 0.09, cost: filteredStats.cost * 0.09, conversions: Math.round(filteredStats.conversions * 0.10) },
+                      { name: 'реклама в яндексе', impressions: filteredStats.impressions * 0.07, clicks: filteredStats.clicks * 0.07, cost: filteredStats.cost * 0.07, conversions: Math.round(filteredStats.conversions * 0.08) },
+                    ],
+                  };
+                case 'income':
+                  return {
+                    columnName: 'Уровень дохода',
+                    data: [
+                      { name: 'Средний', impressions: filteredStats.impressions * 0.45, clicks: filteredStats.clicks * 0.42, cost: filteredStats.cost * 0.40, conversions: Math.round(filteredStats.conversions * 0.38) },
+                      { name: 'Выше среднего', impressions: filteredStats.impressions * 0.30, clicks: filteredStats.clicks * 0.33, cost: filteredStats.cost * 0.35, conversions: Math.round(filteredStats.conversions * 0.40) },
+                      { name: 'Высокий', impressions: filteredStats.impressions * 0.15, clicks: filteredStats.clicks * 0.17, cost: filteredStats.cost * 0.18, conversions: Math.round(filteredStats.conversions * 0.17) },
+                      { name: 'Ниже среднего', impressions: filteredStats.impressions * 0.10, clicks: filteredStats.clicks * 0.08, cost: filteredStats.cost * 0.07, conversions: Math.round(filteredStats.conversions * 0.05) },
+                    ],
+                  };
+                case 'region':
+                  return {
+                    columnName: 'Регион',
+                    data: [
+                      { name: 'Москва', impressions: filteredStats.impressions * 0.35, clicks: filteredStats.clicks * 0.40, cost: filteredStats.cost * 0.42, conversions: Math.round(filteredStats.conversions * 0.45) },
+                      { name: 'Санкт-Петербург', impressions: filteredStats.impressions * 0.15, clicks: filteredStats.clicks * 0.16, cost: filteredStats.cost * 0.17, conversions: Math.round(filteredStats.conversions * 0.18) },
+                      { name: 'Московская область', impressions: filteredStats.impressions * 0.12, clicks: filteredStats.clicks * 0.11, cost: filteredStats.cost * 0.10, conversions: Math.round(filteredStats.conversions * 0.10) },
+                      { name: 'Краснодарский край', impressions: filteredStats.impressions * 0.08, clicks: filteredStats.clicks * 0.07, cost: filteredStats.cost * 0.07, conversions: Math.round(filteredStats.conversions * 0.06) },
+                      { name: 'Новосибирская область', impressions: filteredStats.impressions * 0.05, clicks: filteredStats.clicks * 0.05, cost: filteredStats.cost * 0.05, conversions: Math.round(filteredStats.conversions * 0.05) },
+                    ],
+                  };
+                case 'categories':
+                  return {
+                    columnName: 'Категория',
+                    data: [
+                      { name: 'Маркетинг и реклама', impressions: filteredStats.impressions * 0.40, clicks: filteredStats.clicks * 0.45, cost: filteredStats.cost * 0.43, conversions: Math.round(filteredStats.conversions * 0.48) },
+                      { name: 'Бизнес-услуги', impressions: filteredStats.impressions * 0.25, clicks: filteredStats.clicks * 0.23, cost: filteredStats.cost * 0.25, conversions: Math.round(filteredStats.conversions * 0.22) },
+                      { name: 'Интернет и IT', impressions: filteredStats.impressions * 0.20, clicks: filteredStats.clicks * 0.18, cost: filteredStats.cost * 0.18, conversions: Math.round(filteredStats.conversions * 0.17) },
+                      { name: 'Консалтинг', impressions: filteredStats.impressions * 0.15, clicks: filteredStats.clicks * 0.14, cost: filteredStats.cost * 0.14, conversions: Math.round(filteredStats.conversions * 0.13) },
+                    ],
+                  };
+                case 'text':
+                  return {
+                    columnName: 'Текст объявления',
+                    data: [
+                      { name: 'Настройка рекламы от профессионала...', impressions: filteredStats.impressions * 0.35, clicks: filteredStats.clicks * 0.38, cost: filteredStats.cost * 0.36, conversions: Math.round(filteredStats.conversions * 0.40) },
+                      { name: 'Увеличим продажи с помощью...', impressions: filteredStats.impressions * 0.30, clicks: filteredStats.clicks * 0.32, cost: filteredStats.cost * 0.32, conversions: Math.round(filteredStats.conversions * 0.30) },
+                      { name: 'Эффективная реклама для вашего...', impressions: filteredStats.impressions * 0.20, clicks: filteredStats.clicks * 0.18, cost: filteredStats.cost * 0.19, conversions: Math.round(filteredStats.conversions * 0.18) },
+                      { name: 'Привлечём клиентов уже сегодня...', impressions: filteredStats.impressions * 0.15, clicks: filteredStats.clicks * 0.12, cost: filteredStats.cost * 0.13, conversions: Math.round(filteredStats.conversions * 0.12) },
+                    ],
+                  };
+                case 'placements':
+                  return {
+                    columnName: 'Площадка',
+                    data: [
+                      { name: 'Яндекс Поиск', impressions: filteredStats.impressions * 0.50, clicks: filteredStats.clicks * 0.60, cost: filteredStats.cost * 0.55, conversions: Math.round(filteredStats.conversions * 0.65) },
+                      { name: 'РСЯ: dzen.ru', impressions: filteredStats.impressions * 0.20, clicks: filteredStats.clicks * 0.18, cost: filteredStats.cost * 0.20, conversions: Math.round(filteredStats.conversions * 0.15) },
+                      { name: 'РСЯ: mail.ru', impressions: filteredStats.impressions * 0.15, clicks: filteredStats.clicks * 0.12, cost: filteredStats.cost * 0.13, conversions: Math.round(filteredStats.conversions * 0.10) },
+                      { name: 'РСЯ: avito.ru', impressions: filteredStats.impressions * 0.10, clicks: filteredStats.clicks * 0.07, cost: filteredStats.cost * 0.08, conversions: Math.round(filteredStats.conversions * 0.07) },
+                      { name: 'РСЯ: другие', impressions: filteredStats.impressions * 0.05, clicks: filteredStats.clicks * 0.03, cost: filteredStats.cost * 0.04, conversions: Math.round(filteredStats.conversions * 0.03) },
+                    ],
+                  };
+                default:
+                  return { columnName: 'Название', data: [] };
+              }
+            };
+
+            // Рендер таблицы отчёта
+            const renderReportTable = (reportId: string, isMock: boolean) => {
+              const report = getReportData(reportId);
+              return (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead className="bg-gray-50">
+                      <tr>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                          {report.columnName}
+                          {isMock && <span className="ml-2 text-[10px] bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded normal-case">демо</span>}
+                        </th>
+                        <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Клики</th>
+                        <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Расход</th>
+                        <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Конверсии</th>
+                        <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">CPL</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100">
+                      {report.data.length > 0 ? report.data.map((item: any, idx: number) => {
+                        const cpl = item.conversions > 0 ? item.cost / item.conversions : 0;
+                        const ItemIcon = item.icon;
+                        return (
+                          <tr key={idx} className="hover:bg-gray-50">
+                            <td className="px-4 py-3 text-gray-900">
+                              {ItemIcon ? (
+                                <div className="flex items-center gap-2">
+                                  <ItemIcon size={16} className="text-gray-400" />
+                                  <span>{item.name}</span>
+                                </div>
+                              ) : (
+                                <span className="truncate block max-w-[300px]" title={item.name}>{item.name}</span>
+                              )}
+                            </td>
+                            <td className="px-4 py-3 text-right text-gray-600">{Math.round(item.clicks).toLocaleString('ru-RU')}</td>
+                            <td className="px-4 py-3 text-right font-medium text-gray-900">{Math.round(item.cost).toLocaleString('ru-RU')} ₽</td>
+                            <td className="px-4 py-3 text-right text-gray-600">{item.conversions}</td>
+                            <td className="px-4 py-3 text-right text-gray-600">{cpl > 0 ? `${Math.round(cpl).toLocaleString('ru-RU')} ₽` : '—'}</td>
+                          </tr>
+                        );
+                      }) : (
+                        <tr>
+                          <td colSpan={5} className="px-4 py-8 text-center text-gray-500">
+                            Нет данных
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              );
+            };
+
+            const isAudienceOpen = openReportSections.has('audience');
+            const isTechnicalOpen = openReportSections.has('technical');
+
+            return (
+              <div className="space-y-3">
+                {/* Аккордеон: Показатели аудитории */}
+                <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+                  <button
+                    onClick={() => toggleReportSection('audience')}
+                    className="w-full px-5 py-4 flex items-center justify-between hover:bg-gray-50 transition-colors"
+                  >
+                    <div className="flex items-center gap-3">
+                      <Users size={20} className="text-primary-600" />
+                      <span className="font-semibold text-gray-900">Показатели аудитории</span>
+                      <span className="text-xs text-gray-400">{audienceTabs.length} отчётов</span>
+                    </div>
+                    {isAudienceOpen ? (
+                      <ChevronUp size={20} className="text-gray-400" />
+                    ) : (
+                      <ChevronDown size={20} className="text-gray-400" />
+                    )}
+                  </button>
+
+                  {isAudienceOpen && (
+                    <div className="border-t border-gray-200">
+                      {/* Табы */}
+                      <div className="flex flex-wrap gap-1 px-4 py-3 bg-gray-50 border-b border-gray-200">
+                        {audienceTabs.map((tab) => {
+                          const Icon = tab.icon;
+                          const isActive = audienceReportTab === tab.id;
+                          return (
+                            <button
+                              key={tab.id}
+                              onClick={() => setAudienceReportTab(tab.id)}
+                              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm transition-colors ${
+                                isActive
+                                  ? 'bg-primary-600 text-white'
+                                  : 'bg-white text-gray-600 hover:bg-gray-100 border border-gray-200'
+                              }`}
+                            >
+                              <Icon size={14} />
+                              <span>{tab.label}</span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                      {/* Таблица */}
+                      {renderReportTable(audienceReportTab, audienceTabs.find(t => t.id === audienceReportTab)?.isMock || false)}
+                    </div>
+                  )}
+                </div>
+
+                {/* Аккордеон: Технические показатели */}
+                <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+                  <button
+                    onClick={() => toggleReportSection('technical')}
+                    className="w-full px-5 py-4 flex items-center justify-between hover:bg-gray-50 transition-colors"
+                  >
+                    <div className="flex items-center gap-3">
+                      <FileText size={20} className="text-primary-600" />
+                      <span className="font-semibold text-gray-900">Технические показатели</span>
+                      <span className="text-xs text-gray-400">{technicalTabs.length} отчётов</span>
+                    </div>
+                    {isTechnicalOpen ? (
+                      <ChevronUp size={20} className="text-gray-400" />
+                    ) : (
+                      <ChevronDown size={20} className="text-gray-400" />
+                    )}
+                  </button>
+
+                  {isTechnicalOpen && (
+                    <div className="border-t border-gray-200">
+                      {/* Табы */}
+                      <div className="flex flex-wrap gap-1 px-4 py-3 bg-gray-50 border-b border-gray-200">
+                        {technicalTabs.map((tab) => {
+                          const Icon = tab.icon;
+                          const isActive = technicalReportTab === tab.id;
+                          return (
+                            <button
+                              key={tab.id}
+                              onClick={() => setTechnicalReportTab(tab.id)}
+                              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm transition-colors ${
+                                isActive
+                                  ? 'bg-primary-600 text-white'
+                                  : 'bg-white text-gray-600 hover:bg-gray-100 border border-gray-200'
+                              }`}
+                            >
+                              <Icon size={14} />
+                              <span>{tab.label}</span>
+                              {!tab.isMock && <span className="w-1.5 h-1.5 bg-green-500 rounded-full" />}
+                            </button>
+                          );
+                        })}
+                      </div>
+                      {/* Таблица */}
+                      {renderReportTable(technicalReportTab, technicalTabs.find(t => t.id === technicalReportTab)?.isMock || false)}
+                    </div>
+                  )}
+                </div>
+
+                {/* Аккордеон: Посадочные страницы */}
+                <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+                  <button
+                    onClick={() => {
+                      const newState = !isLandingPagesOpen;
+                      setIsLandingPagesOpen(newState);
+                      if (newState) {
+                        loadLandingPages();
+                      }
+                    }}
+                    className="w-full px-5 py-4 flex items-center justify-between hover:bg-gray-50 transition-colors"
+                  >
+                    <div className="flex items-center gap-3">
+                      <LinkIcon size={20} className="text-primary-600" />
+                      <span className="font-semibold text-gray-900">Посадочные страницы</span>
+                      {landingPages.length > 0 && (
+                        <span className="text-xs text-gray-400">{landingPages.length} страниц</span>
+                      )}
+                    </div>
+                    {isLandingPagesOpen ? (
+                      <ChevronUp size={20} className="text-gray-400" />
+                    ) : (
+                      <ChevronDown size={20} className="text-gray-400" />
+                    )}
+                  </button>
+
+                  {isLandingPagesOpen && (
+                    <div className="border-t border-gray-200">
+                      {isLoadingLandingPages ? (
+                        <div className="flex items-center justify-center py-8">
+                          <Loader2 className="animate-spin text-primary-600" size={24} />
+                          <span className="ml-2 text-gray-500">Загрузка...</span>
+                        </div>
+                      ) : landingPages.length === 0 ? (
+                        <div className="text-center py-8 text-gray-500">
+                          <LinkIcon size={32} className="mx-auto mb-2 text-gray-300" />
+                          <p>Нет данных по посадочным страницам</p>
+                          <p className="text-sm text-gray-400 mt-1">Запустите синхронизацию для получения данных</p>
+                        </div>
+                      ) : (
+                        <div className="overflow-x-auto">
+                          <table className="min-w-full divide-y divide-gray-200">
+                            <thead className="bg-gray-50">
+                              <tr>
+                                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                  Посадочная страница
+                                </th>
+                                <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                  Показы
+                                </th>
+                                <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                  Клики
+                                </th>
+                                <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                  Расход
+                                </th>
+                                <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                  CTR
+                                </th>
+                                <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                  CPC
+                                </th>
+                                <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                  Отказы
+                                </th>
+                                <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                  Конв.
+                                </th>
+                                <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                  CPL
+                                </th>
+                                <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                  CR
+                                </th>
+                              </tr>
+                            </thead>
+                            <tbody className="bg-white divide-y divide-gray-200">
+                              {landingPages.map((lp, idx) => (
+                                <tr key={idx} className="hover:bg-gray-50">
+                                  <td className="px-4 py-3 text-sm">
+                                    <a
+                                      href={lp.landingPage}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="text-primary-600 hover:text-primary-800 hover:underline truncate block max-w-xs"
+                                      title={lp.landingPage}
+                                    >
+                                      {lp.landingPage.replace(/^https?:\/\//, '').substring(0, 50)}
+                                      {lp.landingPage.length > 50 ? '...' : ''}
+                                    </a>
+                                    <span className="text-xs text-gray-400">
+                                      {lp.adsCount} объявл.
+                                    </span>
+                                  </td>
+                                  <td className="px-4 py-3 text-sm text-right text-gray-900">
+                                    {lp.impressions?.toLocaleString() || 0}
+                                  </td>
+                                  <td className="px-4 py-3 text-sm text-right text-gray-900">
+                                    {lp.clicks?.toLocaleString() || 0}
+                                  </td>
+                                  <td className="px-4 py-3 text-sm text-right text-gray-900 font-medium">
+                                    {(lp.cost || 0).toLocaleString('ru-RU', { maximumFractionDigits: 0 })} ₽
+                                  </td>
+                                  <td className="px-4 py-3 text-sm text-right text-gray-900">
+                                    {(lp.ctr || 0).toFixed(2)}%
+                                  </td>
+                                  <td className="px-4 py-3 text-sm text-right text-gray-900">
+                                    {(lp.cpc || 0).toFixed(2)} ₽
+                                  </td>
+                                  <td className="px-4 py-3 text-sm text-right text-gray-900">
+                                    {(lp.bounceRate || 0).toFixed(1)}%
+                                  </td>
+                                  <td className="px-4 py-3 text-sm text-right text-gray-900 font-medium">
+                                    {lp.conversions || 0}
+                                  </td>
+                                  <td className="px-4 py-3 text-sm text-right text-gray-900">
+                                    {lp.conversions > 0 ? (
+                                      <span className={lp.cpl > 1000 ? 'text-red-600' : 'text-green-600'}>
+                                        {(lp.cpl || 0).toFixed(0)} ₽
+                                      </span>
+                                    ) : (
+                                      <span className="text-gray-400">—</span>
+                                    )}
+                                  </td>
+                                  <td className="px-4 py-3 text-sm text-right text-gray-900">
+                                    {(lp.cr || 0).toFixed(2)}%
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </div>
+            );
+          })()}
+        </div>
+      )}
 
       {/* Модальное окно редактирования подключения */}
       {editingConnection && (

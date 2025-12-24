@@ -926,8 +926,8 @@ export const yandexDirectService = {
     accessToken: string,
     login: string,
     adIds: string[]
-  ): Promise<Map<string, { title: string; title2?: string }>> {
-    const result = new Map<string, { title: string; title2?: string }>();
+  ): Promise<Map<string, { title: string; title2?: string; href?: string }>> {
+    const result = new Map<string, { title: string; title2?: string; href?: string }>();
     if (adIds.length === 0) return result;
 
     // API поддерживает максимум 10000 ID за раз, разбиваем на чанки
@@ -945,7 +945,7 @@ export const yandexDirectService = {
                 Ids: chunk.map(id => parseInt(id)),
               },
               FieldNames: ['Id', 'State', 'Type'],
-              TextAdFieldNames: ['Title', 'Title2', 'Text'],
+              TextAdFieldNames: ['Title', 'Title2', 'Text', 'Href'],
             },
           },
           {
@@ -964,6 +964,7 @@ export const yandexDirectService = {
               result.set(adId, {
                 title: ad.TextAd.Title || '',
                 title2: ad.TextAd.Title2 || undefined,
+                href: ad.TextAd.Href || undefined,
               });
             }
           }

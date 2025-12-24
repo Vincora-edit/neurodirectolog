@@ -472,6 +472,62 @@ router.get('/hierarchical-stats/:projectId', async (req, res) => {
 });
 
 /**
+ * GET /api/yandex/daily-stats/:projectId
+ * Получить статистику по дням для графиков и таблицы
+ * Поддерживает connectionId для мультиаккаунтности и фильтр по целям
+ * Поддерживает фильтрацию по campaignId, adGroupId, adId
+ */
+router.get('/daily-stats/:projectId', async (req, res) => {
+  try {
+    const { projectId } = req.params;
+    const { days, goalIds, startDate: startDateParam, endDate: endDateParam, connectionId, campaignId, adGroupId, adId } = req.query;
+
+    let connection;
+    if (connectionId) {
+      connection = await clickhouseService.getConnectionById(connectionId as string);
+    } else {
+      connection = await clickhouseService.getConnectionByProjectId(projectId);
+    }
+
+    if (!connection) {
+      return res.status(404).json({ error: 'Connection not found' });
+    }
+
+    let startDate: Date;
+    let endDate: Date;
+
+    if (startDateParam && endDateParam) {
+      startDate = new Date(startDateParam as string);
+      endDate = new Date(endDateParam as string);
+    } else {
+      endDate = new Date();
+      startDate = new Date();
+      startDate.setDate(startDate.getDate() - parseInt((days as string) || '30'));
+    }
+
+    let goalIdsArray: string[] | undefined;
+    if (goalIds) {
+      goalIdsArray = (goalIds as string).split(',').map(id => id.trim()).filter(id => id);
+    }
+
+    const stats = await clickhouseService.getDailyStats(
+      connection.id,
+      startDate,
+      endDate,
+      goalIdsArray,
+      campaignId as string | undefined,
+      adGroupId as string | undefined,
+      adId as string | undefined
+    );
+
+    res.json(stats);
+  } catch (error: any) {
+    console.error('Failed to get daily stats:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
  * GET /api/yandex/available-goals/:projectId
  * Получить список доступных целей для проекта
  * Поддерживает параметр connectionId для мультиаккаунтности
@@ -639,6 +695,160 @@ router.get('/connection/:connectionId/goals', async (req, res) => {
     });
   } catch (error: any) {
     console.error('Failed to get goals:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ==================== KPI Endpoints ====================
+
+/**
+ * GET /api/yandex/kpi/:connectionId
+ * Получить KPI для аккаунта на текущий месяц + статистику прогресса
+ */
+router.get('/kpi/:connectionId', async (req, res) => {
+  try {
+    const { connectionId } = req.params;
+
+    // Получаем текущий месяц
+    const now = new Date();
+    const month = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+
+    // Получаем KPI настройки
+    const kpi = await clickhouseService.getAccountKpi(connectionId, month);
+
+    // Используем цели из KPI настроек для расчёта статистики
+    // Это ключевое изменение - KPI использует свои привязанные цели, а не глобальный фильтр
+    const kpiGoalIds = kpi?.goalIds && kpi.goalIds.length > 0 ? kpi.goalIds : undefined;
+    const monthStats = await clickhouseService.getMonthStats(connectionId, kpiGoalIds);
+
+    // Рассчитываем прогресс
+    let costProgress = 0;
+    let costDayProgress = 0;
+    let leadsProgress = 0;
+    let leadsDayProgress = 0;
+    let cplStatus: 'good' | 'warning' | 'bad' = 'good';
+
+    if (kpi) {
+      // Прогресс по расходу (к общему плану)
+      costProgress = kpi.targetCost > 0 ? (monthStats.currentCost / kpi.targetCost) * 100 : 0;
+      // Прогресс по расходу к текущему дню (сколько должны были потратить)
+      const expectedCostToday = kpi.targetCost * monthStats.dayProgress;
+      costDayProgress = expectedCostToday > 0 ? (monthStats.currentCost / expectedCostToday) * 100 : 0;
+
+      // Прогресс по лидам
+      leadsProgress = kpi.targetLeads > 0 ? (monthStats.currentLeads / kpi.targetLeads) * 100 : 0;
+      const expectedLeadsToday = kpi.targetLeads * monthStats.dayProgress;
+      leadsDayProgress = expectedLeadsToday > 0 ? (monthStats.currentLeads / expectedLeadsToday) * 100 : 0;
+
+      // Статус CPL
+      if (kpi.targetCpl > 0 && monthStats.currentCpl > 0) {
+        const cplRatio = monthStats.currentCpl / kpi.targetCpl;
+        if (cplRatio <= 1) cplStatus = 'good';
+        else if (cplRatio <= 1.2) cplStatus = 'warning';
+        else cplStatus = 'bad';
+      }
+    }
+
+    res.json({
+      kpi: kpi || {
+        targetCost: 0,
+        targetCpl: 0,
+        targetLeads: 0,
+        goalIds: [],
+      },
+      stats: monthStats,
+      progress: {
+        costProgress: Math.min(costProgress, 150), // cap at 150%
+        costDayProgress: Math.min(costDayProgress, 150),
+        leadsProgress: Math.min(leadsProgress, 150),
+        leadsDayProgress: Math.min(leadsDayProgress, 150),
+        cplStatus,
+      },
+      month,
+    });
+  } catch (error: any) {
+    console.error('Failed to get KPI:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * POST /api/yandex/kpi/:connectionId
+ * Сохранить KPI для аккаунта
+ */
+router.post('/kpi/:connectionId', async (req, res) => {
+  try {
+    const { connectionId } = req.params;
+    const { targetCost, targetCpl, targetLeads, goalIds, month } = req.body;
+
+    // Используем указанный месяц или текущий
+    const now = new Date();
+    const targetMonth = month || `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+
+    const savedKpi = await clickhouseService.saveAccountKpi(connectionId, targetMonth, {
+      targetCost: parseFloat(targetCost) || 0,
+      targetCpl: parseFloat(targetCpl) || 0,
+      targetLeads: parseInt(targetLeads) || 0,
+      goalIds: goalIds || [],
+    });
+
+    res.json({
+      success: true,
+      kpi: savedKpi,
+    });
+  } catch (error: any) {
+    console.error('Failed to save KPI:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * GET /api/yandex/landing-pages/:projectId
+ * Получить статистику по посадочным страницам
+ */
+router.get('/landing-pages/:projectId', async (req, res) => {
+  try {
+    const { projectId } = req.params;
+    const { days, goalIds, startDate: startDateParam, endDate: endDateParam, connectionId } = req.query;
+
+    let connection;
+    if (connectionId) {
+      connection = await clickhouseService.getConnectionById(connectionId as string);
+    } else {
+      connection = await clickhouseService.getConnectionByProjectId(projectId);
+    }
+
+    if (!connection) {
+      return res.status(404).json({ error: 'Connection not found' });
+    }
+
+    let startDate: Date;
+    let endDate: Date;
+
+    if (startDateParam && endDateParam) {
+      startDate = new Date(startDateParam as string);
+      endDate = new Date(endDateParam as string);
+    } else {
+      endDate = new Date();
+      startDate = new Date();
+      startDate.setDate(startDate.getDate() - parseInt((days as string) || '30'));
+    }
+
+    let goalIdsArray: string[] | undefined;
+    if (goalIds) {
+      goalIdsArray = (goalIds as string).split(',').map(id => id.trim()).filter(id => id);
+    }
+
+    const stats = await clickhouseService.getLandingPageStats(
+      connection.id,
+      startDate,
+      endDate,
+      goalIdsArray
+    );
+
+    res.json(stats);
+  } catch (error: any) {
+    console.error('Failed to get landing page stats:', error);
     res.status(500).json({ error: error.message });
   }
 });

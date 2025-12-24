@@ -70,8 +70,8 @@ const authLimiter = rateLimit({
 });
 
 const apiLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 минут
-  max: 100, // Максимум 100 запросов
+  windowMs: 1 * 60 * 1000, // 1 минута
+  max: 200, // Максимум 200 запросов в минуту
   message: 'Too many requests, please try again later',
   standardHeaders: true,
   legacyHeaders: false,

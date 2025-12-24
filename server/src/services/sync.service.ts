@@ -373,6 +373,7 @@ export const syncService = {
                   campaignId: adInfo.campaignId,
                   title: titles.title,
                   title2: titles.title2,
+                  href: titles.href,
                 };
               });
               await clickhouseService.upsertAdContents(adContentRecords);

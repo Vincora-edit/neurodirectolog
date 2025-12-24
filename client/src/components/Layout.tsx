@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { Outlet, Link, useLocation } from 'react-router-dom';
 import {
   LayoutDashboard,
@@ -9,13 +10,16 @@ import {
   MessageSquare,
   Target,
   Filter,
-  LogOut
+  LogOut,
+  PanelLeftClose,
+  PanelLeft,
 } from 'lucide-react';
 import { useAuthStore } from '../store/authStore';
 
 export default function Layout() {
   const location = useLocation();
   const { user, logout } = useAuthStore();
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
   const navigation = [
     { name: 'Dashboard', href: '/', icon: LayoutDashboard },
@@ -31,12 +35,17 @@ export default function Layout() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <div className="flex h-screen">
-        <aside className="w-64 bg-white border-r border-gray-200">
-          <div className="flex flex-col h-full">
-            <div className="p-6 border-b border-gray-200">
-              <h1 className="text-2xl font-bold text-primary-600">Нейродиректолог</h1>
-              <p className="text-sm text-gray-600 mt-1">AI для Яндекс.Директ</p>
+      <div className="flex min-h-screen">
+        {/* Sidebar */}
+        <aside className={`bg-white border-r border-gray-200 transition-all duration-300 sticky top-0 h-screen ${
+          sidebarCollapsed ? 'w-0 overflow-hidden' : 'w-64'
+        }`}>
+          <div className="flex flex-col h-full w-64">
+            <div className="p-6 border-b border-gray-200 flex items-center justify-between">
+              <div>
+                <h1 className="text-2xl font-bold text-primary-600">Нейродиректолог</h1>
+                <p className="text-sm text-gray-600 mt-1">AI для Яндекс.Директ</p>
+              </div>
             </div>
 
             <nav className="flex-1 p-4 space-y-1 overflow-y-auto">
@@ -85,8 +94,22 @@ export default function Layout() {
           </div>
         </aside>
 
-        <main className="flex-1 overflow-auto">
-          <div className="max-w-7xl mx-auto p-8">
+        {/* Main content */}
+        <main className="flex-1">
+          {/* Top bar with toggle button */}
+          <div className="sticky top-0 z-10 bg-gray-50 border-b border-gray-200 px-4 py-2 flex items-center gap-4">
+            <button
+              onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
+              className="p-2 rounded-lg hover:bg-gray-200 transition-colors text-gray-600"
+              title={sidebarCollapsed ? 'Показать меню' : 'Скрыть меню'}
+            >
+              {sidebarCollapsed ? <PanelLeft size={20} /> : <PanelLeftClose size={20} />}
+            </button>
+            <span className="text-sm text-gray-500">
+              {sidebarCollapsed ? 'Меню скрыто' : ''}
+            </span>
+          </div>
+          <div className={`p-8 ${sidebarCollapsed ? 'w-full' : 'max-w-7xl mx-auto'}`}>
             <Outlet />
           </div>
         </main>
