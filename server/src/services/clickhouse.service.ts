@@ -1126,6 +1126,28 @@ export const clickhouseService = {
   async insertAdGroupConversions(records: any[]): Promise<void> {
     if (records.length === 0) return;
 
+    // Определяем диапазон дат и connection_id для удаления дубликатов
+    const connectionId = records[0].connectionId;
+    const dates = records.map(r => r.date);
+    const minDate = dates.sort()[0];
+    const maxDate = dates.sort().reverse()[0];
+
+    // Удаляем старые данные перед вставкой
+    try {
+      await client.command({
+        query: `
+          ALTER TABLE ad_group_conversions
+          DELETE WHERE connection_id = {connectionId:String}
+            AND date >= {minDate:Date}
+            AND date <= {maxDate:Date}
+        `,
+        query_params: { connectionId, minDate, maxDate },
+      });
+      console.log(`[ClickHouse] Deleted old ad_group_conversions for ${connectionId} from ${minDate} to ${maxDate}`);
+    } catch (error) {
+      console.error(`[ClickHouse] Failed to delete old ad_group_conversions:`, error);
+    }
+
     const values = records.map((r) => ({
       id: r.id,
       connection_id: r.connectionId,
@@ -1149,6 +1171,28 @@ export const clickhouseService = {
   // Вставка конверсий по объявлениям с разбивкой по целям
   async insertAdConversions(records: any[]): Promise<void> {
     if (records.length === 0) return;
+
+    // Определяем диапазон дат и connection_id для удаления дубликатов
+    const connectionId = records[0].connectionId;
+    const dates = records.map(r => r.date);
+    const minDate = dates.sort()[0];
+    const maxDate = dates.sort().reverse()[0];
+
+    // Удаляем старые данные перед вставкой
+    try {
+      await client.command({
+        query: `
+          ALTER TABLE ad_conversions
+          DELETE WHERE connection_id = {connectionId:String}
+            AND date >= {minDate:Date}
+            AND date <= {maxDate:Date}
+        `,
+        query_params: { connectionId, minDate, maxDate },
+      });
+      console.log(`[ClickHouse] Deleted old ad_conversions for ${connectionId} from ${minDate} to ${maxDate}`);
+    } catch (error) {
+      console.error(`[ClickHouse] Failed to delete old ad_conversions:`, error);
+    }
 
     const values = records.map((r) => ({
       id: r.id,
