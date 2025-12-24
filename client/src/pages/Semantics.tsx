@@ -2,10 +2,12 @@ import { useState, useEffect } from 'react';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { semanticsService, projectsService } from '../services/api';
 import type { Project } from '../services/api';
+import { useProjectStore } from '../store/projectStore';
 import { Download, Sparkles, FolderOpen, AlertCircle } from 'lucide-react';
 
 export default function Semantics() {
-  const [selectedProjectId, setSelectedProjectId] = useState<string>('');
+  const { activeProjectId, setActiveProjectId } = useProjectStore();
+  const selectedProjectId = activeProjectId || '';
   const [businessDescription, setBusinessDescription] = useState('');
   const [niche, setNiche] = useState('');
   const [keywords, setKeywords] = useState<string[]>([]);
@@ -75,7 +77,7 @@ export default function Semantics() {
               </label>
               <select
                 value={selectedProjectId}
-                onChange={(e) => setSelectedProjectId(e.target.value)}
+                onChange={(e) => setActiveProjectId(e.target.value || null)}
                 className="w-full px-4 py-2 border border-blue-300 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white"
               >
                 <option value="">Без проекта (ввести вручную)</option>

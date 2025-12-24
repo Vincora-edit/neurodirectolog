@@ -1,0 +1,396 @@
+import { Router, Response, NextFunction } from 'express';
+import fs from 'fs';
+import path from 'path';
+import { AuthRequest, authenticate } from '../middleware/auth';
+import { createError } from '../middleware/errorHandler';
+import { projectStore } from '../models/project.model';
+import { clickhouseService } from '../services/clickhouse.service';
+import { usageService } from '../services/usage.service';
+
+const router = Router();
+
+const USERS_FILE = path.join(process.cwd(), 'data', 'users.json');
+
+// Middleware для проверки админских прав
+const requireAdmin = (req: AuthRequest, res: Response, next: NextFunction) => {
+  if (!req.isAdmin) {
+    return next(createError('Admin access required', 403));
+  }
+  next();
+};
+
+// Загрузка пользователей
+function loadUsers(): any[] {
+  try {
+    if (fs.existsSync(USERS_FILE)) {
+      const data = fs.readFileSync(USERS_FILE, 'utf-8');
+      return JSON.parse(data);
+    }
+  } catch (error) {
+    console.error('Error loading users:', error);
+  }
+  return [];
+}
+
+// Сохранение пользователей
+function saveUsers(users: any[]): void {
+  try {
+    const dir = path.dirname(USERS_FILE);
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
+    }
+    fs.writeFileSync(USERS_FILE, JSON.stringify(users, null, 2), 'utf-8');
+  } catch (error) {
+    console.error('Error saving users:', error);
+  }
+}
+
+/**
+ * Получить список всех пользователей
+ */
+router.get('/users', authenticate, requireAdmin, async (req, res, next) => {
+  try {
+    const users = loadUsers();
+
+    // Получаем проекты и подключения для каждого пользователя
+    const usersWithStats = await Promise.all(users.map(async (user) => {
+      // Получаем проекты пользователя
+      const projects = projectStore.getByUserIdLightweight(user.id, false);
+      const userProjects = projects.filter(p => p.userId === user.id);
+
+      // Получаем подключения для всех проектов пользователя
+      let connectionsCount = 0;
+      for (const project of userProjects) {
+        try {
+          const connections = await clickhouseService.getConnectionsByProjectId(project.id);
+          connectionsCount += connections.length;
+        } catch (e) {
+          // Игнорируем ошибки
+        }
+      }
+
+      return {
+        id: user.id,
+        email: user.email,
+        name: user.name,
+        isAdmin: user.isAdmin || false,
+        createdAt: user.createdAt,
+        projectsCount: userProjects.length,
+        connectionsCount,
+      };
+    }));
+
+    res.json(usersWithStats);
+  } catch (error) {
+    next(error);
+  }
+});
+
+/**
+ * Получить детали пользователя с его проектами и подключениями
+ */
+router.get('/users/:userId', authenticate, requireAdmin, async (req, res, next) => {
+  try {
+    const { userId } = req.params;
+    const users = loadUsers();
+    const user = users.find(u => u.id === userId);
+
+    if (!user) {
+      throw createError('User not found', 404);
+    }
+
+    // Получаем проекты пользователя
+    const projects = projectStore.getByUserIdLightweight(userId, false);
+    const userProjects = projects.filter(p => p.userId === userId);
+
+    // Получаем подключения для каждого проекта
+    const projectsWithConnections = await Promise.all(userProjects.map(async (project) => {
+      let connections: any[] = [];
+      try {
+        connections = await clickhouseService.getConnectionsByProjectId(project.id);
+      } catch (e) {
+        // Игнорируем ошибки
+      }
+
+      return {
+        ...project,
+        connections: connections.map(c => ({
+          id: c.id,
+          login: c.login,
+          status: c.status,
+          lastSyncAt: c.lastSyncAt,
+        })),
+      };
+    }));
+
+    res.json({
+      id: user.id,
+      email: user.email,
+      name: user.name,
+      isAdmin: user.isAdmin || false,
+      createdAt: user.createdAt,
+      projects: projectsWithConnections,
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+/**
+ * Удалить пользователя
+ */
+router.delete('/users/:userId', authenticate, requireAdmin, async (req, res, next) => {
+  try {
+    const { userId } = req.params;
+
+    // Нельзя удалить самого себя
+    if (userId === (req as AuthRequest).userId) {
+      throw createError('Cannot delete yourself', 400);
+    }
+
+    const users = loadUsers();
+    const userIndex = users.findIndex(u => u.id === userId);
+
+    if (userIndex === -1) {
+      throw createError('User not found', 404);
+    }
+
+    // Удаляем пользователя
+    users.splice(userIndex, 1);
+    saveUsers(users);
+
+    res.json({ success: true, message: 'User deleted' });
+  } catch (error) {
+    next(error);
+  }
+});
+
+/**
+ * Изменить статус админа пользователя
+ */
+router.put('/users/:userId/admin', authenticate, requireAdmin, async (req, res, next) => {
+  try {
+    const { userId } = req.params;
+    const { isAdmin } = req.body;
+
+    // Нельзя снять админку с самого себя
+    if (userId === (req as AuthRequest).userId && !isAdmin) {
+      throw createError('Cannot remove admin from yourself', 400);
+    }
+
+    const users = loadUsers();
+    const user = users.find(u => u.id === userId);
+
+    if (!user) {
+      throw createError('User not found', 404);
+    }
+
+    user.isAdmin = isAdmin;
+    saveUsers(users);
+
+    res.json({ success: true, message: `Admin status ${isAdmin ? 'granted' : 'revoked'}` });
+  } catch (error) {
+    next(error);
+  }
+});
+
+/**
+ * Получить статистику системы
+ */
+router.get('/stats', authenticate, requireAdmin, async (req, res, next) => {
+  try {
+    const users = loadUsers();
+
+    // Получаем все проекты
+    const allProjects = projectStore.getByUserIdLightweight('', true);
+
+    // Получаем размер данных из ClickHouse
+    let clickhouseStats = {
+      totalRows: 0,
+      diskUsageMB: 0,
+      tables: [] as { name: string; rows: number; sizeMB: number }[],
+    };
+
+    try {
+      // Получаем статистику по таблицам
+      const tablesQuery = `
+        SELECT
+          table,
+          sum(rows) as rows,
+          sum(bytes_on_disk) / 1024 / 1024 as size_mb
+        FROM system.parts
+        WHERE database = 'neurodirectolog' AND active
+        GROUP BY table
+        ORDER BY size_mb DESC
+      `;
+
+      const tablesResult = await clickhouseService.query(tablesQuery);
+
+      if (tablesResult && Array.isArray(tablesResult)) {
+        clickhouseStats.tables = tablesResult.map((row: any) => ({
+          name: row.table,
+          rows: parseInt(row.rows) || 0,
+          sizeMB: parseFloat(row.size_mb) || 0,
+        }));
+
+        clickhouseStats.totalRows = clickhouseStats.tables.reduce((sum, t) => sum + t.rows, 0);
+        clickhouseStats.diskUsageMB = clickhouseStats.tables.reduce((sum, t) => sum + t.sizeMB, 0);
+      }
+    } catch (e) {
+      console.error('Error getting ClickHouse stats:', e);
+    }
+
+    // Получаем размер файлов данных
+    let dataFilesSize = 0;
+    const dataDir = path.join(process.cwd(), 'data');
+    if (fs.existsSync(dataDir)) {
+      const files = fs.readdirSync(dataDir);
+      for (const file of files) {
+        const filePath = path.join(dataDir, file);
+        const stat = fs.statSync(filePath);
+        if (stat.isFile()) {
+          dataFilesSize += stat.size;
+        }
+      }
+    }
+
+    // Считаем подключения
+    let totalConnections = 0;
+    let activeConnections = 0;
+    for (const project of allProjects) {
+      try {
+        const connections = await clickhouseService.getConnectionsByProjectId(project.id);
+        totalConnections += connections.length;
+        activeConnections += connections.filter(c => c.status === 'active').length;
+      } catch (e) {
+        // Игнорируем ошибки
+      }
+    }
+
+    res.json({
+      users: {
+        total: users.length,
+        admins: users.filter(u => u.isAdmin).length,
+      },
+      projects: {
+        total: allProjects.length,
+        withSemantics: allProjects.filter(p => p.hasSemantics).length,
+        withAds: allProjects.filter(p => p.hasAds || p.hasCompleteAds).length,
+      },
+      connections: {
+        total: totalConnections,
+        active: activeConnections,
+      },
+      storage: {
+        clickhouse: {
+          totalRows: clickhouseStats.totalRows,
+          diskUsageMB: Math.round(clickhouseStats.diskUsageMB * 100) / 100,
+          tables: clickhouseStats.tables,
+        },
+        dataFiles: {
+          sizeMB: Math.round(dataFilesSize / 1024 / 1024 * 100) / 100,
+        },
+      },
+      server: {
+        uptime: process.uptime(),
+        memoryUsageMB: Math.round(process.memoryUsage().heapUsed / 1024 / 1024 * 100) / 100,
+        nodeVersion: process.version,
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+/**
+ * Получить все подключения Яндекса
+ */
+router.get('/connections', authenticate, requireAdmin, async (req, res, next) => {
+  try {
+    const connections = await clickhouseService.query(`
+      SELECT
+        id, user_id, project_id, login, status, last_sync_at, created_at
+      FROM neurodirectolog.yandex_direct_connections
+      ORDER BY created_at DESC
+    `);
+
+    res.json(connections || []);
+  } catch (error) {
+    next(error);
+  }
+});
+
+/**
+ * Получить статистику использования по всем пользователям
+ */
+router.get('/usage', authenticate, requireAdmin, async (req, res, next) => {
+  try {
+    const days = parseInt(req.query.days as string) || 30;
+    const users = loadUsers().map(u => ({
+      id: u.id,
+      name: u.name,
+      email: u.email,
+    }));
+
+    const usageData = usageService.getAllUsersUsage(users, days);
+    const systemStats = usageService.getSystemUsageStats(days);
+
+    res.json({
+      period: `${days} дней`,
+      system: systemStats,
+      users: usageData,
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+/**
+ * Получить детальную статистику использования по конкретному пользователю
+ */
+router.get('/usage/:userId', authenticate, requireAdmin, async (req, res, next) => {
+  try {
+    const { userId } = req.params;
+    const days = parseInt(req.query.days as string) || 30;
+
+    const users = loadUsers();
+    const user = users.find(u => u.id === userId);
+    if (!user) {
+      return next(createError('User not found', 404));
+    }
+
+    const usageRecords = usageService.getUserUsage(userId, days);
+
+    // Подсчёт итогов
+    const totalAiRequests = usageRecords.reduce((sum, r) => sum + r.aiRequests, 0);
+    const totalAiTokens = usageRecords.reduce((sum, r) => sum + r.aiTokensUsed, 0);
+    const totalYandexSyncs = usageRecords.reduce((sum, r) => sum + r.yandexSyncs, 0);
+    const totalApiRequests = usageRecords.reduce((sum, r) => sum + r.apiRequests, 0);
+
+    // Расчёт стоимости
+    const aiCostRub = (totalAiTokens / 1000) * 5;
+    const syncCostRub = totalYandexSyncs * 0.5;
+    const estimatedCostRub = Math.round((aiCostRub + syncCostRub) * 100) / 100;
+
+    res.json({
+      user: {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+      },
+      period: `${days} дней`,
+      summary: {
+        totalAiRequests,
+        totalAiTokens,
+        totalYandexSyncs,
+        totalApiRequests,
+        estimatedCostRub,
+      },
+      dailyBreakdown: usageRecords,
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+export default router;

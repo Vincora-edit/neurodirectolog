@@ -220,6 +220,63 @@ health() {
     fi
 }
 
+# Настройка домена с SSL
+setup_domain() {
+    local domain="${1:-dashboard.vincora.ru}"
+
+    echo -e "${YELLOW}🌐 Настройка домена: $domain${NC}"
+    echo "=================================="
+
+    # Копируем скрипт на сервер
+    scp_cmd "setup-domain.sh" "$SERVER_PATH/"
+
+    # Запускаем скрипт на сервере
+    ssh_cmd "chmod +x $SERVER_PATH/setup-domain.sh && $SERVER_PATH/setup-domain.sh $domain"
+
+    echo ""
+    echo -e "${GREEN}✅ Домен настроен!${NC}"
+    echo ""
+    echo -e "${YELLOW}Теперь обновите:${NC}"
+    echo "1. client/.env.production - VITE_API_URL=https://$domain/api"
+    echo "2. Перезапустите контейнер сервера с новыми ENV:"
+    echo "   - CORS_ORIGIN=https://$domain"
+    echo "   - YANDEX_REDIRECT_URI=https://$domain/yandex/callback"
+    echo "3. Обновите OAuth приложение в Яндексе"
+    echo "4. Запустите: ./deploy.sh all"
+}
+
+# Обновить конфигурацию сервера для домена
+update_server_env() {
+    local domain="${1:-dashboard.vincora.ru}"
+
+    echo -e "${YELLOW}⚙️  Обновление конфигурации сервера для домена: $domain${NC}"
+
+    # Останавливаем и удаляем старый контейнер
+    ssh_cmd "docker stop neurodirectolog-server 2>/dev/null || true"
+    ssh_cmd "docker rm neurodirectolog-server 2>/dev/null || true"
+
+    # Запускаем новый контейнер с обновленными переменными
+    ssh_cmd "docker run -d \
+        --name neurodirectolog-server \
+        --network neurodirectolog_neurodirectolog-network \
+        -p 3001:3001 \
+        -v $SERVER_PATH/server/data:/app/data \
+        -e NODE_ENV=production \
+        -e CORS_ORIGIN=https://$domain \
+        -e PRODUCTION_URL=https://$domain \
+        -e JWT_SECRET=super-secret-jwt-key-change-in-production \
+        -e CLICKHOUSE_HOST=http://clickhouse:8123 \
+        -e CLICKHOUSE_DB=neurodirectolog \
+        -e CLICKHOUSE_USER=default \
+        -e CLICKHOUSE_PASSWORD= \
+        -e YANDEX_CLIENT_ID=f34eef7db7da4f4191b14766ef74fbc0 \
+        -e YANDEX_REDIRECT_URI=https://$domain/yandex/callback \
+        --restart unless-stopped \
+        neurodirectolog_server:latest"
+
+    echo -e "${GREEN}✅ Сервер перезапущен с новой конфигурацией${NC}"
+}
+
 # Главная функция
 main() {
     check_sshpass
@@ -252,6 +309,12 @@ main() {
         health)
             health
             ;;
+        domain)
+            setup_domain "$2"
+            ;;
+        update-env)
+            update_server_env "$2"
+            ;;
         *)
             echo "Neurodirectolog Deploy Script"
             echo "=============================="
@@ -272,10 +335,15 @@ main() {
             echo "Управление:"
             echo "  restart  - Рестарт (restart all|server|client|clickhouse)"
             echo ""
+            echo "Домен и SSL:"
+            echo "  domain     - Настройка домена с SSL (domain example.com)"
+            echo "  update-env - Обновить ENV сервера для домена (update-env example.com)"
+            echo ""
             echo "Примеры:"
             echo "  ./deploy.sh all              # Полный деплой"
             echo "  ./deploy.sh client           # Быстрый деплой UI"
             echo "  ./deploy.sh rebuild          # Пересборка образа сервера"
+            echo "  ./deploy.sh domain mysite.ru # Настроить SSL для домена"
             echo "  DEPLOY_PASSWORD=xxx ./deploy.sh status  # Без ввода пароля"
             ;;
     esac

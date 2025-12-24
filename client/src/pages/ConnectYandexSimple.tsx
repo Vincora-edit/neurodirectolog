@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { projectsService, API_BASE_URL } from '../services/api';
+import { useProjectStore } from '../store/projectStore';
 import { Sparkles, AlertCircle, CheckCircle2, FolderOpen, Key, User, ExternalLink } from 'lucide-react';
 
 const yandexService = {
@@ -32,7 +33,8 @@ const yandexService = {
 
 export default function ConnectYandexSimple() {
   const navigate = useNavigate();
-  const [selectedProjectId, setSelectedProjectId] = useState<string>('');
+  const { activeProjectId, setActiveProjectId } = useProjectStore();
+  const selectedProjectId = activeProjectId || '';
   const [accessToken, setAccessToken] = useState<string>('');
   const [login, setLogin] = useState<string>('');
   const [goalIds, setGoalIds] = useState<string>('');
@@ -143,7 +145,7 @@ export default function ConnectYandexSimple() {
           ) : (
             <select
               value={selectedProjectId}
-              onChange={(e) => setSelectedProjectId(e.target.value)}
+              onChange={(e) => setActiveProjectId(e.target.value || null)}
               className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 bg-white"
             >
               <option value="">Выберите проект...</option>

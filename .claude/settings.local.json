@@ -66,7 +66,14 @@
       "Bash(sshpass -p 'c9R+eLvxtQJ-,x' ssh -o StrictHostKeyChecking=no root@91.222.239.217 \"docker logs neurodirectolog-server 2>&1 | grep -E ''\\(getAdGroupConversionsReport.*Error|getAdGroupConversionsReport.*Fetching|getAdGroupConversionsReport.*raw\\)'' | tail -20\")",
       "Bash(sshpass -p 'c9R+eLvxtQJ-,x' ssh -o StrictHostKeyChecking=no root@91.222.239.217 \"docker logs neurodirectolog-server 2>&1 | grep -E ''\\(getAdGroupPerformanceReport|Failed to fetch ad group\\)'' | tail -20\")",
       "Bash(sshpass:*)",
-      "Bash(DEPLOY_PASSWORD='c9R+eLvxtQJ-,x' ./deploy.sh client)"
+      "Bash(DEPLOY_PASSWORD='c9R+eLvxtQJ-,x' ./deploy.sh client)",
+      "Bash(npx tsc:*)",
+      "Bash(nslookup:*)",
+      "Bash(dig:*)",
+      "Bash(host:*)",
+      "Bash(DEPLOY_PASSWORD='c9R+eLvxtQJ-,x' ./deploy.sh update-env)",
+      "Bash(nginx -t:*)",
+      "Bash(systemctl reload:*)"
     ]
   }
 }

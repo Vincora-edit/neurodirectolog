@@ -30,10 +30,14 @@ import projectsRouter from './routes/projects';
 import analyticsRouter from './routes/analytics';
 import keywordsRouter from './routes/keywords';
 import yandexRouter from './routes/yandex';
+import adminRouter from './routes/admin';
 import { startSyncJob } from './jobs/sync.job';
 
 const app = express();
 const PORT = process.env.PORT || 3001;
+
+// Trust proxy - нужно для работы за nginx (правильные IP в rate limiter)
+app.set('trust proxy', 1);
 
 // Health check - до всех middleware, чтобы работал без CORS
 app.get('/health', (req, res) => {
@@ -44,6 +48,8 @@ app.get('/health', (req, res) => {
 const allowedOrigins = [
   'http://localhost:5173',
   'http://localhost:8080',
+  'http://91.222.239.217:8080',
+  'https://dashboard.vincora.ru',
   process.env.CORS_ORIGIN,
   process.env.PRODUCTION_URL
 ].filter(Boolean);
@@ -108,6 +114,7 @@ app.use('/api/ads', apiLimiter, adsRouter);
 app.use('/api/strategy', apiLimiter, strategyRouter);
 app.use('/api/minus-words', apiLimiter, minusWordsRouter);
 app.use('/api/yandex', apiLimiter, yandexRouter);
+app.use('/api/admin', apiLimiter, adminRouter);
 
 // Error handling
 app.use(errorHandler);

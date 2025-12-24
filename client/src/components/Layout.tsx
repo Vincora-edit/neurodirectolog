@@ -13,6 +13,7 @@ import {
   LogOut,
   PanelLeftClose,
   PanelLeft,
+  Shield,
 } from 'lucide-react';
 import { useAuthStore } from '../store/authStore';
 
@@ -31,6 +32,7 @@ export default function Layout() {
     { name: 'Объявления', href: '/ads', icon: MessageSquare },
     { name: 'Стратегия', href: '/strategy', icon: Target },
     { name: 'Минус-слова', href: '/minus-words', icon: Filter },
+    ...(user?.isAdmin ? [{ name: 'Админ-панель', href: '/admin', icon: Shield }] : []),
   ];
 
   return (

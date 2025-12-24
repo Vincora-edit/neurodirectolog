@@ -1,6 +1,8 @@
+import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { projectsService } from '../services/api';
+import { useProjectStore } from '../store/projectStore';
 import {
   TrendingUp,
   FileText,
@@ -18,18 +20,34 @@ import {
   BarChart3,
   Zap,
   Clock,
-  FlaskConical
+  FlaskConical,
+  ChevronDown
 } from 'lucide-react';
 
 export default function Dashboard() {
+  const { activeProjectId, setActiveProjectId } = useProjectStore();
+  const [showProjectSelector, setShowProjectSelector] = useState(false);
+
   // Загружаем проекты пользователя
   const { data: projects = [], isLoading } = useQuery({
     queryKey: ['projects'],
     queryFn: () => projectsService.list(),
   });
 
-  // Берем последний активный проект
-  const activeProject = projects[0];
+  // Находим активный проект или берём первый
+  const activeProject = projects.find(p => p.id === activeProjectId) || projects[0];
+
+  // Устанавливаем первый проект как активный, если нет выбранного
+  useEffect(() => {
+    if (projects.length > 0 && !activeProjectId) {
+      setActiveProjectId(projects[0].id);
+    }
+  }, [projects, activeProjectId, setActiveProjectId]);
+
+  const handleSelectProject = (projectId: string) => {
+    setActiveProjectId(projectId);
+    setShowProjectSelector(false);
+  };
 
   // Определяем статус каждого модуля для активного проекта
   const getModuleStatus = (field: string) => {
@@ -168,7 +186,43 @@ export default function Dashboard() {
                 <FolderOpen size={24} />
                 <h2 className="text-xl font-bold">Активный проект</h2>
               </div>
-              <h3 className="text-2xl font-bold mb-1">{activeProject.name}</h3>
+
+              {/* Выбор проекта */}
+              {projects.length > 1 ? (
+                <div className="relative">
+                  <button
+                    onClick={() => setShowProjectSelector(!showProjectSelector)}
+                    className="flex items-center gap-2 text-2xl font-bold mb-1 hover:text-primary-100 transition-colors"
+                  >
+                    {activeProject.name}
+                    <ChevronDown size={24} className={`transition-transform ${showProjectSelector ? 'rotate-180' : ''}`} />
+                  </button>
+
+                  {showProjectSelector && (
+                    <div className="absolute top-full left-0 mt-2 bg-white rounded-lg shadow-xl py-2 min-w-[250px] z-50">
+                      {projects.map((project) => (
+                        <button
+                          key={project.id}
+                          onClick={() => handleSelectProject(project.id)}
+                          className={`w-full text-left px-4 py-3 hover:bg-gray-50 transition-colors ${
+                            project.id === activeProject.id ? 'bg-primary-50' : ''
+                          }`}
+                        >
+                          <div className={`font-medium ${project.id === activeProject.id ? 'text-primary-600' : 'text-gray-900'}`}>
+                            {project.name}
+                          </div>
+                          <div className="text-sm text-gray-500">
+                            {project.brief.niche} • {project.brief.geo}
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <h3 className="text-2xl font-bold mb-1">{activeProject.name}</h3>
+              )}
+
               <p className="text-primary-100 text-sm">
                 {activeProject.brief.niche} • {activeProject.brief.geo}
               </p>

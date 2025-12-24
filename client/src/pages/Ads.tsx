@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { adsService, projectsService } from '../services/api';
 import type { Project } from '../services/api';
+import { useProjectStore } from '../store/projectStore';
 import { Sparkles, FolderOpen, AlertCircle, Search, Monitor, ImageIcon, Link2, FileText } from 'lucide-react';
 
 interface CompleteAd {
@@ -16,7 +17,8 @@ interface CompleteAd {
 }
 
 export default function Ads() {
-  const [selectedProjectId, setSelectedProjectId] = useState<string>('');
+  const { activeProjectId, setActiveProjectId } = useProjectStore();
+  const selectedProjectId = activeProjectId || '';
   const [campaignType, setCampaignType] = useState<'search' | 'display'>('search');
   const [quantity, setQuantity] = useState<number>(3);
   const [generatedAds, setGeneratedAds] = useState<CompleteAd[]>([]);
@@ -86,7 +88,7 @@ export default function Ads() {
             <>
               <select
                 value={selectedProjectId}
-                onChange={(e) => setSelectedProjectId(e.target.value)}
+                onChange={(e) => setActiveProjectId(e.target.value || null)}
                 className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 bg-white"
               >
                 <option value="">Выберите проект...</option>

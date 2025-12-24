@@ -4,13 +4,14 @@ import { openAIService } from '../services/openai.service';
 import { excelService } from '../services/excel.service';
 import { createError } from '../middleware/errorHandler';
 import { projectStore } from '../models/project.model';
+import { trackAiRequest } from '../middleware/aiTracking';
 
 const router = Router();
 
 /**
  * Генерация семантического ядра
  */
-router.post('/generate', authenticate, async (req, res, next) => {
+router.post('/generate', authenticate, trackAiRequest(2000), async (req, res, next) => {
   try {
     const { businessDescription, niche, projectId } = req.body;
 

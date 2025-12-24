@@ -3,6 +3,7 @@ import Joi from 'joi';
 import { yandexDirectService } from '../services/yandex-direct.service';
 import { yandexMetrikaService } from '../services/yandex-metrika.service';
 import { clickhouseService } from '../services/clickhouse.service';
+import { aiAnalysisService } from '../services/ai-analysis.service';
 import { runManualSync } from '../jobs/sync.job';
 import { syncService } from '../services/sync.service';
 import { authenticate, AuthRequest } from '../middleware/auth';
@@ -849,6 +850,807 @@ router.get('/landing-pages/:projectId', async (req, res) => {
     res.json(stats);
   } catch (error: any) {
     console.error('Failed to get landing page stats:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * GET /api/yandex/budget-forecast/:connectionId
+ * Получить прогноз бюджета (баланс аккаунта и на сколько дней хватит)
+ */
+router.get('/budget-forecast/:connectionId', async (req, res) => {
+  try {
+    const { connectionId } = req.params;
+
+    const connection = await clickhouseService.getConnectionById(connectionId);
+    if (!connection) {
+      return res.status(404).json({ error: 'Connection not found' });
+    }
+
+    // 1. Получаем текущий баланс через Yandex API
+    const balance = await yandexDirectService.getAccountBalance(
+      connection.accessToken,
+      connection.login
+    );
+
+    if (!balance) {
+      return res.json({
+        balance: null,
+        forecast: null,
+        error: 'Не удалось получить баланс аккаунта. Возможно, нет доступа к общему счёту.',
+      });
+    }
+
+    // 2. Получаем средний расход за последние 7 дней
+    const endDate = new Date();
+    const startDate = new Date();
+    startDate.setDate(startDate.getDate() - 7);
+
+    const dailyStats = await clickhouseService.getDailyStats(
+      connectionId,
+      startDate,
+      endDate
+    );
+
+    // Считаем средний дневной расход
+    let totalCost = 0;
+    let daysWithData = 0;
+
+    if (Array.isArray(dailyStats) && dailyStats.length > 0) {
+      dailyStats.forEach((day: any) => {
+        if (day.cost > 0) {
+          totalCost += day.cost;
+          daysWithData++;
+        }
+      });
+    }
+
+    const avgDailyCost = daysWithData > 0 ? totalCost / daysWithData : 0;
+    const daysRemaining = avgDailyCost > 0 ? Math.floor(balance.amount / avgDailyCost) : null;
+
+    // 3. Прогноз до конца месяца
+    const today = new Date();
+    const daysLeftInMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0).getDate() - today.getDate();
+    const projectedMonthCost = avgDailyCost * daysLeftInMonth;
+    const willRunOutBeforeMonthEnd = daysRemaining !== null && daysRemaining < daysLeftInMonth;
+
+    res.json({
+      balance: {
+        amount: balance.amount,
+        currency: balance.currency,
+        amountAvailableForTransfer: balance.amountAvailableForTransfer,
+        source: balance.source, // 'shared_account' или 'campaigns_sum'
+      },
+      stats: {
+        avgDailyCost: Math.round(avgDailyCost * 100) / 100,
+        totalCostLast7Days: Math.round(totalCost * 100) / 100,
+        daysWithData,
+      },
+      forecast: {
+        daysRemaining,
+        daysLeftInMonth,
+        projectedMonthCost: Math.round(projectedMonthCost * 100) / 100,
+        willRunOutBeforeMonthEnd,
+        runOutDate: daysRemaining !== null
+          ? new Date(Date.now() + daysRemaining * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
+          : null,
+      },
+    });
+  } catch (error: any) {
+    console.error('Failed to get budget forecast:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * GET /api/yandex/recommendations/:connectionId
+ * Получить AI-рекомендации для дашборда
+ */
+router.get('/recommendations/:connectionId', async (req, res) => {
+  try {
+    const { connectionId } = req.params;
+
+    const connection = await clickhouseService.getConnectionById(connectionId);
+    if (!connection) {
+      return res.status(404).json({ error: 'Connection not found' });
+    }
+
+    const recommendations = await aiAnalysisService.getDashboardRecommendations(connectionId);
+
+    res.json(recommendations);
+  } catch (error: any) {
+    console.error('Failed to get recommendations:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * GET /api/yandex/geo-stats/:projectId
+ * Получить статистику по регионам
+ */
+router.get('/geo-stats/:projectId', async (req, res) => {
+  try {
+    const { projectId } = req.params;
+    const { days, startDate: startDateParam, endDate: endDateParam, connectionId } = req.query;
+
+    let connection;
+    if (connectionId) {
+      connection = await clickhouseService.getConnectionById(connectionId as string);
+    } else {
+      connection = await clickhouseService.getConnectionByProjectId(projectId);
+    }
+
+    if (!connection) {
+      return res.status(404).json({ error: 'Connection not found' });
+    }
+
+    let startDate: Date;
+    let endDate: Date;
+
+    if (startDateParam && endDateParam) {
+      startDate = new Date(startDateParam as string);
+      endDate = new Date(endDateParam as string);
+    } else {
+      endDate = new Date();
+      startDate = new Date();
+      startDate.setDate(startDate.getDate() - parseInt((days as string) || '30'));
+    }
+
+    // Получаем список кампаний для этого подключения
+    const campaigns = await clickhouseService.getCampaignsByConnectionId(connection.id);
+    const campaignIds = campaigns.map(c => parseInt(c.externalId));
+
+    if (campaignIds.length === 0) {
+      return res.json([]);
+    }
+
+    // Форматируем даты для API
+    const dateFrom = startDate.toISOString().split('T')[0];
+    const dateTo = endDate.toISOString().split('T')[0];
+
+    // Получаем статистику по регионам напрямую из Yandex API
+    const geoStats = await yandexDirectService.getGeoStats(
+      connection.accessToken,
+      connection.login,
+      campaignIds,
+      dateFrom,
+      dateTo
+    );
+
+    // Агрегируем данные по регионам
+    const geoMap = new Map<string, {
+      region: string;
+      impressions: number;
+      clicks: number;
+      cost: number;
+      bounces: number;
+    }>();
+
+    geoStats.forEach((row: any) => {
+      const region = row.LocationOfPresenceName || 'Неизвестный регион';
+      const existing = geoMap.get(region) || {
+        region,
+        impressions: 0,
+        clicks: 0,
+        cost: 0,
+        bounces: 0,
+      };
+
+      existing.impressions += parseInt(row.Impressions) || 0;
+      existing.clicks += parseInt(row.Clicks) || 0;
+      existing.cost += parseFloat(row.Cost) || 0;
+      const bounceRate = parseFloat(row.BounceRate) || 0;
+      const clicks = parseInt(row.Clicks) || 0;
+      existing.bounces += Math.round(clicks * bounceRate / 100);
+
+      geoMap.set(region, existing);
+    });
+
+    // Преобразуем в массив с вычисленными метриками
+    const result = Array.from(geoMap.values()).map(g => ({
+      region: g.region,
+      impressions: g.impressions,
+      clicks: g.clicks,
+      cost: Math.round(g.cost * 100) / 100,
+      ctr: g.impressions > 0 ? Math.round((g.clicks / g.impressions) * 10000) / 100 : 0,
+      avgCpc: g.clicks > 0 ? Math.round((g.cost / g.clicks) * 100) / 100 : 0,
+      bounceRate: g.clicks > 0 ? Math.round((g.bounces / g.clicks) * 10000) / 100 : 0,
+    }));
+
+    // Сортируем по расходу (убывание)
+    result.sort((a, b) => b.cost - a.cost);
+
+    // Ограничиваем топ-20 регионов
+    res.json(result.slice(0, 20));
+  } catch (error: any) {
+    console.error('Failed to get geo stats:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * GET /api/yandex/device-stats/:projectId
+ * Получить статистику по устройствам (Desktop/Mobile/Tablet)
+ */
+router.get('/device-stats/:projectId', async (req, res) => {
+  try {
+    const { projectId } = req.params;
+    const { days, startDate: startDateParam, endDate: endDateParam, connectionId } = req.query;
+
+    let connection;
+    if (connectionId) {
+      connection = await clickhouseService.getConnectionById(connectionId as string);
+    } else {
+      connection = await clickhouseService.getConnectionByProjectId(projectId);
+    }
+
+    if (!connection) {
+      return res.status(404).json({ error: 'Connection not found' });
+    }
+
+    let startDate: Date;
+    let endDate: Date;
+
+    if (startDateParam && endDateParam) {
+      startDate = new Date(startDateParam as string);
+      endDate = new Date(endDateParam as string);
+    } else {
+      endDate = new Date();
+      startDate = new Date();
+      startDate.setDate(startDate.getDate() - parseInt((days as string) || '30'));
+    }
+
+    // Получаем список кампаний для этого подключения
+    const campaigns = await clickhouseService.getCampaignsByConnectionId(connection.id);
+    const campaignIds = campaigns.map(c => parseInt(c.externalId));
+
+    if (campaignIds.length === 0) {
+      return res.json([]);
+    }
+
+    // Форматируем даты для API
+    const dateFrom = startDate.toISOString().split('T')[0];
+    const dateTo = endDate.toISOString().split('T')[0];
+
+    // Получаем статистику по устройствам напрямую из Yandex API
+    const deviceStats = await yandexDirectService.getDeviceStats(
+      connection.accessToken,
+      connection.login,
+      campaignIds,
+      dateFrom,
+      dateTo
+    );
+
+    // Агрегируем данные по устройствам
+    const deviceMap = new Map<string, {
+      device: string;
+      impressions: number;
+      clicks: number;
+      cost: number;
+      bounces: number;
+    }>();
+
+    deviceStats.forEach((row: any) => {
+      const device = row.Device || 'UNKNOWN';
+      const existing = deviceMap.get(device) || {
+        device,
+        impressions: 0,
+        clicks: 0,
+        cost: 0,
+        bounces: 0,
+      };
+
+      existing.impressions += parseInt(row.Impressions) || 0;
+      existing.clicks += parseInt(row.Clicks) || 0;
+      existing.cost += parseFloat(row.Cost) || 0;
+      // BounceRate в процентах, конвертируем в количество отказов
+      const bounceRate = parseFloat(row.BounceRate) || 0;
+      const clicks = parseInt(row.Clicks) || 0;
+      existing.bounces += Math.round(clicks * bounceRate / 100);
+
+      deviceMap.set(device, existing);
+    });
+
+    // Преобразуем в массив с вычисленными метриками
+    const result = Array.from(deviceMap.values()).map(d => ({
+      device: d.device,
+      deviceName: d.device === 'DESKTOP' ? 'Десктоп' :
+                  d.device === 'MOBILE' ? 'Мобильный' :
+                  d.device === 'TABLET' ? 'Планшет' : d.device,
+      impressions: d.impressions,
+      clicks: d.clicks,
+      cost: Math.round(d.cost * 100) / 100,
+      ctr: d.impressions > 0 ? Math.round((d.clicks / d.impressions) * 10000) / 100 : 0,
+      avgCpc: d.clicks > 0 ? Math.round((d.cost / d.clicks) * 100) / 100 : 0,
+      bounceRate: d.clicks > 0 ? Math.round((d.bounces / d.clicks) * 10000) / 100 : 0,
+    }));
+
+    // Сортируем по кликам (убывание)
+    result.sort((a, b) => b.clicks - a.clicks);
+
+    res.json(result);
+  } catch (error: any) {
+    console.error('Failed to get device stats:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * GET /api/yandex/search-queries/:projectId
+ * Получить статистику по поисковым запросам
+ */
+router.get('/search-queries/:projectId', async (req, res) => {
+  try {
+    const { projectId } = req.params;
+    const { days, startDate: startDateParam, endDate: endDateParam, connectionId } = req.query;
+
+    let connection;
+    if (connectionId) {
+      connection = await clickhouseService.getConnectionById(connectionId as string);
+    } else {
+      connection = await clickhouseService.getConnectionByProjectId(projectId);
+    }
+
+    if (!connection) {
+      return res.status(404).json({ error: 'Connection not found' });
+    }
+
+    let startDate: Date;
+    let endDate: Date;
+
+    if (startDateParam && endDateParam) {
+      startDate = new Date(startDateParam as string);
+      endDate = new Date(endDateParam as string);
+    } else {
+      endDate = new Date();
+      startDate = new Date();
+      startDate.setDate(startDate.getDate() - parseInt((days as string) || '30'));
+    }
+
+    // Получаем список кампаний для этого подключения
+    const campaigns = await clickhouseService.getCampaignsByConnectionId(connection.id);
+    const campaignIds = campaigns.map(c => parseInt(c.externalId));
+
+    if (campaignIds.length === 0) {
+      return res.json([]);
+    }
+
+    // Форматируем даты для API
+    const dateFrom = startDate.toISOString().split('T')[0];
+    const dateTo = endDate.toISOString().split('T')[0];
+
+    // Получаем статистику по поисковым запросам
+    const searchQueries = await yandexDirectService.getSearchQueryReport(
+      connection.accessToken,
+      connection.login,
+      campaignIds,
+      dateFrom,
+      dateTo
+    );
+
+    res.json(searchQueries);
+  } catch (error: any) {
+    console.error('Failed to get search queries:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * GET /api/yandex/demographics/:projectId
+ * Получить статистику по полу и возрасту
+ */
+router.get('/demographics/:projectId', async (req, res) => {
+  try {
+    const { projectId } = req.params;
+    const { days, startDate: startDateParam, endDate: endDateParam, connectionId } = req.query;
+
+    let connection;
+    if (connectionId) {
+      connection = await clickhouseService.getConnectionById(connectionId as string);
+    } else {
+      connection = await clickhouseService.getConnectionByProjectId(projectId);
+    }
+
+    if (!connection) {
+      return res.status(404).json({ error: 'Connection not found' });
+    }
+
+    let startDate: Date;
+    let endDate: Date;
+
+    if (startDateParam && endDateParam) {
+      startDate = new Date(startDateParam as string);
+      endDate = new Date(endDateParam as string);
+    } else {
+      endDate = new Date();
+      startDate = new Date();
+      startDate.setDate(startDate.getDate() - parseInt((days as string) || '30'));
+    }
+
+    // Получаем список кампаний для этого подключения
+    const campaigns = await clickhouseService.getCampaignsByConnectionId(connection.id);
+    const campaignIds = campaigns.map(c => parseInt(c.externalId));
+
+    if (campaignIds.length === 0) {
+      return res.json([]);
+    }
+
+    // Форматируем даты для API
+    const dateFrom = startDate.toISOString().split('T')[0];
+    const dateTo = endDate.toISOString().split('T')[0];
+
+    // Получаем статистику по демографии
+    const demographics = await yandexDirectService.getDemographicsReport(
+      connection.accessToken,
+      connection.login,
+      campaignIds,
+      dateFrom,
+      dateTo
+    );
+
+    res.json(demographics);
+  } catch (error: any) {
+    console.error('Failed to get demographics:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * GET /api/yandex/geo-report/:projectId
+ * Получить статистику по регионам (альтернативный отчёт через Reports API)
+ */
+router.get('/geo-report/:projectId', async (req, res) => {
+  try {
+    const { projectId } = req.params;
+    const { days, startDate: startDateParam, endDate: endDateParam, connectionId } = req.query;
+
+    let connection;
+    if (connectionId) {
+      connection = await clickhouseService.getConnectionById(connectionId as string);
+    } else {
+      connection = await clickhouseService.getConnectionByProjectId(projectId);
+    }
+
+    if (!connection) {
+      return res.status(404).json({ error: 'Connection not found' });
+    }
+
+    let startDate: Date;
+    let endDate: Date;
+
+    if (startDateParam && endDateParam) {
+      startDate = new Date(startDateParam as string);
+      endDate = new Date(endDateParam as string);
+    } else {
+      endDate = new Date();
+      startDate = new Date();
+      startDate.setDate(startDate.getDate() - parseInt((days as string) || '30'));
+    }
+
+    // Получаем список кампаний для этого подключения
+    const campaigns = await clickhouseService.getCampaignsByConnectionId(connection.id);
+    const campaignIds = campaigns.map(c => parseInt(c.externalId));
+
+    if (campaignIds.length === 0) {
+      return res.json([]);
+    }
+
+    // Форматируем даты для API
+    const dateFrom = startDate.toISOString().split('T')[0];
+    const dateTo = endDate.toISOString().split('T')[0];
+
+    // Получаем статистику по регионам
+    const geoReport = await yandexDirectService.getGeoReport(
+      connection.accessToken,
+      connection.login,
+      campaignIds,
+      dateFrom,
+      dateTo
+    );
+
+    res.json(geoReport);
+  } catch (error: any) {
+    console.error('Failed to get geo report:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * GET /api/yandex/placements/:projectId
+ * Получить статистику по площадкам (РСЯ, Поиск и т.д.)
+ */
+router.get('/placements/:projectId', async (req, res) => {
+  try {
+    const { projectId } = req.params;
+    const { days, startDate: startDateParam, endDate: endDateParam, connectionId } = req.query;
+
+    let connection;
+    if (connectionId) {
+      connection = await clickhouseService.getConnectionById(connectionId as string);
+    } else {
+      connection = await clickhouseService.getConnectionByProjectId(projectId);
+    }
+
+    if (!connection) {
+      return res.status(404).json({ error: 'Connection not found' });
+    }
+
+    let startDate: Date;
+    let endDate: Date;
+
+    if (startDateParam && endDateParam) {
+      startDate = new Date(startDateParam as string);
+      endDate = new Date(endDateParam as string);
+    } else {
+      endDate = new Date();
+      startDate = new Date();
+      startDate.setDate(startDate.getDate() - parseInt((days as string) || '30'));
+    }
+
+    // Получаем список кампаний для этого подключения
+    const campaigns = await clickhouseService.getCampaignsByConnectionId(connection.id);
+    const campaignIds = campaigns.map(c => parseInt(c.externalId));
+
+    if (campaignIds.length === 0) {
+      return res.json([]);
+    }
+
+    // Форматируем даты для API
+    const dateFrom = startDate.toISOString().split('T')[0];
+    const dateTo = endDate.toISOString().split('T')[0];
+
+    // Получаем статистику по площадкам
+    const placements = await yandexDirectService.getPlacementsReport(
+      connection.accessToken,
+      connection.login,
+      campaignIds,
+      dateFrom,
+      dateTo
+    );
+
+    res.json(placements);
+  } catch (error: any) {
+    console.error('Failed to get placements:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * GET /api/yandex/income/:projectId
+ * Получить статистику по платёжеспособности (IncomeGrade)
+ */
+router.get('/income/:projectId', async (req, res) => {
+  try {
+    const { projectId } = req.params;
+    const { days, startDate: startDateParam, endDate: endDateParam, connectionId } = req.query;
+
+    let connection;
+    if (connectionId) {
+      connection = await clickhouseService.getConnectionById(connectionId as string);
+    } else {
+      connection = await clickhouseService.getConnectionByProjectId(projectId);
+    }
+
+    if (!connection) {
+      return res.status(404).json({ error: 'Connection not found' });
+    }
+
+    let startDate: Date;
+    let endDate: Date;
+
+    if (startDateParam && endDateParam) {
+      startDate = new Date(startDateParam as string);
+      endDate = new Date(endDateParam as string);
+    } else {
+      endDate = new Date();
+      startDate = new Date();
+      startDate.setDate(startDate.getDate() - parseInt((days as string) || '30'));
+    }
+
+    // Получаем список кампаний для этого подключения
+    const campaigns = await clickhouseService.getCampaignsByConnectionId(connection.id);
+    const campaignIds = campaigns.map(c => parseInt(c.externalId));
+
+    if (campaignIds.length === 0) {
+      return res.json([]);
+    }
+
+    // Форматируем даты для API
+    const dateFrom = startDate.toISOString().split('T')[0];
+    const dateTo = endDate.toISOString().split('T')[0];
+
+    // Получаем статистику по платёжеспособности
+    const incomeData = await yandexDirectService.getIncomeReport(
+      connection.accessToken,
+      connection.login,
+      campaignIds,
+      dateFrom,
+      dateTo
+    );
+
+    res.json(incomeData);
+  } catch (error: any) {
+    console.error('Failed to get income data:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * GET /api/yandex/targeting-categories/:projectId
+ * Получить статистику по категориям таргетинга
+ */
+router.get('/targeting-categories/:projectId', async (req, res) => {
+  try {
+    const { projectId } = req.params;
+    const { days, startDate: startDateParam, endDate: endDateParam, connectionId } = req.query;
+
+    let connection;
+    if (connectionId) {
+      connection = await clickhouseService.getConnectionById(connectionId as string);
+    } else {
+      connection = await clickhouseService.getConnectionByProjectId(projectId);
+    }
+
+    if (!connection) {
+      return res.status(404).json({ error: 'Connection not found' });
+    }
+
+    let startDate: Date;
+    let endDate: Date;
+
+    if (startDateParam && endDateParam) {
+      startDate = new Date(startDateParam as string);
+      endDate = new Date(endDateParam as string);
+    } else {
+      endDate = new Date();
+      startDate = new Date();
+      startDate.setDate(startDate.getDate() - parseInt((days as string) || '30'));
+    }
+
+    // Получаем список кампаний для этого подключения
+    const campaigns = await clickhouseService.getCampaignsByConnectionId(connection.id);
+    const campaignIds = campaigns.map(c => parseInt(c.externalId));
+
+    if (campaignIds.length === 0) {
+      return res.json([]);
+    }
+
+    // Форматируем даты для API
+    const dateFrom = startDate.toISOString().split('T')[0];
+    const dateTo = endDate.toISOString().split('T')[0];
+
+    // Получаем статистику по категориям таргетинга
+    const categoriesData = await yandexDirectService.getTargetingCategoryReport(
+      connection.accessToken,
+      connection.login,
+      campaignIds,
+      dateFrom,
+      dateTo
+    );
+
+    res.json(categoriesData);
+  } catch (error: any) {
+    console.error('Failed to get targeting categories:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * GET /api/yandex/criteria/:projectId
+ * Получить статистику по условиям показа (ключевым словам)
+ */
+router.get('/criteria/:projectId', async (req, res) => {
+  try {
+    const { projectId } = req.params;
+    const { days, startDate: startDateParam, endDate: endDateParam, connectionId } = req.query;
+
+    let connection;
+    if (connectionId) {
+      connection = await clickhouseService.getConnectionById(connectionId as string);
+    } else {
+      connection = await clickhouseService.getConnectionByProjectId(projectId);
+    }
+
+    if (!connection) {
+      return res.status(404).json({ error: 'Connection not found' });
+    }
+
+    let startDate: Date;
+    let endDate: Date;
+
+    if (startDateParam && endDateParam) {
+      startDate = new Date(startDateParam as string);
+      endDate = new Date(endDateParam as string);
+    } else {
+      endDate = new Date();
+      startDate = new Date();
+      startDate.setDate(startDate.getDate() - parseInt((days as string) || '30'));
+    }
+
+    // Получаем список кампаний для этого подключения
+    const campaigns = await clickhouseService.getCampaignsByConnectionId(connection.id);
+    const campaignIds = campaigns.map(c => parseInt(c.externalId));
+
+    if (campaignIds.length === 0) {
+      return res.json([]);
+    }
+
+    // Форматируем даты для API
+    const dateFrom = startDate.toISOString().split('T')[0];
+    const dateTo = endDate.toISOString().split('T')[0];
+
+    // Получаем статистику по условиям показа
+    const criteriaData = await yandexDirectService.getCriteriaReport(
+      connection.accessToken,
+      connection.login,
+      campaignIds,
+      dateFrom,
+      dateTo
+    );
+
+    res.json(criteriaData);
+  } catch (error: any) {
+    console.error('Failed to get criteria:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * GET /api/yandex/ad-texts/:projectId
+ * Получить статистику по текстам объявлений
+ */
+router.get('/ad-texts/:projectId', async (req, res) => {
+  try {
+    const { projectId } = req.params;
+    const { days, startDate: startDateParam, endDate: endDateParam, connectionId } = req.query;
+
+    let connection;
+    if (connectionId) {
+      connection = await clickhouseService.getConnectionById(connectionId as string);
+    } else {
+      connection = await clickhouseService.getConnectionByProjectId(projectId);
+    }
+
+    if (!connection) {
+      return res.status(404).json({ error: 'Connection not found' });
+    }
+
+    let startDate: Date;
+    let endDate: Date;
+
+    if (startDateParam && endDateParam) {
+      startDate = new Date(startDateParam as string);
+      endDate = new Date(endDateParam as string);
+    } else {
+      endDate = new Date();
+      startDate = new Date();
+      startDate.setDate(startDate.getDate() - parseInt((days as string) || '30'));
+    }
+
+    // Получаем список кампаний для этого подключения
+    const campaigns = await clickhouseService.getCampaignsByConnectionId(connection.id);
+    const campaignIds = campaigns.map(c => parseInt(c.externalId));
+
+    if (campaignIds.length === 0) {
+      return res.json([]);
+    }
+
+    // Форматируем даты для API
+    const dateFrom = startDate.toISOString().split('T')[0];
+    const dateTo = endDate.toISOString().split('T')[0];
+
+    // Получаем статистику по текстам объявлений
+    const adTextsData = await yandexDirectService.getAdTextReport(
+      connection.accessToken,
+      connection.login,
+      campaignIds,
+      dateFrom,
+      dateTo
+    );
+
+    res.json(adTextsData);
+  } catch (error: any) {
+    console.error('Failed to get ad texts:', error);
     res.status(500).json({ error: error.message });
   }
 });

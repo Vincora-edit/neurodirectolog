@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { analyticsService, projectsService } from '../services/api';
 import type { Project } from '../services/api';
+import { useProjectStore } from '../store/projectStore';
 import {
   Sparkles,
   FolderOpen,
@@ -17,7 +18,8 @@ import {
 } from 'lucide-react';
 
 export default function Analytics() {
-  const [selectedProjectId, setSelectedProjectId] = useState<string>('');
+  const { activeProjectId, setActiveProjectId } = useProjectStore();
+  const selectedProjectId = activeProjectId || '';
   const [competitorAdsAnalysis, setCompetitorAdsAnalysis] = useState<any>(null);
   const [competitorWebsitesAnalysis, setCompetitorWebsitesAnalysis] = useState<any>(null);
   const [targetAudienceAnalysis, setTargetAudienceAnalysis] = useState<any>(null);
@@ -160,7 +162,7 @@ export default function Analytics() {
               </label>
               <select
                 value={selectedProjectId}
-                onChange={(e) => setSelectedProjectId(e.target.value)}
+                onChange={(e) => setActiveProjectId(e.target.value || null)}
                 className="w-full px-4 py-2 border border-blue-300 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white"
               >
                 <option value="">Выберите проект...</option>

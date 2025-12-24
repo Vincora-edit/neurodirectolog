@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { keywordsService, projectsService } from '../services/api';
 import type { Project } from '../services/api';
+import { useProjectStore } from '../store/projectStore';
 import { Sparkles, FolderOpen, AlertCircle, FileText, Trash2, AlertTriangle, Target, Download } from 'lucide-react';
 
 interface ClassifiedKeyword {
@@ -23,7 +24,8 @@ interface AnalysisResult {
 }
 
 export default function KeywordAnalysis() {
-  const [selectedProjectId, setSelectedProjectId] = useState<string>('');
+  const { activeProjectId, setActiveProjectId } = useProjectStore();
+  const selectedProjectId = activeProjectId || '';
   const [keywordsText, setKeywordsText] = useState<string>('');
   const [analysisResult, setAnalysisResult] = useState<AnalysisResult | null>(null);
 
@@ -130,7 +132,7 @@ export default function KeywordAnalysis() {
             <>
               <select
                 value={selectedProjectId}
-                onChange={(e) => setSelectedProjectId(e.target.value)}
+                onChange={(e) => setActiveProjectId(e.target.value || null)}
                 className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 bg-white"
               >
                 <option value="">Выберите проект...</option>

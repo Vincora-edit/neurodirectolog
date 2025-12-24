@@ -3,6 +3,7 @@ import jwt from 'jsonwebtoken';
 import fs from 'fs';
 import path from 'path';
 import { createError } from './errorHandler';
+import { usageService } from '../services/usage.service';
 
 // JWT Secret - ОБЯЗАТЕЛЬНАЯ переменная окружения
 const JWT_SECRET = process.env.JWT_SECRET;
@@ -49,6 +50,15 @@ export const authenticate = (
     req.userId = decoded.userId;
     // Проверяем isAdmin из токена, а если нет - читаем из файла
     req.isAdmin = decoded.isAdmin ?? getUserIsAdmin(decoded.userId);
+
+    // Трекинг API запроса
+    try {
+      usageService.trackApiRequest(decoded.userId);
+    } catch (e) {
+      // Не прерываем запрос из-за ошибки трекинга
+      console.error('Usage tracking error:', e);
+    }
+
     next();
   } catch (error) {
     next(createError('Invalid or expired token', 401));

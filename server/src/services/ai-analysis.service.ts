@@ -244,15 +244,15 @@ export const aiAnalysisService = {
 
   /**
    * Анализировать все кампании подключения
-   * ОПТИМИЗАЦИЯ: Анализируем только активные кампании с данными за последние 7 дней
+   * ОПТИМИЗАЦИЯ: Анализируем только активные кампании, но с полными данными за 30 дней
    */
   async analyzeAllCampaigns(connectionId: string): Promise<void> {
     console.log(`[AI Analysis] Starting analysis for connection ${connectionId}`);
 
-    // 1. Получаем статистику один раз для всех кампаний
+    // 1. Получаем статистику один раз для всех кампаний за 30 дней
     const endDate = new Date();
     const startDate = new Date();
-    startDate.setDate(startDate.getDate() - 7); // Только последние 7 дней
+    startDate.setDate(startDate.getDate() - 30); // Полный месяц для качественного анализа
 
     const aggregatedStats = await clickhouseService.getAggregatedStats(
       connectionId,
@@ -324,5 +324,186 @@ export const aiAnalysisService = {
     }
 
     console.log(`[AI Analysis] Completed: analyzed ${analyzedCount} campaigns with recommendations`);
+  },
+
+  /**
+   * Получить рекомендации для дашборда (без сохранения)
+   * Анализирует агрегированную статистику и топ-кампании
+   */
+  async getDashboardRecommendations(connectionId: string): Promise<Array<{
+    type: 'warning' | 'suggestion' | 'critical' | 'success';
+    category: 'budget' | 'ctr' | 'conversions' | 'keywords' | 'general';
+    title: string;
+    description: string;
+    actionText: string;
+    campaignName?: string;
+  }>> {
+    console.log(`[AI Analysis] Getting dashboard recommendations for connection ${connectionId}`);
+
+    try {
+      const recommendations: any[] = [];
+
+      // 1. Получаем статистику за последние 30 дней
+      const endDate = new Date();
+      const startDate = new Date();
+      startDate.setDate(startDate.getDate() - 30);
+
+      const aggregatedStats = await clickhouseService.getAggregatedStats(
+        connectionId,
+        startDate,
+        endDate
+      );
+
+      if (aggregatedStats.length === 0) {
+        return [{
+          type: 'suggestion',
+          category: 'general',
+          title: 'Нет данных для анализа',
+          description: 'Подождите, пока накопится статистика по кампаниям (минимум несколько дней работы).',
+          actionText: 'Проверьте позже',
+        }];
+      }
+
+      // 2. Агрегируем общую статистику
+      const totalStats = aggregatedStats.reduce((acc, s) => ({
+        impressions: acc.impressions + s.totalImpressions,
+        clicks: acc.clicks + s.totalClicks,
+        cost: acc.cost + s.totalCost,
+        conversions: acc.conversions + s.totalConversions,
+      }), { impressions: 0, clicks: 0, cost: 0, conversions: 0 });
+
+      const overallCtr = totalStats.impressions > 0 ? (totalStats.clicks / totalStats.impressions) * 100 : 0;
+      const overallCpc = totalStats.clicks > 0 ? totalStats.cost / totalStats.clicks : 0;
+      const overallCr = totalStats.clicks > 0 ? (totalStats.conversions / totalStats.clicks) * 100 : 0;
+      const overallCpl = totalStats.conversions > 0 ? totalStats.cost / totalStats.conversions : 0;
+
+      // 3. Получаем информацию о кампаниях
+      const campaigns = await clickhouseService.getCampaignsByConnectionId(connectionId);
+      const campaignMap = new Map(campaigns.map(c => [c.externalId, c]));
+
+      // 4. Анализ общей статистики
+
+      // Проверка общего CTR
+      if (overallCtr < 2.0 && totalStats.impressions > 1000) {
+        recommendations.push({
+          type: 'warning',
+          category: 'ctr',
+          title: 'Низкий общий CTR аккаунта',
+          description: `Средний CTR по всем кампаниям составляет ${overallCtr.toFixed(2)}%. Рекомендуемый показатель - от 3% до 5%.`,
+          actionText: 'Проработайте заголовки и тексты объявлений, добавьте быстрые ссылки и уточнения',
+        });
+      } else if (overallCtr >= 5.0 && totalStats.impressions > 1000) {
+        recommendations.push({
+          type: 'success',
+          category: 'ctr',
+          title: 'Отличный CTR',
+          description: `CTR аккаунта ${overallCtr.toFixed(2)}% - это выше среднего по рынку. Продолжайте в том же духе!`,
+          actionText: 'Масштабируйте успешные объявления',
+        });
+      }
+
+      // Проверка CPL
+      if (overallCpl > 5000 && totalStats.conversions > 0) {
+        recommendations.push({
+          type: 'warning',
+          category: 'conversions',
+          title: 'Высокая стоимость лида',
+          description: `Средняя стоимость конверсии ${overallCpl.toFixed(0)} ₽. Это может снижать рентабельность рекламы.`,
+          actionText: 'Оптимизируйте ставки, проработайте минус-слова и посадочные страницы',
+        });
+      }
+
+      // Проверка отсутствия конверсий
+      if (totalStats.conversions === 0 && totalStats.clicks > 100) {
+        recommendations.push({
+          type: 'critical',
+          category: 'conversions',
+          title: 'Нет конверсий',
+          description: `При ${totalStats.clicks} кликах не зафиксировано ни одной конверсии. Проверьте настройку целей.`,
+          actionText: 'Убедитесь, что цели Метрики настроены корректно и передаются в Директ',
+        });
+      }
+
+      // 5. Анализ проблемных кампаний (топ-3 по расходу с проблемами)
+      const sortedBySpend = [...aggregatedStats].sort((a, b) => b.totalCost - a.totalCost);
+
+      for (const stats of sortedBySpend.slice(0, 5)) {
+        const campaign = campaignMap.get(stats.campaignId);
+        const campaignName = campaign?.name || `Кампания ${stats.campaignId}`;
+
+        // Кампания с высоким расходом и нулевыми конверсиями
+        if (stats.totalCost > 1000 && stats.totalConversions === 0 && stats.totalClicks > 20) {
+          recommendations.push({
+            type: 'critical',
+            category: 'conversions',
+            title: `Нет конверсий в "${campaignName.substring(0, 30)}..."`,
+            description: `Потрачено ${stats.totalCost.toFixed(0)} ₽ при ${stats.totalClicks} кликах, но конверсий нет.`,
+            actionText: 'Приостановите или оптимизируйте кампанию',
+            campaignName,
+          });
+        }
+
+        // Очень низкий CTR в дорогой кампании
+        if (stats.avgCtr < 1.0 && stats.totalCost > 500 && stats.totalImpressions > 500) {
+          recommendations.push({
+            type: 'warning',
+            category: 'ctr',
+            title: `Низкий CTR в "${campaignName.substring(0, 30)}..."`,
+            description: `CTR ${stats.avgCtr.toFixed(2)}% значительно ниже нормы. Объявления могут быть нерелевантны запросам.`,
+            actionText: 'Пересмотрите ключевые слова и тексты объявлений',
+            campaignName,
+          });
+        }
+
+        // Высокий CPC
+        if (stats.avgCpc > 150 && stats.totalClicks > 10) {
+          recommendations.push({
+            type: 'warning',
+            category: 'budget',
+            title: `Дорогие клики в "${campaignName.substring(0, 30)}..."`,
+            description: `Средний CPC ${stats.avgCpc.toFixed(0)} ₽ - это выше среднего. Возможна высокая конкуренция или нецелевые запросы.`,
+            actionText: 'Добавьте минус-слова, проверьте стратегию ставок',
+            campaignName,
+          });
+        }
+      }
+
+      // 6. Позитивные рекомендации для лучших кампаний
+      const bestByCr = aggregatedStats
+        .filter(s => s.totalConversions >= 3 && s.totalClicks >= 20)
+        .sort((a, b) => b.avgConversionRate - a.avgConversionRate)[0];
+
+      if (bestByCr) {
+        const campaign = campaignMap.get(bestByCr.campaignId);
+        recommendations.push({
+          type: 'success',
+          category: 'conversions',
+          title: 'Лучшая кампания по конверсиям',
+          description: `"${campaign?.name || bestByCr.campaignId}" показывает CR ${bestByCr.avgConversionRate.toFixed(2)}% при CPL ${(bestByCr.totalCost / bestByCr.totalConversions).toFixed(0)} ₽`,
+          actionText: 'Увеличьте бюджет этой кампании',
+          campaignName: campaign?.name,
+        });
+      }
+
+      // Ограничиваем количество рекомендаций
+      const limitedRecs = recommendations.slice(0, 8);
+
+      // Сортируем: critical -> warning -> suggestion -> success
+      const typeOrder = { critical: 0, warning: 1, suggestion: 2, success: 3 };
+      limitedRecs.sort((a, b) => typeOrder[a.type] - typeOrder[b.type]);
+
+      console.log(`[AI Analysis] Generated ${limitedRecs.length} dashboard recommendations`);
+      return limitedRecs;
+
+    } catch (error) {
+      console.error('[AI Analysis] Error getting dashboard recommendations:', error);
+      return [{
+        type: 'warning',
+        category: 'general',
+        title: 'Ошибка анализа',
+        description: 'Не удалось проанализировать данные. Попробуйте позже.',
+        actionText: 'Обновить страницу',
+      }];
+    }
   },
 };

@@ -17,6 +17,7 @@ import Analytics from './pages/Analytics';
 import ConnectYandex from './pages/ConnectYandex';
 import ConnectYandexSimple from './pages/ConnectYandexSimple';
 import YandexDashboard from './pages/YandexDashboard';
+import AdminPanel from './pages/AdminPanel';
 import Layout from './components/Layout';
 
 const queryClient = new QueryClient();
@@ -59,6 +60,7 @@ function App() {
             <Route path="connect-yandex-simple" element={<ConnectYandexSimple />} />
             <Route path="yandex/callback" element={<ConnectYandex />} />
             <Route path="yandex-dashboard" element={<YandexDashboard />} />
+            <Route path="admin" element={<AdminPanel />} />
           </Route>
         </Routes>
       </BrowserRouter>

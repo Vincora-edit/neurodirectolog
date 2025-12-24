@@ -2,6 +2,8 @@ import axios from 'axios';
 
 const YANDEX_OAUTH_URL = 'https://oauth.yandex.ru';
 const YANDEX_API_URL = 'https://api.direct.yandex.com/json/v5';
+// API v501 для Мастер Кампаний (UNIFIED_CAMPAIGN)
+const YANDEX_API_URL_V501 = 'https://api.direct.yandex.com/json/v501';
 
 export interface YandexTokenResponse {
   access_token: string;
@@ -15,7 +17,7 @@ export interface YandexCampaign {
   Name: string;
   Status: 'ACCEPTED' | 'DRAFT' | 'MODERATION' | 'REJECTED';
   State: 'ON' | 'OFF' | 'SUSPENDED' | 'ENDED' | 'ARCHIVED';
-  Type: 'TEXT_CAMPAIGN' | 'MOBILE_APP_CAMPAIGN' | 'DYNAMIC_TEXT_CAMPAIGN';
+  Type: 'TEXT_CAMPAIGN' | 'MOBILE_APP_CAMPAIGN' | 'DYNAMIC_TEXT_CAMPAIGN' | 'UNIFIED_CAMPAIGN' | 'SMART_CAMPAIGN';
   DailyBudget?: {
     Amount: number;
     Mode: string;
@@ -100,31 +102,87 @@ export const yandexDirectService = {
 
   /**
    * Получить список кампаний
+   * Включает TEXT_CAMPAIGN, UNIFIED_CAMPAIGN (Мастер кампании) и другие типы
+   * Запрашивает из v5 API и v501 API (для Мастер кампаний)
    */
   async getCampaigns(accessToken: string, login: string): Promise<YandexCampaign[]> {
-    const response = await axios.post(
-      `${YANDEX_API_URL}/campaigns`,
-      {
-        method: 'get',
-        params: {
-          SelectionCriteria: {},
-          FieldNames: ['Id', 'Name', 'Status', 'State', 'Type', 'DailyBudget'],
-        },
-      },
-      {
-        headers: {
-          'Authorization': `Bearer ${accessToken}`,
-          'Client-Login': login,
-          'Accept-Language': 'ru',
-        },
-      }
-    );
+    const allCampaigns: YandexCampaign[] = [];
 
-    if (response.data.error) {
-      throw new Error(`Yandex API Error: ${response.data.error.error_string}`);
+    // 1. Запрос к v5 API (TEXT_CAMPAIGN, DYNAMIC_TEXT_CAMPAIGN и др.)
+    try {
+      const responseV5 = await axios.post(
+        `${YANDEX_API_URL}/campaigns`,
+        {
+          method: 'get',
+          params: {
+            SelectionCriteria: {},
+            FieldNames: ['Id', 'Name', 'Status', 'State', 'Type', 'DailyBudget'],
+          },
+        },
+        {
+          headers: {
+            'Authorization': `Bearer ${accessToken}`,
+            'Client-Login': login,
+            'Accept-Language': 'ru',
+          },
+        }
+      );
+
+      if (responseV5.data.error) {
+        console.error(`[getCampaigns v5] Error: ${responseV5.data.error.error_string}`);
+      } else {
+        const campaignsV5 = responseV5.data.result?.Campaigns || [];
+        console.log(`[getCampaigns v5] Found ${campaignsV5.length} campaigns`);
+        allCampaigns.push(...campaignsV5);
+      }
+    } catch (error: any) {
+      console.error('[getCampaigns v5] Request failed:', error.message);
     }
 
-    return response.data.result?.Campaigns || [];
+    // 2. Запрос к v501 API (UNIFIED_CAMPAIGN, SMART_CAMPAIGN - Мастер кампании)
+    try {
+      const responseV501 = await axios.post(
+        `${YANDEX_API_URL_V501}/campaigns`,
+        {
+          method: 'get',
+          params: {
+            SelectionCriteria: {
+              Types: ['UNIFIED_CAMPAIGN', 'SMART_CAMPAIGN'],
+            },
+            FieldNames: ['Id', 'Name', 'Status', 'State', 'Type'],
+          },
+        },
+        {
+          headers: {
+            'Authorization': `Bearer ${accessToken}`,
+            'Client-Login': login,
+            'Accept-Language': 'ru',
+          },
+        }
+      );
+
+      if (responseV501.data.error) {
+        console.error(`[getCampaigns v501] Error: ${responseV501.data.error.error_string}`, responseV501.data.error);
+      } else {
+        const campaignsV501 = responseV501.data.result?.Campaigns || [];
+        const smartCount = campaignsV501.filter((c: any) => c.Type === 'SMART_CAMPAIGN').length;
+        const unifiedCount = campaignsV501.filter((c: any) => c.Type === 'UNIFIED_CAMPAIGN').length;
+        console.log(`[getCampaigns v501] Found ${campaignsV501.length} campaigns (UNIFIED: ${unifiedCount}, SMART: ${smartCount})`);
+        allCampaigns.push(...campaignsV501);
+      }
+    } catch (error: any) {
+      console.error('[getCampaigns v501] Request failed:', error.response?.data || error.message);
+    }
+
+    // Удаляем дубликаты по Id
+    const uniqueCampaigns = Array.from(
+      new Map(allCampaigns.map(c => [c.Id, c])).values()
+    );
+
+    const types = [...new Set(uniqueCampaigns.map((c: any) => c.Type))];
+    console.log(`[getCampaigns] Total: ${uniqueCampaigns.length} campaigns, types: ${types.join(', ')}`);
+
+    return uniqueCampaigns;
   },
 
   /**
@@ -155,7 +213,7 @@ export const yandexDirectService = {
             ],
           },
           FieldNames: ['Date', 'CampaignId', 'Impressions', 'Clicks', 'Cost'],
-          ReportName: 'Campaign Stats Report',
+          ReportName: `CampStats_${dateFrom}_${dateTo}_${Date.now()}`,
           ReportType: 'CAMPAIGN_PERFORMANCE_REPORT',
           DateRangeType: 'CUSTOM_DATE',
           Format: 'TSV',
@@ -287,54 +345,81 @@ export const yandexDirectService = {
     // });
 
     let response;
-    try {
-      response = await axios.post(
-        `${YANDEX_API_URL}/reports`,
-        {
-          params: {
-            SelectionCriteria: {
-              DateFrom: dateFrom,
-              DateTo: dateTo,
-              Filter: [
-                {
-                  Field: 'CampaignId',
-                  Operator: 'IN',
-                  Values: campaignIds.map(String),
-                },
-              ],
+    const maxRetries = 10;
+    const retryDelay = 3000;
+    const reportName = `CampPerf_${dateFrom}_${dateTo}_${Date.now()}`;
+
+    // Retry loop для offline отчётов
+    for (let attempt = 0; attempt < maxRetries; attempt++) {
+      try {
+        response = await axios.post(
+          `${YANDEX_API_URL}/reports`,
+          {
+            params: {
+              SelectionCriteria: {
+                DateFrom: dateFrom,
+                DateTo: dateTo,
+                Filter: [
+                  {
+                    Field: 'CampaignId',
+                    Operator: 'IN',
+                    Values: campaignIds.map(String),
+                  },
+                ],
+              },
+              FieldNames: fields,
+              ReportName: reportName,
+              ReportType: 'CAMPAIGN_PERFORMANCE_REPORT',
+              DateRangeType: 'CUSTOM_DATE',
+              Format: 'TSV',
+              IncludeVAT: 'YES',
+              IncludeDiscount: 'NO',
             },
-            FieldNames: fields,
-            ReportName: 'Campaign Performance Report',
-            ReportType: 'CAMPAIGN_PERFORMANCE_REPORT',
-            DateRangeType: 'CUSTOM_DATE',
-            Format: 'TSV',
-            IncludeVAT: 'YES',
-            IncludeDiscount: 'NO',
           },
-        },
-        {
-          headers: {
-            'Authorization': `Bearer ${accessToken}`,
-            'Client-Login': login,
-            'Accept-Language': 'ru',
-            'returnMoneyInMicros': 'false',
-            'skipReportHeader': 'true',
-            'skipReportSummary': 'true',
-          },
+          {
+            headers: {
+              'Authorization': `Bearer ${accessToken}`,
+              'Client-Login': login,
+              'Accept-Language': 'ru',
+              'returnMoneyInMicros': 'false',
+              'skipReportHeader': 'true',
+              'skipReportSummary': 'true',
+            },
+          }
+        );
+
+        if (response.status === 200) {
+          console.log(`[getCampaignPerformanceReport] Report ready on attempt ${attempt + 1}`);
+          break;
         }
-      );
-    } catch (error: any) {
-      console.error('[getCampaignPerformanceReport] Yandex API Error:', {
-        status: error.response?.status,
-        statusText: error.response?.statusText,
-        data: error.response?.data,
-        message: error.message
-      });
-      throw error;
+
+        if (response.status === 201 || response.status === 202) {
+          const retryIn = response.headers['retryin'] || retryDelay / 1000;
+          console.log(`[getCampaignPerformanceReport] Report in queue (status ${response.status}), waiting ${retryIn}s, attempt ${attempt + 1}/${maxRetries}`);
+          await new Promise(resolve => setTimeout(resolve, parseInt(retryIn) * 1000 || retryDelay));
+          continue;
+        }
+      } catch (error: any) {
+        console.error('[getCampaignPerformanceReport] Yandex API Error:', {
+          status: error.response?.status,
+          statusText: error.response?.statusText,
+          data: error.response?.data,
+          message: error.message
+        });
+        throw error;
+      }
+    }
+
+    if (!response || response.status !== 200) {
+      console.error('[getCampaignPerformanceReport] Failed to get report after all retries');
+      return [];
     }
 
     // Parse TSV response
+    console.log(`[getCampaignPerformanceReport] Response status: ${response.status}, data length: ${response.data?.length || 0}`);
+
     const lines = response.data.split('\n').filter((line: string) => line.trim());
+    console.log(`[getCampaignPerformanceReport] Parsed ${lines.length} lines`);
     if (lines.length === 0) return [];
 
     // Первая строка - заголовки
@@ -378,51 +463,76 @@ export const yandexDirectService = {
 
     // Запрашиваем данные по каждой цели отдельно
     const allResults: any[] = [];
+    const maxRetries = 10;
+    const retryDelay = 3000;
 
     for (const goalId of goalIds) {
       console.log(`[getConversionsReport] Fetching data for goal ${goalId}`);
 
       try {
-        const response = await axios.post(
-          `${YANDEX_API_URL}/reports`,
-          {
-            params: {
-              SelectionCriteria: {
-                DateFrom: dateFrom,
-                DateTo: dateTo,
-                Filter: [
-                  {
-                    Field: 'CampaignId',
-                    Operator: 'IN',
-                    Values: campaignIds.map(String),
-                  },
-                ],
+        let response;
+        const reportName = `Conv_${goalId}_${dateFrom}_${dateTo}_${Date.now()}`;
+
+        // Retry loop для offline отчётов
+        for (let attempt = 0; attempt < maxRetries; attempt++) {
+          response = await axios.post(
+            `${YANDEX_API_URL}/reports`,
+            {
+              params: {
+                SelectionCriteria: {
+                  DateFrom: dateFrom,
+                  DateTo: dateTo,
+                  Filter: [
+                    {
+                      Field: 'CampaignId',
+                      Operator: 'IN',
+                      Values: campaignIds.map(String),
+                    },
+                  ],
+                },
+                FieldNames: ['Date', 'CampaignId', 'CampaignName', 'Conversions', 'Revenue'],
+                Goals: [goalId],
+                AttributionModels: ['AUTO'],
+                ReportName: reportName,
+                ReportType: 'CUSTOM_REPORT',
+                DateRangeType: 'CUSTOM_DATE',
+                Format: 'TSV',
+                IncludeVAT: 'YES',
+                IncludeDiscount: 'NO',
               },
-              FieldNames: ['Date', 'CampaignId', 'CampaignName', 'Conversions', 'Revenue'],
-              Goals: [goalId],
-              AttributionModels: ['AUTO'],
-              ReportName: `Conversions Report - Goal ${goalId}`,
-              ReportType: 'CUSTOM_REPORT',
-              DateRangeType: 'CUSTOM_DATE',
-              Format: 'TSV',
-              IncludeVAT: 'YES',
-              IncludeDiscount: 'NO',
             },
-          },
-          {
-            headers: {
-              'Authorization': `Bearer ${accessToken}`,
-              'Client-Login': login,
-              'Accept-Language': 'ru',
-              'returnMoneyInMicros': 'false',
-              'skipReportHeader': 'true',
-              'skipReportSummary': 'true',
-            },
+            {
+              headers: {
+                'Authorization': `Bearer ${accessToken}`,
+                'Client-Login': login,
+                'Accept-Language': 'ru',
+                'returnMoneyInMicros': 'false',
+                'skipReportHeader': 'true',
+                'skipReportSummary': 'true',
+              },
+            }
+          );
+
+          if (response.status === 200) {
+            console.log(`[getConversionsReport] Goal ${goalId} ready on attempt ${attempt + 1}`);
+            break;
           }
-        );
+
+          if (response.status === 201 || response.status === 202) {
+            const retryIn = response.headers['retryin'] || retryDelay / 1000;
+            console.log(`[getConversionsReport] Goal ${goalId} in queue (status ${response.status}), waiting ${retryIn}s, attempt ${attempt + 1}/${maxRetries}`);
+            await new Promise(resolve => setTimeout(resolve, parseInt(retryIn) * 1000 || retryDelay));
+            continue;
+          }
+        }
+
+        if (!response || response.status !== 200) {
+          console.log(`[getConversionsReport] Failed to get report for goal ${goalId} after all retries`);
+          continue;
+        }
 
         // Parse TSV response
-        console.log(`[getConversionsReport] Raw response for goal ${goalId} (first 500 chars):`, response.data.substring(0, 500));
+        console.log(`[getConversionsReport] Goal ${goalId} response length: ${response.data?.length || 0}`);
         const lines = response.data.split('\n').filter((line: string) => line.trim());
         if (lines.length === 0) {
           console.log(`[getConversionsReport] No data for goal ${goalId}`);
@@ -1127,5 +1237,1569 @@ export const yandexDirectService = {
     }
 
     return results;
+  },
+
+  /**
+   * Получить статистику по устройствам (Desktop/Mobile/Tablet)
+   * Использует CUSTOM_REPORT с полем Device
+   */
+  async getDeviceStats(
+    accessToken: string,
+    login: string,
+    campaignIds: number[],
+    dateFrom: string,
+    dateTo: string
+  ): Promise<any[]> {
+    if (campaignIds.length === 0) return [];
+
+    const reportName = `Device_${dateFrom}_${dateTo}_${Date.now()}_${Math.random().toString(36).substring(7)}`;
+    const maxRetries = 10;
+    const retryDelay = 3000;
+
+    let response;
+
+    for (let attempt = 0; attempt < maxRetries; attempt++) {
+      try {
+        response = await axios.post(
+          `${YANDEX_API_URL}/reports`,
+          {
+            params: {
+              SelectionCriteria: {
+                DateFrom: dateFrom,
+                DateTo: dateTo,
+                Filter: [
+                  {
+                    Field: 'CampaignId',
+                    Operator: 'IN',
+                    Values: campaignIds.map(String),
+                  },
+                ],
+              },
+              FieldNames: [
+                'Device',
+                'Impressions',
+                'Clicks',
+                'Cost',
+                'Ctr',
+                'AvgCpc',
+                'BounceRate',
+              ],
+              ReportName: reportName,
+              ReportType: 'CUSTOM_REPORT',
+              DateRangeType: 'CUSTOM_DATE',
+              Format: 'TSV',
+              IncludeVAT: 'YES',
+              IncludeDiscount: 'NO',
+            },
+          },
+          {
+            headers: {
+              'Authorization': `Bearer ${accessToken}`,
+              'Client-Login': login,
+              'Accept-Language': 'ru',
+              'returnMoneyInMicros': 'false',
+              'skipReportHeader': 'true',
+              'skipReportSummary': 'true',
+            },
+          }
+        );
+
+        if (response.status === 200) {
+          console.log(`[getDeviceStats] Report ready on attempt ${attempt + 1}`);
+          break;
+        }
+
+        if (response.status === 201 || response.status === 202) {
+          const retryIn = response.headers['retryin'] || retryDelay / 1000;
+          console.log(`[getDeviceStats] Report in queue (status ${response.status}), waiting ${retryIn}s, attempt ${attempt + 1}/${maxRetries}`);
+          await new Promise(resolve => setTimeout(resolve, parseInt(retryIn) * 1000 || retryDelay));
+          continue;
+        }
+      } catch (error: any) {
+        console.error('[getDeviceStats] Yandex API Error:', {
+          status: error.response?.status,
+          data: error.response?.data,
+        });
+        throw error;
+      }
+    }
+
+    if (!response || response.status !== 200) {
+      console.log('[getDeviceStats] Failed to get report after all retries');
+      return [];
+    }
+
+    // Parse TSV response
+    const lines = response.data.split('\n').filter((line: string) => line.trim());
+    if (lines.length < 2) return [];
+
+    const headers = lines[0].split('\t');
+    const results: any[] = [];
+
+    for (let i = 1; i < lines.length; i++) {
+      const values = lines[i].split('\t');
+      const row: any = {};
+      headers.forEach((header: string, index: number) => {
+        row[header] = values[index] || null;
+      });
+      if (row.Device === 'Device') continue;
+      results.push(row);
+    }
+
+    console.log(`[getDeviceStats] Fetched ${results.length} device rows`);
+    return results;
+  },
+
+  /**
+   * Получить статистику по регионам (LocationOfPresenceId и LocationOfPresenceName)
+   * Использует CUSTOM_REPORT с полем LocationOfPresenceName
+   */
+  async getGeoStats(
+    accessToken: string,
+    login: string,
+    campaignIds: number[],
+    dateFrom: string,
+    dateTo: string
+  ): Promise<any[]> {
+    if (campaignIds.length === 0) return [];
+
+    const reportName = `Geo_${dateFrom}_${dateTo}_${Date.now()}_${Math.random().toString(36).substring(7)}`;
+    const maxRetries = 10;
+    const retryDelay = 3000;
+
+    let response;
+
+    for (let attempt = 0; attempt < maxRetries; attempt++) {
+      try {
+        response = await axios.post(
+          `${YANDEX_API_URL}/reports`,
+          {
+            params: {
+              SelectionCriteria: {
+                DateFrom: dateFrom,
+                DateTo: dateTo,
+                Filter: [
+                  {
+                    Field: 'CampaignId',
+                    Operator: 'IN',
+                    Values: campaignIds.map(String),
+                  },
+                ],
+              },
+              FieldNames: [
+                'LocationOfPresenceName',
+                'Impressions',
+                'Clicks',
+                'Cost',
+                'Ctr',
+                'AvgCpc',
+                'BounceRate',
+              ],
+              ReportName: reportName,
+              ReportType: 'CUSTOM_REPORT',
+              DateRangeType: 'CUSTOM_DATE',
+              Format: 'TSV',
+              IncludeVAT: 'YES',
+              IncludeDiscount: 'NO',
+            },
+          },
+          {
+            headers: {
+              'Authorization': `Bearer ${accessToken}`,
+              'Client-Login': login,
+              'Accept-Language': 'ru',
+              'returnMoneyInMicros': 'false',
+              'skipReportHeader': 'true',
+              'skipReportSummary': 'true',
+            },
+          }
+        );
+
+        if (response.status === 200) {
+          console.log(`[getGeoStats] Report ready on attempt ${attempt + 1}`);
+          break;
+        }
+
+        if (response.status === 201 || response.status === 202) {
+          const retryIn = response.headers['retryin'] || retryDelay / 1000;
+          console.log(`[getGeoStats] Report in queue (status ${response.status}), waiting ${retryIn}s, attempt ${attempt + 1}/${maxRetries}`);
+          await new Promise(resolve => setTimeout(resolve, parseInt(retryIn) * 1000 || retryDelay));
+          continue;
+        }
+      } catch (error: any) {
+        console.error('[getGeoStats] Yandex API Error:', {
+          status: error.response?.status,
+          data: error.response?.data,
+        });
+        throw error;
+      }
+    }
+
+    if (!response || response.status !== 200) {
+      console.log('[getGeoStats] Failed to get report after all retries');
+      return [];
+    }
+
+    // Parse TSV response
+    const lines = response.data.split('\n').filter((line: string) => line.trim());
+    if (lines.length < 2) return [];
+
+    const headers = lines[0].split('\t');
+    const results: any[] = [];
+
+    for (let i = 1; i < lines.length; i++) {
+      const values = lines[i].split('\t');
+      const row: any = {};
+      headers.forEach((header: string, index: number) => {
+        row[header] = values[index] || null;
+      });
+      if (row.LocationOfPresenceName === 'LocationOfPresenceName') continue;
+      results.push(row);
+    }
+
+    console.log(`[getGeoStats] Fetched ${results.length} geo rows`);
+    return results;
+  },
+
+  /**
+   * Получить баланс аккаунта
+   * Сначала пробуем API v4 Live (общий счёт), если не работает - суммируем балансы кампаний
+   */
+  async getAccountBalance(
+    accessToken: string,
+    login: string
+  ): Promise<{
+    amount: number;
+    currency: string;
+    amountAvailableForTransfer: number;
+    source: 'shared_account' | 'campaigns_sum';
+  } | null> {
+    // 1. Сначала пробуем получить баланс общего счёта через API v4 Live
+    const YANDEX_API_V4_LIVE_URL = 'https://api.direct.yandex.ru/live/v4/json/';
+
+    try {
+      const response = await axios.post(
+        YANDEX_API_V4_LIVE_URL,
+        {
+          method: 'AccountManagement',
+          token: accessToken,
+          param: {
+            Action: 'Get',
+            SelectionCriteria: {
+              Logins: [login],
+            },
+          },
+        },
+        {
+          headers: {
+            'Content-Type': 'application/json',
+            'Accept-Language': 'ru',
+          },
+        }
+      );
+
+      const accounts = response.data.data?.Accounts;
+      if (accounts && accounts.length > 0) {
+        const account = accounts[0];
+        console.log('[getAccountBalance] Got shared account balance:', account.Amount);
+        return {
+          amount: account.Amount || 0,
+          currency: account.Currency || 'RUB',
+          amountAvailableForTransfer: account.AmountAvailableForTransfer || 0,
+          source: 'shared_account',
+        };
+      }
+    } catch (error: any) {
+      console.log('[getAccountBalance] Shared account not available, trying campaigns...');
+    }
+
+    // 2. Если общий счёт не доступен - получаем балансы кампаний через API v5
+    try {
+      const response = await axios.post(
+        `${YANDEX_API_URL}/campaigns`,
+        {
+          method: 'get',
+          params: {
+            SelectionCriteria: {
+              States: ['ON', 'OFF', 'SUSPENDED'], // Активные и приостановленные кампании
+            },
+            FieldNames: ['Id', 'Name', 'State', 'Funds', 'Currency'],
+          },
+        },
+        {
+          headers: {
+            'Authorization': `Bearer ${accessToken}`,
+            'Client-Login': login,
+            'Accept-Language': 'ru',
+            'returnMoneyInMicros': 'false',
+          },
+        }
+      );
+
+      if (response.data.error) {
+        console.error('[getAccountBalance] Campaigns API Error:', response.data.error);
+        return null;
+      }
+
+      const campaigns = response.data.result?.Campaigns || [];
+      if (campaigns.length === 0) {
+        console.log('[getAccountBalance] No campaigns found');
+        return null;
+      }
+
+      // Проверяем тип счёта - общий или индивидуальный
+      let totalBalance = 0;
+      let totalAvailable = 0;
+      let currency = 'RUB';
+      let hasSharedAccount = false;
+
+      for (const campaign of campaigns) {
+        if (campaign.Currency) {
+          currency = campaign.Currency;
+        }
+
+        // SharedAccountFunds - когда включён общий счёт
+        const sharedFunds = campaign.Funds?.SharedAccountFunds;
+        if (sharedFunds) {
+          hasSharedAccount = true;
+          // При общем счёте Spend показывает потраченное, но баланс получаем через API v4 Live
+          continue;
+        }
+
+        // CampaignFunds - когда нет общего счёта
+        const campaignFunds = campaign.Funds?.CampaignFunds;
+        if (campaignFunds) {
+          // Balance в микро-единицах (делим на 1,000,000)
+          totalBalance += (campaignFunds.Balance || 0) / 1000000;
+          totalAvailable += (campaignFunds.SumAvailableForTransfer || 0) / 1000000;
+        }
+      }
+
+      // Если у аккаунта общий счёт, но API v4 Live не вернул данные - возвращаем null
+      if (hasSharedAccount && totalBalance === 0) {
+        console.log('[getAccountBalance] Shared account enabled but balance not available via API');
+        return null;
+      }
+
+      console.log(`[getAccountBalance] Sum of ${campaigns.length} campaigns: ${totalBalance} ${currency}`);
+
+      return {
+        amount: totalBalance,
+        currency,
+        amountAvailableForTransfer: totalAvailable,
+        source: 'campaigns_sum',
+      };
+    } catch (error: any) {
+      console.error('[getAccountBalance] Error getting campaigns:', {
+        status: error.response?.status,
+        data: error.response?.data,
+        message: error.message,
+      });
+      return null;
+    }
+  },
+
+  /**
+   * Получить отчёт по поисковым запросам (SEARCH_QUERY_PERFORMANCE_REPORT)
+   */
+  async getSearchQueryReport(
+    accessToken: string,
+    login: string,
+    campaignIds: number[],
+    dateFrom: string,
+    dateTo: string
+  ): Promise<any[]> {
+    if (campaignIds.length === 0) return [];
+
+    const fields = [
+      'Query',
+      'CampaignId',
+      'AdGroupId',
+      'Clicks',
+      'Cost',
+      'Impressions',
+      'Ctr',
+      'AvgCpc',
+    ];
+
+    let response;
+    const maxRetries = 10;
+    const retryDelay = 3000;
+    const reportName = `SearchQuery_${dateFrom}_${dateTo}_${Date.now()}`;
+
+    for (let attempt = 0; attempt < maxRetries; attempt++) {
+      try {
+        response = await axios.post(
+          `${YANDEX_API_URL}/reports`,
+          {
+            params: {
+              SelectionCriteria: {
+                DateFrom: dateFrom,
+                DateTo: dateTo,
+                Filter: [
+                  {
+                    Field: 'CampaignId',
+                    Operator: 'IN',
+                    Values: campaignIds.map(String),
+                  },
+                ],
+              },
+              FieldNames: fields,
+              ReportName: reportName,
+              ReportType: 'SEARCH_QUERY_PERFORMANCE_REPORT',
+              DateRangeType: 'CUSTOM_DATE',
+              Format: 'TSV',
+              IncludeVAT: 'YES',
+              IncludeDiscount: 'NO',
+            },
+          },
+          {
+            headers: {
+              'Authorization': `Bearer ${accessToken}`,
+              'Client-Login': login,
+              'Accept-Language': 'ru',
+              'returnMoneyInMicros': 'false',
+              'skipReportHeader': 'true',
+              'skipReportSummary': 'true',
+            },
+          }
+        );
+
+        if (response.status === 200) {
+          console.log(`[getSearchQueryReport] Report ready on attempt ${attempt + 1}`);
+          break;
+        }
+
+        if (response.status === 201 || response.status === 202) {
+          const retryIn = response.headers['retryin'] || retryDelay / 1000;
+          console.log(`[getSearchQueryReport] Report pending, retry in ${retryIn}s...`);
+          await new Promise(resolve => setTimeout(resolve, Number(retryIn) * 1000));
+        }
+      } catch (error: any) {
+        if (error.response?.status === 201 || error.response?.status === 202) {
+          const retryIn = error.response.headers['retryin'] || retryDelay / 1000;
+          console.log(`[getSearchQueryReport] Report pending (catch), retry in ${retryIn}s...`);
+          await new Promise(resolve => setTimeout(resolve, Number(retryIn) * 1000));
+        } else {
+          console.error('[getSearchQueryReport] Error:', error.response?.data || error.message);
+          return [];
+        }
+      }
+    }
+
+    if (!response || response.status !== 200) {
+      console.error('[getSearchQueryReport] Failed to get report after retries');
+      return [];
+    }
+
+    // Парсим TSV данные
+    const lines = response.data.split('\n').filter((line: string) => line.trim());
+    if (lines.length < 2) return [];
+
+    const headers = lines[0].split('\t');
+    const results: any[] = [];
+
+    for (let i = 1; i < lines.length; i++) {
+      const values = lines[i].split('\t');
+      const row: any = {};
+      headers.forEach((header: string, idx: number) => {
+        row[header] = values[idx];
+      });
+      results.push({
+        query: row['Query'] || '',
+        campaignId: row['CampaignId'],
+        adGroupId: row['AdGroupId'],
+        clicks: parseInt(row['Clicks'] || '0'),
+        cost: parseFloat(row['Cost'] || '0'),
+        impressions: parseInt(row['Impressions'] || '0'),
+        ctr: parseFloat(row['Ctr'] || '0'),
+        avgCpc: parseFloat(row['AvgCpc'] || '0'),
+      });
+    }
+
+    // Группируем по запросу и суммируем
+    const queryMap = new Map<string, any>();
+    results.forEach(row => {
+      const existing = queryMap.get(row.query);
+      if (existing) {
+        existing.clicks += row.clicks;
+        existing.cost += row.cost;
+        existing.impressions += row.impressions;
+      } else {
+        queryMap.set(row.query, { ...row });
+      }
+    });
+
+    return Array.from(queryMap.values())
+      .sort((a, b) => b.cost - a.cost)
+      .slice(0, 50); // Топ 50 запросов
+  },
+
+  /**
+   * Получить отчёт по демографии (пол/возраст) через CUSTOM_REPORT
+   */
+  async getDemographicsReport(
+    accessToken: string,
+    login: string,
+    campaignIds: number[],
+    dateFrom: string,
+    dateTo: string
+  ): Promise<any[]> {
+    if (campaignIds.length === 0) return [];
+
+    const fields = [
+      'Gender',
+      'Age',
+      'CampaignId',
+      'Clicks',
+      'Cost',
+      'Impressions',
+    ];
+
+    let response;
+    const maxRetries = 10;
+    const retryDelay = 3000;
+    const reportName = `Demographics_${dateFrom}_${dateTo}_${Date.now()}`;
+
+    for (let attempt = 0; attempt < maxRetries; attempt++) {
+      try {
+        response = await axios.post(
+          `${YANDEX_API_URL}/reports`,
+          {
+            params: {
+              SelectionCriteria: {
+                DateFrom: dateFrom,
+                DateTo: dateTo,
+                Filter: [
+                  {
+                    Field: 'CampaignId',
+                    Operator: 'IN',
+                    Values: campaignIds.map(String),
+                  },
+                ],
+              },
+              FieldNames: fields,
+              ReportName: reportName,
+              ReportType: 'CUSTOM_REPORT',
+              DateRangeType: 'CUSTOM_DATE',
+              Format: 'TSV',
+              IncludeVAT: 'YES',
+              IncludeDiscount: 'NO',
+            },
+          },
+          {
+            headers: {
+              'Authorization': `Bearer ${accessToken}`,
+              'Client-Login': login,
+              'Accept-Language': 'ru',
+              'returnMoneyInMicros': 'false',
+              'skipReportHeader': 'true',
+              'skipReportSummary': 'true',
+            },
+          }
+        );
+
+        if (response.status === 200) {
+          console.log(`[getDemographicsReport] Report ready on attempt ${attempt + 1}`);
+          break;
+        }
+
+        if (response.status === 201 || response.status === 202) {
+          const retryIn = response.headers['retryin'] || retryDelay / 1000;
+          console.log(`[getDemographicsReport] Report pending, retry in ${retryIn}s...`);
+          await new Promise(resolve => setTimeout(resolve, Number(retryIn) * 1000));
+        }
+      } catch (error: any) {
+        if (error.response?.status === 201 || error.response?.status === 202) {
+          const retryIn = error.response.headers['retryin'] || retryDelay / 1000;
+          console.log(`[getDemographicsReport] Report pending (catch), retry in ${retryIn}s...`);
+          await new Promise(resolve => setTimeout(resolve, Number(retryIn) * 1000));
+        } else {
+          console.error('[getDemographicsReport] Error:', error.response?.data || error.message);
+          return [];
+        }
+      }
+    }
+
+    if (!response || response.status !== 200) {
+      console.error('[getDemographicsReport] Failed to get report after retries');
+      return [];
+    }
+
+    // Парсим TSV
+    const lines = response.data.split('\n').filter((line: string) => line.trim());
+    if (lines.length < 2) return [];
+
+    const headers = lines[0].split('\t');
+    const results: any[] = [];
+
+    // Маппинг значений Gender и Age на русский
+    const genderMap: Record<string, string> = {
+      'GENDER_MALE': 'Мужчины',
+      'GENDER_FEMALE': 'Женщины',
+      'UNKNOWN': 'Неизвестно',
+    };
+
+    const ageMap: Record<string, string> = {
+      'AGE_0_17': '0-17',
+      'AGE_18_24': '18-24',
+      'AGE_25_34': '25-34',
+      'AGE_35_44': '35-44',
+      'AGE_45_54': '45-54',
+      'AGE_45': '45+',
+      'AGE_55': '55+',
+      'UNKNOWN': 'Неизвестно',
+    };
+
+    for (let i = 1; i < lines.length; i++) {
+      const values = lines[i].split('\t');
+      const row: any = {};
+      headers.forEach((header: string, idx: number) => {
+        row[header] = values[idx];
+      });
+
+      const gender = genderMap[row['Gender']] || row['Gender'] || 'Неизвестно';
+      const age = ageMap[row['Age']] || row['Age'] || 'Неизвестно';
+
+      results.push({
+        segment: `${gender} ${age}`,
+        gender: gender,
+        age: age,
+        clicks: parseInt(row['Clicks'] || '0'),
+        cost: parseFloat(row['Cost'] || '0'),
+        impressions: parseInt(row['Impressions'] || '0'),
+      });
+    }
+
+    // Группируем по сегменту
+    const segmentMap = new Map<string, any>();
+    results.forEach(row => {
+      const existing = segmentMap.get(row.segment);
+      if (existing) {
+        existing.clicks += row.clicks;
+        existing.cost += row.cost;
+        existing.impressions += row.impressions;
+      } else {
+        segmentMap.set(row.segment, { ...row });
+      }
+    });
+
+    return Array.from(segmentMap.values())
+      .filter(r => r.segment !== 'Неизвестно Неизвестно')
+      .sort((a, b) => b.cost - a.cost)
+      .slice(0, 20);
+  },
+
+  /**
+   * Получить отчёт по регионам через CUSTOM_REPORT
+   */
+  async getGeoReport(
+    accessToken: string,
+    login: string,
+    campaignIds: number[],
+    dateFrom: string,
+    dateTo: string
+  ): Promise<any[]> {
+    if (campaignIds.length === 0) return [];
+
+    const fields = [
+      'TargetingLocationName',
+      'CampaignId',
+      'Clicks',
+      'Cost',
+      'Impressions',
+    ];
+
+    let response;
+    const maxRetries = 10;
+    const retryDelay = 3000;
+    const reportName = `Geo_${dateFrom}_${dateTo}_${Date.now()}`;
+
+    for (let attempt = 0; attempt < maxRetries; attempt++) {
+      try {
+        response = await axios.post(
+          `${YANDEX_API_URL}/reports`,
+          {
+            params: {
+              SelectionCriteria: {
+                DateFrom: dateFrom,
+                DateTo: dateTo,
+                Filter: [
+                  {
+                    Field: 'CampaignId',
+                    Operator: 'IN',
+                    Values: campaignIds.map(String),
+                  },
+                ],
+              },
+              FieldNames: fields,
+              ReportName: reportName,
+              ReportType: 'CUSTOM_REPORT',
+              DateRangeType: 'CUSTOM_DATE',
+              Format: 'TSV',
+              IncludeVAT: 'YES',
+              IncludeDiscount: 'NO',
+            },
+          },
+          {
+            headers: {
+              'Authorization': `Bearer ${accessToken}`,
+              'Client-Login': login,
+              'Accept-Language': 'ru',
+              'returnMoneyInMicros': 'false',
+              'skipReportHeader': 'true',
+              'skipReportSummary': 'true',
+            },
+          }
+        );
+
+        if (response.status === 200) {
+          console.log(`[getGeoReport] Report ready on attempt ${attempt + 1}`);
+          break;
+        }
+
+        if (response.status === 201 || response.status === 202) {
+          const retryIn = response.headers['retryin'] || retryDelay / 1000;
+          console.log(`[getGeoReport] Report pending, retry in ${retryIn}s...`);
+          await new Promise(resolve => setTimeout(resolve, Number(retryIn) * 1000));
+        }
+      } catch (error: any) {
+        if (error.response?.status === 201 || error.response?.status === 202) {
+          const retryIn = error.response.headers['retryin'] || retryDelay / 1000;
+          console.log(`[getGeoReport] Report pending (catch), retry in ${retryIn}s...`);
+          await new Promise(resolve => setTimeout(resolve, Number(retryIn) * 1000));
+        } else {
+          console.error('[getGeoReport] Error:', error.response?.data || error.message);
+          return [];
+        }
+      }
+    }
+
+    if (!response || response.status !== 200) {
+      console.error('[getGeoReport] Failed to get report after retries');
+      return [];
+    }
+
+    // Парсим TSV
+    const lines = response.data.split('\n').filter((line: string) => line.trim());
+    if (lines.length < 2) return [];
+
+    const headers = lines[0].split('\t');
+    const results: any[] = [];
+
+    for (let i = 1; i < lines.length; i++) {
+      const values = lines[i].split('\t');
+      const row: any = {};
+      headers.forEach((header: string, idx: number) => {
+        row[header] = values[idx];
+      });
+
+      results.push({
+        region: row['TargetingLocationName'] || 'Неизвестно',
+        clicks: parseInt(row['Clicks'] || '0'),
+        cost: parseFloat(row['Cost'] || '0'),
+        impressions: parseInt(row['Impressions'] || '0'),
+      });
+    }
+
+    // Группируем по региону
+    const regionMap = new Map<string, any>();
+    results.forEach(row => {
+      const existing = regionMap.get(row.region);
+      if (existing) {
+        existing.clicks += row.clicks;
+        existing.cost += row.cost;
+        existing.impressions += row.impressions;
+      } else {
+        regionMap.set(row.region, { ...row });
+      }
+    });
+
+    return Array.from(regionMap.values())
+      .filter(r => r.region !== 'Неизвестно')
+      .sort((a, b) => b.cost - a.cost)
+      .slice(0, 20);
+  },
+
+  /**
+   * Получить статистику по площадкам (Placement)
+   */
+  async getPlacementsReport(
+    accessToken: string,
+    login: string,
+    campaignIds: number[],
+    dateFrom: string,
+    dateTo: string
+  ): Promise<any[]> {
+    const reportName = `placements_report_${Date.now()}`;
+
+    const requestBody = {
+      params: {
+        SelectionCriteria: {
+          Filter: [
+            {
+              Field: 'CampaignId',
+              Operator: 'IN',
+              Values: campaignIds.map(String),
+            },
+          ],
+          DateFrom: dateFrom,
+          DateTo: dateTo,
+        },
+        FieldNames: ['Placement', 'Clicks', 'Cost', 'Impressions', 'Ctr', 'AvgCpc'],
+        ReportName: reportName,
+        ReportType: 'CUSTOM_REPORT',
+        DateRangeType: 'CUSTOM_DATE',
+        Format: 'TSV',
+        IncludeVAT: 'YES',
+        IncludeDiscount: 'NO',
+      },
+    };
+
+    // Пробуем до 10 раз с паузами
+    let response: any = null;
+    for (let attempt = 0; attempt < 10; attempt++) {
+      try {
+        response = await axios.post(
+          'https://api.direct.yandex.com/json/v5/reports',
+          requestBody,
+          {
+            headers: {
+              Authorization: `Bearer ${accessToken}`,
+              'Client-Login': login,
+              'Accept-Language': 'ru',
+              processingMode: 'auto',
+              returnMoneyInMicros: 'false',
+              skipReportHeader: 'true',
+              skipReportSummary: 'true',
+            },
+            validateStatus: (status) => status < 500,
+          }
+        );
+
+        if (response.status === 200) {
+          console.log(`[getPlacementsReport] Report ready on attempt ${attempt + 1}`);
+          break;
+        } else if (response.status === 201 || response.status === 202) {
+          const retryIn = parseInt(response.headers['retryIn'] || '10');
+          console.log(`[getPlacementsReport] Report pending, retry in ${retryIn}s...`);
+          await new Promise(resolve => setTimeout(resolve, retryIn * 1000));
+        }
+      } catch (error: any) {
+        if (error.response?.status === 201 || error.response?.status === 202) {
+          const retryIn = parseInt(error.response.headers['retryIn'] || '10');
+          console.log(`[getPlacementsReport] Report pending (catch), retry in ${retryIn}s...`);
+          await new Promise(resolve => setTimeout(resolve, retryIn * 1000));
+        } else {
+          console.error('[getPlacementsReport] Error:', error.response?.data || error.message);
+          return [];
+        }
+      }
+    }
+
+    if (!response || response.status !== 200) {
+      console.error('[getPlacementsReport] Failed to get report after retries');
+      return [];
+    }
+
+    // Парсим TSV
+    const lines = response.data.split('\n').filter((line: string) => line.trim());
+    if (lines.length < 2) return [];
+
+    const headers = lines[0].split('\t');
+    const results: any[] = [];
+
+    for (let i = 1; i < lines.length; i++) {
+      const values = lines[i].split('\t');
+      const row: any = {};
+      headers.forEach((header: string, idx: number) => {
+        row[header] = values[idx];
+      });
+
+      results.push({
+        placement: row['Placement'] || 'Неизвестно',
+        clicks: parseInt(row['Clicks'] || '0'),
+        cost: parseFloat(row['Cost'] || '0'),
+        impressions: parseInt(row['Impressions'] || '0'),
+        ctr: parseFloat(row['Ctr'] || '0'),
+        avgCpc: parseFloat(row['AvgCpc'] || '0'),
+      });
+    }
+
+    // Группируем по площадке
+    const placementMap = new Map<string, any>();
+    results.forEach(row => {
+      const existing = placementMap.get(row.placement);
+      if (existing) {
+        existing.clicks += row.clicks;
+        existing.cost += row.cost;
+        existing.impressions += row.impressions;
+      } else {
+        placementMap.set(row.placement, { ...row });
+      }
+    });
+
+    // Функция для определения типа площадки по имени
+    const getPlacementType = (placement: string): string => {
+      if (!placement) return 'Другое';
+      const p = placement.toLowerCase();
+
+      // Поиск Яндекс
+      if (p.includes('yandex') || p.includes('яндекс')) {
+        if (p.includes('search') || p.includes('поиск')) return 'Поиск';
+        if (p.includes('maps') || p.includes('карт')) return 'Карты';
+        if (p.includes('video') || p.includes('видео')) return 'Видео';
+        if (p.includes('zen') || p.includes('дзен')) return 'Дзен';
+        return 'РСЯ';
+      }
+
+      // Мобильные приложения
+      if (p.includes('.app') || p.includes('android') || p.includes('ios') || p.includes('mobile')) return 'Приложения';
+
+      // Социальные сети
+      if (p.includes('vk.com') || p.includes('ok.ru') || p.includes('mail.ru')) return 'Соцсети';
+
+      // Видео площадки
+      if (p.includes('youtube') || p.includes('rutube') || p.includes('video')) return 'Видео';
+
+      // Новостные сайты
+      if (p.includes('news') || p.includes('новости') || p.includes('lenta') || p.includes('rbc') || p.includes('ria')) return 'Новости';
+
+      // Обычные сайты РСЯ
+      return 'РСЯ';
+    };
+
+    // Пересчитываем CTR и AvgCpc после агрегации, добавляем тип
+    const aggregated = Array.from(placementMap.values()).map(p => ({
+      ...p,
+      ctr: p.impressions > 0 ? (p.clicks / p.impressions) * 100 : 0,
+      avgCpc: p.clicks > 0 ? p.cost / p.clicks : 0,
+      placementType: getPlacementType(p.placement),
+    }));
+
+    return aggregated
+      .filter(p => p.placement !== 'Неизвестно' && p.placement !== '--')
+      .sort((a, b) => b.cost - a.cost)
+      .slice(0, 30);
+  },
+
+  /**
+   * Получить отчёт по платёжеспособности (IncomeGrade)
+   * Значения: VERY_HIGH, HIGH, ABOVE_AVERAGE, OTHER
+   */
+  async getIncomeReport(
+    accessToken: string,
+    login: string,
+    campaignIds: number[],
+    dateFrom: string,
+    dateTo: string
+  ): Promise<any[]> {
+    if (campaignIds.length === 0) return [];
+
+    const reportName = `income_report_${Date.now()}`;
+    const maxRetries = 10;
+    const retryDelay = 3000;
+
+    let response: any = null;
+
+    for (let attempt = 0; attempt < maxRetries; attempt++) {
+      try {
+        response = await axios.post(
+          `${YANDEX_API_URL}/reports`,
+          {
+            params: {
+              SelectionCriteria: {
+                DateFrom: dateFrom,
+                DateTo: dateTo,
+                Filter: [
+                  {
+                    Field: 'CampaignId',
+                    Operator: 'IN',
+                    Values: campaignIds.map(String),
+                  },
+                ],
+              },
+              FieldNames: ['IncomeGrade', 'Clicks', 'Cost', 'Impressions', 'Ctr', 'AvgCpc'],
+              ReportName: reportName,
+              ReportType: 'CUSTOM_REPORT',
+              DateRangeType: 'CUSTOM_DATE',
+              Format: 'TSV',
+              IncludeVAT: 'YES',
+              IncludeDiscount: 'NO',
+            },
+          },
+          {
+            headers: {
+              'Authorization': `Bearer ${accessToken}`,
+              'Client-Login': login,
+              'Accept-Language': 'ru',
+              'returnMoneyInMicros': 'false',
+              'skipReportHeader': 'true',
+              'skipReportSummary': 'true',
+            },
+          }
+        );
+
+        if (response.status === 200) {
+          console.log(`[getIncomeReport] Report ready on attempt ${attempt + 1}`);
+          break;
+        }
+
+        if (response.status === 201 || response.status === 202) {
+          const retryIn = response.headers['retryin'] || retryDelay / 1000;
+          console.log(`[getIncomeReport] Report pending, retry in ${retryIn}s...`);
+          await new Promise(resolve => setTimeout(resolve, Number(retryIn) * 1000));
+        }
+      } catch (error: any) {
+        if (error.response?.status === 201 || error.response?.status === 202) {
+          const retryIn = error.response.headers['retryin'] || retryDelay / 1000;
+          console.log(`[getIncomeReport] Report pending (catch), retry in ${retryIn}s...`);
+          await new Promise(resolve => setTimeout(resolve, Number(retryIn) * 1000));
+        } else {
+          console.error('[getIncomeReport] Error:', error.response?.data || error.message);
+          return [];
+        }
+      }
+    }
+
+    if (!response || response.status !== 200) {
+      console.error('[getIncomeReport] Failed to get report after retries');
+      return [];
+    }
+
+    // Парсим TSV
+    const lines = response.data.split('\n').filter((line: string) => line.trim());
+    if (lines.length < 2) return [];
+
+    const headers = lines[0].split('\t');
+    const results: any[] = [];
+
+    // Маппинг значений на русский
+    const incomeMap: Record<string, string> = {
+      'VERY_HIGH': 'Очень высокий',
+      'HIGH': 'Высокий',
+      'ABOVE_AVERAGE': 'Выше среднего',
+      'OTHER': 'Прочий',
+      'UNKNOWN': 'Неизвестно',
+    };
+
+    for (let i = 1; i < lines.length; i++) {
+      const values = lines[i].split('\t');
+      const row: any = {};
+      headers.forEach((header: string, idx: number) => {
+        row[header] = values[idx];
+      });
+
+      const incomeGrade = row['IncomeGrade'] || 'UNKNOWN';
+      results.push({
+        incomeGrade: incomeMap[incomeGrade] || incomeGrade,
+        incomeGradeRaw: incomeGrade,
+        clicks: parseInt(row['Clicks'] || '0'),
+        cost: parseFloat(row['Cost'] || '0'),
+        impressions: parseInt(row['Impressions'] || '0'),
+        ctr: parseFloat(row['Ctr'] || '0'),
+        avgCpc: parseFloat(row['AvgCpc'] || '0'),
+      });
+    }
+
+    // Группируем по incomeGrade
+    const incomeGradeMap = new Map<string, any>();
+    results.forEach(row => {
+      const existing = incomeGradeMap.get(row.incomeGrade);
+      if (existing) {
+        existing.clicks += row.clicks;
+        existing.cost += row.cost;
+        existing.impressions += row.impressions;
+      } else {
+        incomeGradeMap.set(row.incomeGrade, { ...row });
+      }
+    });
+
+    // Пересчитываем CTR и AvgCpc после агрегации
+    const aggregated = Array.from(incomeGradeMap.values()).map(p => ({
+      ...p,
+      ctr: p.impressions > 0 ? (p.clicks / p.impressions) * 100 : 0,
+      avgCpc: p.clicks > 0 ? p.cost / p.clicks : 0,
+    }));
+
+    return aggregated
+      .filter(p => p.incomeGrade !== 'Неизвестно')
+      .sort((a, b) => b.cost - a.cost);
+  },
+
+  /**
+   * Получить отчёт по категориям таргетинга (TargetingCategory)
+   * Значения: EXACT, ALTERNATIVE, COMPETITOR, BROADER, ACCESSORY
+   */
+  async getTargetingCategoryReport(
+    accessToken: string,
+    login: string,
+    campaignIds: number[],
+    dateFrom: string,
+    dateTo: string
+  ): Promise<any[]> {
+    if (campaignIds.length === 0) return [];
+
+    const reportName = `targeting_category_report_${Date.now()}`;
+    const maxRetries = 10;
+    const retryDelay = 3000;
+
+    let response: any = null;
+
+    for (let attempt = 0; attempt < maxRetries; attempt++) {
+      try {
+        response = await axios.post(
+          `${YANDEX_API_URL}/reports`,
+          {
+            params: {
+              SelectionCriteria: {
+                DateFrom: dateFrom,
+                DateTo: dateTo,
+                Filter: [
+                  {
+                    Field: 'CampaignId',
+                    Operator: 'IN',
+                    Values: campaignIds.map(String),
+                  },
+                ],
+              },
+              FieldNames: ['TargetingCategory', 'Clicks', 'Cost', 'Impressions', 'Ctr', 'AvgCpc'],
+              ReportName: reportName,
+              ReportType: 'CUSTOM_REPORT',
+              DateRangeType: 'CUSTOM_DATE',
+              Format: 'TSV',
+              IncludeVAT: 'YES',
+              IncludeDiscount: 'NO',
+            },
+          },
+          {
+            headers: {
+              'Authorization': `Bearer ${accessToken}`,
+              'Client-Login': login,
+              'Accept-Language': 'ru',
+              'returnMoneyInMicros': 'false',
+              'skipReportHeader': 'true',
+              'skipReportSummary': 'true',
+            },
+          }
+        );
+
+        if (response.status === 200) {
+          console.log(`[getTargetingCategoryReport] Report ready on attempt ${attempt + 1}`);
+          break;
+        }
+
+        if (response.status === 201 || response.status === 202) {
+          const retryIn = response.headers['retryin'] || retryDelay / 1000;
+          console.log(`[getTargetingCategoryReport] Report pending, retry in ${retryIn}s...`);
+          await new Promise(resolve => setTimeout(resolve, Number(retryIn) * 1000));
+        }
+      } catch (error: any) {
+        if (error.response?.status === 201 || error.response?.status === 202) {
+          const retryIn = error.response.headers['retryin'] || retryDelay / 1000;
+          console.log(`[getTargetingCategoryReport] Report pending (catch), retry in ${retryIn}s...`);
+          await new Promise(resolve => setTimeout(resolve, Number(retryIn) * 1000));
+        } else {
+          console.error('[getTargetingCategoryReport] Error:', error.response?.data || error.message);
+          return [];
+        }
+      }
+    }
+
+    if (!response || response.status !== 200) {
+      console.error('[getTargetingCategoryReport] Failed to get report after retries');
+      return [];
+    }
+
+    // Парсим TSV
+    const lines = response.data.split('\n').filter((line: string) => line.trim());
+    if (lines.length < 2) return [];
+
+    const headers = lines[0].split('\t');
+    const results: any[] = [];
+
+    // Маппинг значений на русский
+    const categoryMap: Record<string, string> = {
+      'EXACT': 'Точное соответствие',
+      'ALTERNATIVE': 'Альтернатива',
+      'COMPETITOR': 'Конкурент',
+      'BROADER': 'Более широкое',
+      'ACCESSORY': 'Сопутствующее',
+      'UNKNOWN': 'Неизвестно',
+    };
+
+    for (let i = 1; i < lines.length; i++) {
+      const values = lines[i].split('\t');
+      const row: any = {};
+      headers.forEach((header: string, idx: number) => {
+        row[header] = values[idx];
+      });
+
+      const category = row['TargetingCategory'] || 'UNKNOWN';
+      results.push({
+        category: categoryMap[category] || category,
+        categoryRaw: category,
+        clicks: parseInt(row['Clicks'] || '0'),
+        cost: parseFloat(row['Cost'] || '0'),
+        impressions: parseInt(row['Impressions'] || '0'),
+        ctr: parseFloat(row['Ctr'] || '0'),
+        avgCpc: parseFloat(row['AvgCpc'] || '0'),
+      });
+    }
+
+    // Группируем по category
+    const categoryMapAgg = new Map<string, any>();
+    results.forEach(row => {
+      const existing = categoryMapAgg.get(row.category);
+      if (existing) {
+        existing.clicks += row.clicks;
+        existing.cost += row.cost;
+        existing.impressions += row.impressions;
+      } else {
+        categoryMapAgg.set(row.category, { ...row });
+      }
+    });
+
+    // Пересчитываем CTR и AvgCpc после агрегации
+    const aggregated = Array.from(categoryMapAgg.values()).map(p => ({
+      ...p,
+      ctr: p.impressions > 0 ? (p.clicks / p.impressions) * 100 : 0,
+      avgCpc: p.clicks > 0 ? p.cost / p.clicks : 0,
+    }));
+
+    return aggregated
+      .filter(p => p.category !== 'Неизвестно')
+      .sort((a, b) => b.cost - a.cost);
+  },
+
+  /**
+   * Получить отчёт по условиям показа (ключевым словам/Criterion)
+   */
+  async getCriteriaReport(
+    accessToken: string,
+    login: string,
+    campaignIds: number[],
+    dateFrom: string,
+    dateTo: string
+  ): Promise<any[]> {
+    if (campaignIds.length === 0) return [];
+
+    const reportName = `criteria_report_${Date.now()}`;
+    const maxRetries = 10;
+    const retryDelay = 3000;
+
+    let response: any = null;
+
+    for (let attempt = 0; attempt < maxRetries; attempt++) {
+      try {
+        response = await axios.post(
+          `${YANDEX_API_URL}/reports`,
+          {
+            params: {
+              SelectionCriteria: {
+                DateFrom: dateFrom,
+                DateTo: dateTo,
+                Filter: [
+                  {
+                    Field: 'CampaignId',
+                    Operator: 'IN',
+                    Values: campaignIds.map(String),
+                  },
+                ],
+              },
+              FieldNames: ['Criterion', 'CriterionType', 'Clicks', 'Cost', 'Impressions', 'Ctr', 'AvgCpc'],
+              ReportName: reportName,
+              ReportType: 'CUSTOM_REPORT',
+              DateRangeType: 'CUSTOM_DATE',
+              Format: 'TSV',
+              IncludeVAT: 'YES',
+              IncludeDiscount: 'NO',
+            },
+          },
+          {
+            headers: {
+              'Authorization': `Bearer ${accessToken}`,
+              'Client-Login': login,
+              'Accept-Language': 'ru',
+              'returnMoneyInMicros': 'false',
+              'skipReportHeader': 'true',
+              'skipReportSummary': 'true',
+            },
+          }
+        );
+
+        if (response.status === 200) {
+          console.log(`[getCriteriaReport] Report ready on attempt ${attempt + 1}`);
+          break;
+        }
+
+        if (response.status === 201 || response.status === 202) {
+          const retryIn = response.headers['retryin'] || retryDelay / 1000;
+          console.log(`[getCriteriaReport] Report pending, retry in ${retryIn}s...`);
+          await new Promise(resolve => setTimeout(resolve, Number(retryIn) * 1000));
+        }
+      } catch (error: any) {
+        if (error.response?.status === 201 || error.response?.status === 202) {
+          const retryIn = error.response.headers['retryin'] || retryDelay / 1000;
+          console.log(`[getCriteriaReport] Report pending (catch), retry in ${retryIn}s...`);
+          await new Promise(resolve => setTimeout(resolve, Number(retryIn) * 1000));
+        } else {
+          console.error('[getCriteriaReport] Error:', error.response?.data || error.message);
+          return [];
+        }
+      }
+    }
+
+    if (!response || response.status !== 200) {
+      console.error('[getCriteriaReport] Failed to get report after retries');
+      return [];
+    }
+
+    // Парсим TSV
+    const lines = response.data.split('\n').filter((line: string) => line.trim());
+    if (lines.length < 2) return [];
+
+    const headers = lines[0].split('\t');
+    const results: any[] = [];
+
+    for (let i = 1; i < lines.length; i++) {
+      const values = lines[i].split('\t');
+      const row: any = {};
+      headers.forEach((header: string, idx: number) => {
+        row[header] = values[idx];
+      });
+
+      results.push({
+        criterion: row['Criterion'] || '',
+        criterionType: row['CriterionType'] || '',
+        clicks: parseInt(row['Clicks'] || '0'),
+        cost: parseFloat(row['Cost'] || '0'),
+        impressions: parseInt(row['Impressions'] || '0'),
+        ctr: parseFloat(row['Ctr'] || '0'),
+        avgCpc: parseFloat(row['AvgCpc'] || '0'),
+      });
+    }
+
+    // Группируем по criterion
+    const criterionMap = new Map<string, any>();
+    results.forEach(row => {
+      if (!row.criterion || row.criterion === '--') return;
+      const existing = criterionMap.get(row.criterion);
+      if (existing) {
+        existing.clicks += row.clicks;
+        existing.cost += row.cost;
+        existing.impressions += row.impressions;
+      } else {
+        criterionMap.set(row.criterion, { ...row });
+      }
+    });
+
+    // Пересчитываем CTR и AvgCpc после агрегации
+    const aggregated = Array.from(criterionMap.values()).map(p => ({
+      ...p,
+      ctr: p.impressions > 0 ? (p.clicks / p.impressions) * 100 : 0,
+      avgCpc: p.clicks > 0 ? p.cost / p.clicks : 0,
+    }));
+
+    return aggregated
+      .sort((a, b) => b.cost - a.cost)
+      .slice(0, 50);
+  },
+
+  /**
+   * Получить отчёт по текстам объявлений (AdTitle + AdText)
+   */
+  async getAdTextReport(
+    accessToken: string,
+    login: string,
+    campaignIds: number[],
+    dateFrom: string,
+    dateTo: string
+  ): Promise<any[]> {
+    if (campaignIds.length === 0) return [];
+
+    const reportName = `adtext_report_${Date.now()}`;
+    const maxRetries = 10;
+    const retryDelay = 3000;
+
+    let response: any = null;
+
+    for (let attempt = 0; attempt < maxRetries; attempt++) {
+      try {
+        response = await axios.post(
+          `${YANDEX_API_URL}/reports`,
+          {
+            params: {
+              SelectionCriteria: {
+                DateFrom: dateFrom,
+                DateTo: dateTo,
+                Filter: [
+                  {
+                    Field: 'CampaignId',
+                    Operator: 'IN',
+                    Values: campaignIds.map(String),
+                  },
+                ],
+              },
+              FieldNames: ['AdId', 'Clicks', 'Cost', 'Impressions', 'Ctr', 'AvgCpc'],
+              ReportName: reportName,
+              ReportType: 'AD_PERFORMANCE_REPORT',
+              DateRangeType: 'CUSTOM_DATE',
+              Format: 'TSV',
+              IncludeVAT: 'YES',
+              IncludeDiscount: 'NO',
+            },
+          },
+          {
+            headers: {
+              'Authorization': `Bearer ${accessToken}`,
+              'Client-Login': login,
+              'Accept-Language': 'ru',
+              'returnMoneyInMicros': 'false',
+              'skipReportHeader': 'true',
+              'skipReportSummary': 'true',
+            },
+          }
+        );
+
+        if (response.status === 200) {
+          console.log(`[getAdTextReport] Report ready on attempt ${attempt + 1}`);
+          break;
+        }
+
+        if (response.status === 201 || response.status === 202) {
+          const retryIn = response.headers['retryin'] || retryDelay / 1000;
+          console.log(`[getAdTextReport] Report pending, retry in ${retryIn}s...`);
+          await new Promise(resolve => setTimeout(resolve, Number(retryIn) * 1000));
+        }
+      } catch (error: any) {
+        if (error.response?.status === 201 || error.response?.status === 202) {
+          const retryIn = error.response.headers['retryin'] || retryDelay / 1000;
+          console.log(`[getAdTextReport] Report pending (catch), retry in ${retryIn}s...`);
+          await new Promise(resolve => setTimeout(resolve, Number(retryIn) * 1000));
+        } else {
+          console.error('[getAdTextReport] Error:', error.response?.data || error.message);
+          return [];
+        }
+      }
+    }
+
+    if (!response || response.status !== 200) {
+      console.error('[getAdTextReport] Failed to get report after retries');
+      return [];
+    }
+
+    // Парсим TSV
+    const lines = response.data.split('\n').filter((line: string) => line.trim());
+    if (lines.length < 2) return [];
+
+    const headers = lines[0].split('\t');
+    const adStats: any[] = [];
+
+    for (let i = 1; i < lines.length; i++) {
+      const values = lines[i].split('\t');
+      const row: any = {};
+      headers.forEach((header: string, idx: number) => {
+        row[header] = values[idx];
+      });
+
+      adStats.push({
+        adId: row['AdId'],
+        clicks: parseInt(row['Clicks'] || '0'),
+        cost: parseFloat(row['Cost'] || '0'),
+        impressions: parseInt(row['Impressions'] || '0'),
+        ctr: parseFloat(row['Ctr'] || '0'),
+        avgCpc: parseFloat(row['AvgCpc'] || '0'),
+      });
+    }
+
+    // Группируем по adId
+    const adMap = new Map<string, any>();
+    adStats.forEach(row => {
+      const existing = adMap.get(row.adId);
+      if (existing) {
+        existing.clicks += row.clicks;
+        existing.cost += row.cost;
+        existing.impressions += row.impressions;
+      } else {
+        adMap.set(row.adId, { ...row });
+      }
+    });
+
+    const aggregatedAds = Array.from(adMap.values()).map(p => ({
+      ...p,
+      ctr: p.impressions > 0 ? (p.clicks / p.impressions) * 100 : 0,
+      avgCpc: p.clicks > 0 ? p.cost / p.clicks : 0,
+    })).sort((a, b) => b.cost - a.cost).slice(0, 30);
+
+    // Теперь получаем тексты объявлений через Ads API
+    const adIds = aggregatedAds.map(a => parseInt(a.adId));
+    if (adIds.length === 0) return [];
+
+    try {
+      const adsResponse = await axios.post(
+        `${YANDEX_API_URL}/ads`,
+        {
+          method: 'get',
+          params: {
+            SelectionCriteria: {
+              Ids: adIds,
+            },
+            FieldNames: ['Id'],
+            TextAdFieldNames: ['Title', 'Title2', 'Text'],
+          },
+        },
+        {
+          headers: {
+            'Authorization': `Bearer ${accessToken}`,
+            'Client-Login': login,
+            'Accept-Language': 'ru',
+          },
+        }
+      );
+
+      const ads = adsResponse.data?.result?.Ads || [];
+      const adTextsMap = new Map<string, { title: string; text: string }>();
+
+      ads.forEach((ad: any) => {
+        const textAd = ad.TextAd;
+        if (textAd) {
+          adTextsMap.set(String(ad.Id), {
+            title: textAd.Title || '',
+            text: textAd.Text || '',
+          });
+        }
+      });
+
+      // Объединяем статистику с текстами
+      return aggregatedAds.map(adStat => {
+        const texts = adTextsMap.get(adStat.adId) || { title: '', text: '' };
+        return {
+          adId: adStat.adId,
+          title: texts.title,
+          text: texts.text,
+          fullText: texts.title ? `${texts.title} ${texts.text}`.trim() : `Объявление ${adStat.adId}`,
+          clicks: adStat.clicks,
+          cost: adStat.cost,
+          impressions: adStat.impressions,
+          ctr: adStat.ctr,
+          avgCpc: adStat.avgCpc,
+        };
+      });
+    } catch (error: any) {
+      console.error('[getAdTextReport] Error getting ad texts:', error.response?.data || error.message);
+      // Возвращаем статистику без текстов
+      return aggregatedAds.map(adStat => ({
+        adId: adStat.adId,
+        title: '',
+        text: '',
+        fullText: `Объявление ${adStat.adId}`,
+        clicks: adStat.clicks,
+        cost: adStat.cost,
+        impressions: adStat.impressions,
+        ctr: adStat.ctr,
+        avgCpc: adStat.avgCpc,
+      }));
+    }
   },
 };

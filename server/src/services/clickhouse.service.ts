@@ -139,6 +139,15 @@ export const clickhouseService = {
     return result.success;
   },
 
+  // Generic query method for custom queries
+  async query(sql: string): Promise<any[]> {
+    const result = await client.query({
+      query: sql,
+      format: 'JSONEachRow',
+    });
+    return await result.json();
+  },
+
   // Yandex.Direct Connections
   async createConnection(connection: Omit<YandexDirectConnection, 'id' | 'createdAt'>): Promise<string> {
     const id = uuidv4();

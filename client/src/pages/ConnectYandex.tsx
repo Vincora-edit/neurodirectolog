@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { projectsService, API_BASE_URL } from '../services/api';
+import { useProjectStore } from '../store/projectStore';
 import { Sparkles, AlertCircle, CheckCircle2, FolderOpen, Link as LinkIcon } from 'lucide-react';
 
 // API Service для Yandex подключения
@@ -46,7 +47,8 @@ export default function ConnectYandex() {
   const searchParams = new URLSearchParams(location.search);
   const codeFromUrl = searchParams.get('code');
 
-  const [selectedProjectId, setSelectedProjectId] = useState<string>('');
+  const { activeProjectId, setActiveProjectId } = useProjectStore();
+  const selectedProjectId = activeProjectId || '';
   const [metrikaCounterId, setMetrikaCounterId] = useState<string>('');
   const [metrikaToken, setMetrikaToken] = useState<string>('');
   const [conversionGoals, setConversionGoals] = useState<string[]>([]);
@@ -145,7 +147,7 @@ export default function ConnectYandex() {
                 </label>
                 <select
                   value={selectedProjectId}
-                  onChange={(e) => setSelectedProjectId(e.target.value)}
+                  onChange={(e) => setActiveProjectId(e.target.value || null)}
                   className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 bg-white"
                 >
                   <option value="">Выберите проект...</option>

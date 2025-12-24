@@ -2,6 +2,7 @@ import { clickhouseService } from './clickhouse.service';
 import { yandexDirectService } from './yandex-direct.service';
 import { yandexMetrikaService } from './yandex-metrika.service';
 import { aiAnalysisService } from './ai-analysis.service';
+import { usageService } from './usage.service';
 
 const YANDEX_CLIENT_ID = process.env.YANDEX_CLIENT_ID || '';
 const YANDEX_CLIENT_SECRET = process.env.YANDEX_CLIENT_SECRET || '';
@@ -87,12 +88,12 @@ export const syncService = {
 
       await clickhouseService.upsertCampaigns(campaignData);
 
-      // 5. Получаем детальную статистику за последние 30 дней
+      // 5. Получаем детальную статистику за последние 90 дней (3 месяца)
       const today = new Date();
-      const thirtyDaysAgo = new Date(today);
-      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+      const ninetyDaysAgo = new Date(today);
+      ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
 
-      const dateFrom = thirtyDaysAgo.toISOString().split('T')[0];
+      const dateFrom = ninetyDaysAgo.toISOString().split('T')[0];
       const dateTo = today.toISOString().split('T')[0];
 
       const campaignIds = campaigns.map(c => c.Id);
@@ -485,6 +486,14 @@ export const syncService = {
       }
 
       console.log(`[Sync] Successfully synced connection ${connectionId}`);
+
+      // Трекинг использования: синхронизация + AI анализ
+      try {
+        usageService.trackYandexSync(connection.userId);
+        usageService.trackAiRequest(connection.userId, 3000); // AI анализ кампаний
+      } catch (trackError) {
+        console.error(`[Sync] Usage tracking failed:`, trackError);
+      }
     } catch (error: any) {
       console.error(`[Sync] Error syncing connection ${connectionId}:`, error);
 

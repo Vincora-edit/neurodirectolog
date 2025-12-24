@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { projectsService, API_BASE_URL } from '../services/api';
+import { useProjectStore } from '../store/projectStore';
 import {
   LineChart,
   Line,
@@ -57,6 +58,10 @@ import {
   Megaphone,
   Gauge,
   TrendingUp as TrendUp,
+  Wallet,
+  AlertTriangle,
+  CheckCircle,
+  Banknote,
 } from 'lucide-react';
 
 // API Service для получения данных дашборда
@@ -218,6 +223,186 @@ const dashboardService = {
     const response = await fetch(url);
     return response.json();
   },
+
+  async getBudgetForecast(connectionId: string) {
+    const response = await fetch(`${API_BASE_URL}/api/yandex/budget-forecast/${connectionId}`);
+    return response.json();
+  },
+
+  async getDeviceStats(projectId: string, days: number = 30, startDate?: string, endDate?: string, connectionId?: string) {
+    let url = `${API_BASE_URL}/api/yandex/device-stats/${projectId}?`;
+
+    if (startDate && endDate) {
+      url += `startDate=${startDate}&endDate=${endDate}`;
+    } else {
+      url += `days=${days}`;
+    }
+
+    if (connectionId) {
+      url += `&connectionId=${connectionId}`;
+    }
+
+    const response = await fetch(url);
+    return response.json();
+  },
+
+  async getGeoStats(projectId: string, days: number = 30, startDate?: string, endDate?: string, connectionId?: string) {
+    let url = `${API_BASE_URL}/api/yandex/geo-stats/${projectId}?`;
+
+    if (startDate && endDate) {
+      url += `startDate=${startDate}&endDate=${endDate}`;
+    } else {
+      url += `days=${days}`;
+    }
+
+    if (connectionId) {
+      url += `&connectionId=${connectionId}`;
+    }
+
+    const response = await fetch(url);
+    return response.json();
+  },
+
+  async getSearchQueries(projectId: string, days: number = 30, startDate?: string, endDate?: string, connectionId?: string) {
+    let url = `${API_BASE_URL}/api/yandex/search-queries/${projectId}?`;
+
+    if (startDate && endDate) {
+      url += `startDate=${startDate}&endDate=${endDate}`;
+    } else {
+      url += `days=${days}`;
+    }
+
+    if (connectionId) {
+      url += `&connectionId=${connectionId}`;
+    }
+
+    const response = await fetch(url);
+    return response.json();
+  },
+
+  async getDemographics(projectId: string, days: number = 30, startDate?: string, endDate?: string, connectionId?: string) {
+    let url = `${API_BASE_URL}/api/yandex/demographics/${projectId}?`;
+
+    if (startDate && endDate) {
+      url += `startDate=${startDate}&endDate=${endDate}`;
+    } else {
+      url += `days=${days}`;
+    }
+
+    if (connectionId) {
+      url += `&connectionId=${connectionId}`;
+    }
+
+    const response = await fetch(url);
+    return response.json();
+  },
+
+  async getGeoReport(projectId: string, days: number = 30, startDate?: string, endDate?: string, connectionId?: string) {
+    let url = `${API_BASE_URL}/api/yandex/geo-report/${projectId}?`;
+
+    if (startDate && endDate) {
+      url += `startDate=${startDate}&endDate=${endDate}`;
+    } else {
+      url += `days=${days}`;
+    }
+
+    if (connectionId) {
+      url += `&connectionId=${connectionId}`;
+    }
+
+    const response = await fetch(url);
+    return response.json();
+  },
+
+  async getPlacements(projectId: string, days: number = 30, startDate?: string, endDate?: string, connectionId?: string) {
+    let url = `${API_BASE_URL}/api/yandex/placements/${projectId}?`;
+
+    if (startDate && endDate) {
+      url += `startDate=${startDate}&endDate=${endDate}`;
+    } else {
+      url += `days=${days}`;
+    }
+
+    if (connectionId) {
+      url += `&connectionId=${connectionId}`;
+    }
+
+    const response = await fetch(url);
+    return response.json();
+  },
+
+  async getIncome(projectId: string, days: number = 30, startDate?: string, endDate?: string, connectionId?: string) {
+    let url = `${API_BASE_URL}/api/yandex/income/${projectId}?`;
+
+    if (startDate && endDate) {
+      url += `startDate=${startDate}&endDate=${endDate}`;
+    } else {
+      url += `days=${days}`;
+    }
+
+    if (connectionId) {
+      url += `&connectionId=${connectionId}`;
+    }
+
+    const response = await fetch(url);
+    return response.json();
+  },
+
+  async getTargetingCategories(projectId: string, days: number = 30, startDate?: string, endDate?: string, connectionId?: string) {
+    let url = `${API_BASE_URL}/api/yandex/targeting-categories/${projectId}?`;
+
+    if (startDate && endDate) {
+      url += `startDate=${startDate}&endDate=${endDate}`;
+    } else {
+      url += `days=${days}`;
+    }
+
+    if (connectionId) {
+      url += `&connectionId=${connectionId}`;
+    }
+
+    const response = await fetch(url);
+    return response.json();
+  },
+
+  async getCriteria(projectId: string, days: number = 30, startDate?: string, endDate?: string, connectionId?: string) {
+    let url = `${API_BASE_URL}/api/yandex/criteria/${projectId}?`;
+
+    if (startDate && endDate) {
+      url += `startDate=${startDate}&endDate=${endDate}`;
+    } else {
+      url += `days=${days}`;
+    }
+
+    if (connectionId) {
+      url += `&connectionId=${connectionId}`;
+    }
+
+    const response = await fetch(url);
+    return response.json();
+  },
+
+  async getAdTexts(projectId: string, days: number = 30, startDate?: string, endDate?: string, connectionId?: string) {
+    let url = `${API_BASE_URL}/api/yandex/ad-texts/${projectId}?`;
+
+    if (startDate && endDate) {
+      url += `startDate=${startDate}&endDate=${endDate}`;
+    } else {
+      url += `days=${days}`;
+    }
+
+    if (connectionId) {
+      url += `&connectionId=${connectionId}`;
+    }
+
+    const response = await fetch(url);
+    return response.json();
+  },
+
+  async getRecommendations(connectionId: string) {
+    const response = await fetch(`${API_BASE_URL}/api/yandex/recommendations/${connectionId}`);
+    return response.json();
+  },
 };
 
 // Компонент круговой прогресс-бар
@@ -307,7 +492,7 @@ const CircularProgress = ({
 
 export default function YandexDashboard() {
   const navigate = useNavigate();
-  const [selectedProjectId, setSelectedProjectId] = useState<string>('');
+  const { activeProjectId: globalActiveProjectId, setActiveProjectId } = useProjectStore();
   const [selectedConnectionId, setSelectedConnectionId] = useState<string>('');
   const [dateRange, setDateRange] = useState<number>(30);
   const [selectedGoalIds, setSelectedGoalIds] = useState<string[]>([]);
@@ -376,6 +561,17 @@ export default function YandexDashboard() {
   // Dynamics section state
   const [isDynamicsOpen, setIsDynamicsOpen] = useState(true);
 
+  // Budget forecast state
+  const [budgetForecast, setBudgetForecast] = useState<any>(null);
+  const [isLoadingBudgetForecast, setIsLoadingBudgetForecast] = useState(false);
+  const [isBudgetForecastOpen, setIsBudgetForecastOpen] = useState(true);
+
+  // Geo stats state
+  const [isGeoStatsOpen, setIsGeoStatsOpen] = useState(false);
+
+  // AI Recommendations state
+  const [isRecommendationsOpen, setIsRecommendationsOpen] = useState(true);
+
   // Отслеживаем скролл для компактного режима
   useEffect(() => {
     const handleScroll = () => {
@@ -412,8 +608,15 @@ export default function YandexDashboard() {
     return null;
   }
 
-  // Автоматически выбираем первый проект
-  const activeProjectId = selectedProjectId || projects[0]?.id || '';
+  // Используем глобальный activeProjectId из стора или первый проект
+  const activeProjectId = globalActiveProjectId || projects[0]?.id || '';
+
+  // Устанавливаем первый проект как активный, если нет выбранного
+  useEffect(() => {
+    if (projects.length > 0 && !globalActiveProjectId) {
+      setActiveProjectId(projects[0].id);
+    }
+  }, [projects, globalActiveProjectId, setActiveProjectId]);
 
   // Загрузка всех подключений для проекта (мультиаккаунтность)
   const { data: connections = [], isLoading: connectionsLoading } = useQuery({
@@ -485,6 +688,152 @@ export default function YandexDashboard() {
     queryKey: ['yandex-kpi', activeConnectionId],
     queryFn: () => dashboardService.getKpi(activeConnectionId),
     enabled: !!activeConnectionId,
+  });
+
+  // Загрузка прогноза бюджета
+  const { data: budgetForecastData, refetch: refetchBudgetForecast } = useQuery({
+    queryKey: ['yandex-budget-forecast', activeConnectionId],
+    queryFn: () => dashboardService.getBudgetForecast(activeConnectionId),
+    enabled: !!activeConnectionId,
+    refetchInterval: 5 * 60 * 1000, // Обновляем каждые 5 минут
+  });
+
+  // Загрузка статистики по устройствам
+  const { data: deviceStatsData, isLoading: deviceStatsLoading } = useQuery({
+    queryKey: ['yandex-device-stats', activeProjectId, activeConnectionId, dateRange, customDateMode, customStartDate, customEndDate],
+    queryFn: () => dashboardService.getDeviceStats(
+      activeProjectId,
+      dateRange,
+      customDateMode ? customStartDate : undefined,
+      customDateMode ? customEndDate : undefined,
+      activeConnectionId
+    ),
+    enabled: !!activeProjectId && !!activeConnectionId,
+  });
+
+  // Загрузка статистики по регионам
+  const { data: geoStatsData, isLoading: geoStatsLoading } = useQuery({
+    queryKey: ['yandex-geo-stats', activeProjectId, activeConnectionId, dateRange, customDateMode, customStartDate, customEndDate],
+    queryFn: () => dashboardService.getGeoStats(
+      activeProjectId,
+      dateRange,
+      customDateMode ? customStartDate : undefined,
+      customDateMode ? customEndDate : undefined,
+      activeConnectionId
+    ),
+    enabled: !!activeProjectId && !!activeConnectionId,
+  });
+
+  // Загрузка статистики по поисковым запросам
+  const { data: searchQueriesData, isLoading: searchQueriesLoading } = useQuery({
+    queryKey: ['yandex-search-queries', activeProjectId, activeConnectionId, dateRange, customDateMode, customStartDate, customEndDate],
+    queryFn: () => dashboardService.getSearchQueries(
+      activeProjectId,
+      dateRange,
+      customDateMode ? customStartDate : undefined,
+      customDateMode ? customEndDate : undefined,
+      activeConnectionId
+    ),
+    enabled: !!activeProjectId && !!activeConnectionId,
+  });
+
+  // Загрузка демографической статистики
+  const { data: demographicsData, isLoading: demographicsLoading } = useQuery({
+    queryKey: ['yandex-demographics', activeProjectId, activeConnectionId, dateRange, customDateMode, customStartDate, customEndDate],
+    queryFn: () => dashboardService.getDemographics(
+      activeProjectId,
+      dateRange,
+      customDateMode ? customStartDate : undefined,
+      customDateMode ? customEndDate : undefined,
+      activeConnectionId
+    ),
+    enabled: !!activeProjectId && !!activeConnectionId,
+  });
+
+  // Загрузка geo-отчёта (альтернативный)
+  const { data: geoReportData, isLoading: geoReportLoading } = useQuery({
+    queryKey: ['yandex-geo-report', activeProjectId, activeConnectionId, dateRange, customDateMode, customStartDate, customEndDate],
+    queryFn: () => dashboardService.getGeoReport(
+      activeProjectId,
+      dateRange,
+      customDateMode ? customStartDate : undefined,
+      customDateMode ? customEndDate : undefined,
+      activeConnectionId
+    ),
+    enabled: !!activeProjectId && !!activeConnectionId,
+  });
+
+  // Загрузка статистики по площадкам
+  const { data: placementsData, isLoading: placementsLoading } = useQuery({
+    queryKey: ['yandex-placements', activeProjectId, activeConnectionId, dateRange, customDateMode, customStartDate, customEndDate],
+    queryFn: () => dashboardService.getPlacements(
+      activeProjectId,
+      dateRange,
+      customDateMode ? customStartDate : undefined,
+      customDateMode ? customEndDate : undefined,
+      activeConnectionId
+    ),
+    enabled: !!activeProjectId && !!activeConnectionId,
+  });
+
+  // Загрузка статистики по платежеспособности (IncomeGrade)
+  const { data: incomeData, isLoading: incomeLoading } = useQuery({
+    queryKey: ['yandex-income', activeProjectId, activeConnectionId, dateRange, customDateMode, customStartDate, customEndDate],
+    queryFn: () => dashboardService.getIncome(
+      activeProjectId,
+      dateRange,
+      customDateMode ? customStartDate : undefined,
+      customDateMode ? customEndDate : undefined,
+      activeConnectionId
+    ),
+    enabled: !!activeProjectId && !!activeConnectionId,
+  });
+
+  // Загрузка статистики по категориям таргетинга
+  const { data: targetingCategoriesData, isLoading: targetingCategoriesLoading } = useQuery({
+    queryKey: ['yandex-targeting-categories', activeProjectId, activeConnectionId, dateRange, customDateMode, customStartDate, customEndDate],
+    queryFn: () => dashboardService.getTargetingCategories(
+      activeProjectId,
+      dateRange,
+      customDateMode ? customStartDate : undefined,
+      customDateMode ? customEndDate : undefined,
+      activeConnectionId
+    ),
+    enabled: !!activeProjectId && !!activeConnectionId,
+  });
+
+  // Загрузка статистики по условиям показа (ключевым словам)
+  const { data: criteriaData, isLoading: criteriaLoading } = useQuery({
+    queryKey: ['yandex-criteria', activeProjectId, activeConnectionId, dateRange, customDateMode, customStartDate, customEndDate],
+    queryFn: () => dashboardService.getCriteria(
+      activeProjectId,
+      dateRange,
+      customDateMode ? customStartDate : undefined,
+      customDateMode ? customEndDate : undefined,
+      activeConnectionId
+    ),
+    enabled: !!activeProjectId && !!activeConnectionId,
+  });
+
+  // Загрузка статистики по текстам объявлений
+  const { data: adTextsData, isLoading: adTextsLoading } = useQuery({
+    queryKey: ['yandex-ad-texts', activeProjectId, activeConnectionId, dateRange, customDateMode, customStartDate, customEndDate],
+    queryFn: () => dashboardService.getAdTexts(
+      activeProjectId,
+      dateRange,
+      customDateMode ? customStartDate : undefined,
+      customDateMode ? customEndDate : undefined,
+      activeConnectionId
+    ),
+    enabled: !!activeProjectId && !!activeConnectionId,
+  });
+
+  // Загрузка AI-рекомендаций
+  const { data: recommendationsData, isLoading: recommendationsLoading } = useQuery({
+    queryKey: ['yandex-recommendations', activeConnectionId],
+    queryFn: () => dashboardService.getRecommendations(activeConnectionId),
+    enabled: !!activeConnectionId,
+    refetchInterval: 10 * 60 * 1000, // Обновляем каждые 10 минут
   });
 
   // Загрузка посадочных страниц при открытии секции
@@ -1669,10 +2018,28 @@ export default function YandexDashboard() {
       )}
 
       {/* Ключевые метрики */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+      <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-6 mb-8">
+        {/* Бюджет */}
+        <div className="bg-gradient-to-br from-green-500 to-emerald-600 rounded-xl shadow-lg p-6 text-white">
+          <div className="flex items-center justify-between mb-3">
+            <div className="bg-white/20 p-2 rounded-lg">
+              <Wallet size={24} />
+            </div>
+            <div className="text-right">
+              <p className="text-sm text-green-100">Бюджет</p>
+              <p className="text-3xl font-bold">{budgetForecastData?.balance?.amount ? budgetForecastData.balance.amount.toLocaleString('ru-RU') : '—'} ₽</p>
+            </div>
+          </div>
+          <div className="text-green-100 text-sm">
+            {budgetForecastData?.forecast?.daysRemaining !== null && budgetForecastData?.forecast?.daysRemaining !== undefined
+              ? `Хватит на ${budgetForecastData.forecast.daysRemaining} дней`
+              : 'Загрузка...'}
+          </div>
+        </div>
+
         {/* Расход */}
         <div className="bg-gradient-to-br from-red-500 to-rose-600 rounded-xl shadow-lg p-6 text-white">
-          <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center justify-between">
             <div className="bg-white/20 p-2 rounded-lg">
               <DollarSign size={24} />
             </div>
@@ -1681,30 +2048,24 @@ export default function YandexDashboard() {
               <p className="text-3xl font-bold">{totalStats.cost.toLocaleString('ru-RU')} ₽</p>
             </div>
           </div>
-          <div className="text-red-100 text-sm">
-            В день: {Math.round(avgCostPerDay).toLocaleString('ru-RU')} ₽
-          </div>
         </div>
 
-        {/* Клики */}
+        {/* CR */}
         <div className="bg-gradient-to-br from-blue-500 to-indigo-600 rounded-xl shadow-lg p-6 text-white">
-          <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center justify-between">
             <div className="bg-white/20 p-2 rounded-lg">
-              <MousePointer size={24} />
+              <TrendingUp size={24} />
             </div>
             <div className="text-right">
-              <p className="text-sm text-blue-100">Клики</p>
-              <p className="text-3xl font-bold">{totalStats.clicks.toLocaleString('ru-RU')}</p>
+              <p className="text-sm text-blue-100">CR</p>
+              <p className="text-3xl font-bold">{cr.toFixed(2)}%</p>
             </div>
-          </div>
-          <div className="text-blue-100 text-sm">
-            CPC: {avgCpc.toFixed(2)} ₽
           </div>
         </div>
 
         {/* CPL */}
         <div className="bg-gradient-to-br from-gray-500 to-gray-600 rounded-xl shadow-lg p-6 text-white">
-          <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center justify-between">
             <div className="bg-white/20 p-2 rounded-lg">
               <TrendingDown size={24} />
             </div>
@@ -1713,19 +2074,16 @@ export default function YandexDashboard() {
               <p className="text-3xl font-bold">{cpl > 0 ? Math.round(cpl).toLocaleString('ru-RU') : '—'} ₽</p>
             </div>
           </div>
-          <div className="text-gray-100 text-sm">
-            CR: {cr.toFixed(2)}%
-          </div>
         </div>
 
         {/* Конверсии */}
-        <div className="bg-gradient-to-br from-green-500 to-emerald-600 rounded-xl shadow-lg p-6 text-white">
+        <div className="bg-gradient-to-br from-purple-500 to-violet-600 rounded-xl shadow-lg p-6 text-white">
           <div className="flex items-center justify-between">
             <div className="bg-white/20 p-2 rounded-lg">
               <Target size={24} />
             </div>
             <div className="text-right">
-              <p className="text-sm text-green-100">Конверсии</p>
+              <p className="text-sm text-purple-100">Конверсии</p>
               <p className="text-3xl font-bold">{totalStats.conversions.toLocaleString('ru-RU')}</p>
             </div>
           </div>
@@ -2590,20 +2948,20 @@ export default function YandexDashboard() {
 
             // Табы для секции "Показатели аудитории"
             const audienceTabs = [
-              { id: 'search', label: 'Поисковые запросы', icon: Search, isMock: true },
-              { id: 'demographics', label: 'Пол / Возраст', icon: Users, isMock: true },
-              { id: 'devices', label: 'Устройства', icon: Smartphone, isMock: true },
-              { id: 'income', label: 'Платежеспособность', icon: DollarSign, isMock: true },
-              { id: 'region', label: 'Регион', icon: MapPin, isMock: true },
+              { id: 'search', label: 'Поисковые запросы', icon: Search, isMock: false },
+              { id: 'demographics', label: 'Пол / Возраст', icon: Users, isMock: false },
+              { id: 'devices', label: 'Устройства', icon: Smartphone, isMock: false },
+              { id: 'income', label: 'Платежеспособность', icon: DollarSign, isMock: false },
+              { id: 'region', label: 'Регион', icon: MapPin, isMock: false },
             ];
 
             // Табы для секции "Технические показатели"
             const technicalTabs = [
-              { id: 'categories', label: 'Категории таргетинга', icon: Tag, isMock: true },
+              { id: 'categories', label: 'Категории таргетинга', icon: Tag, isMock: false },
               { id: 'titles', label: 'Заголовок', icon: FileText, isMock: false },
-              { id: 'text', label: 'Текст', icon: Type, isMock: true },
+              { id: 'text', label: 'Текст', icon: Type, isMock: false },
               { id: 'criteria', label: 'Условия показа', icon: Target, isMock: false },
-              { id: 'placements', label: 'Площадки', icon: Layout, isMock: true },
+              { id: 'placements', label: 'Площадки', icon: Layout, isMock: false },
             ];
 
             // Данные для разных отчётов
@@ -2618,109 +2976,185 @@ export default function YandexDashboard() {
                       .slice(0, 10),
                   };
                 case 'criteria':
+                  // Используем реальные данные по условиям показа (ключевым словам)
+                  if (Array.isArray(criteriaData) && criteriaData.length > 0) {
+                    return {
+                      columnName: 'Условие показа',
+                      data: criteriaData.map((item: any) => ({
+                        name: item.criterion || 'Неизвестно',
+                        impressions: item.impressions || 0,
+                        clicks: item.clicks || 0,
+                        cost: item.cost || 0,
+                        conversions: 0,
+                      })).sort((a: any, b: any) => b.cost - a.cost).slice(0, 15),
+                    };
+                  }
                   return {
                     columnName: 'Условие показа',
-                    data: filteredCampaigns.flatMap((campaign: any) =>
-                      (campaign.adGroups || []).map((adGroup: any) => ({
-                        name: adGroup.adGroupName || `Группа ${adGroup.adGroupId}`,
-                        impressions: adGroup.totalImpressions || 0,
-                        clicks: adGroup.totalClicks || 0,
-                        cost: adGroup.totalCost || 0,
-                        conversions: adGroup.totalConversions || 0,
-                      }))
-                    ).sort((a: any, b: any) => b.cost - a.cost).slice(0, 10),
+                    data: [],
                   };
                 case 'devices':
+                  // Используем реальные данные по устройствам
+                  if (Array.isArray(deviceStatsData) && deviceStatsData.length > 0) {
+                    return {
+                      columnName: 'Устройство',
+                      data: deviceStatsData.map((device: any) => ({
+                        name: device.deviceName,
+                        icon: device.device === 'DESKTOP' ? Monitor : device.device === 'MOBILE' ? Smartphone : Tablet,
+                        clicks: device.clicks,
+                        cost: device.cost,
+                        conversions: device.conversions || 0,
+                      })).sort((a: any, b: any) => b.cost - a.cost),
+                    };
+                  }
+                  // Fallback если нет данных
                   return {
                     columnName: 'Устройство',
-                    data: [
-                      { name: 'Телефон', icon: Smartphone, impressions: filteredStats.impressions * 0.65, clicks: filteredStats.clicks * 0.70, cost: filteredStats.cost * 0.68, conversions: Math.round(filteredStats.conversions * 0.72) },
-                      { name: 'Десктоп', icon: Monitor, impressions: filteredStats.impressions * 0.30, clicks: filteredStats.clicks * 0.25, cost: filteredStats.cost * 0.27, conversions: Math.round(filteredStats.conversions * 0.23) },
-                      { name: 'Планшет', icon: Tablet, impressions: filteredStats.impressions * 0.05, clicks: filteredStats.clicks * 0.05, cost: filteredStats.cost * 0.05, conversions: Math.round(filteredStats.conversions * 0.05) },
-                    ],
+                    data: [],
                   };
                 case 'demographics':
+                  // Используем реальные данные по демографии
+                  if (Array.isArray(demographicsData) && demographicsData.length > 0) {
+                    return {
+                      columnName: 'Сегмент',
+                      data: demographicsData.map((item: any) => ({
+                        name: item.segment,
+                        impressions: item.impressions || 0,
+                        clicks: item.clicks || 0,
+                        cost: item.cost || 0,
+                        conversions: item.conversions || 0,
+                      })).sort((a: any, b: any) => b.cost - a.cost).slice(0, 10),
+                    };
+                  }
                   return {
                     columnName: 'Сегмент',
-                    data: [
-                      { name: 'Женщины 25-34', impressions: filteredStats.impressions * 0.25, clicks: filteredStats.clicks * 0.28, cost: filteredStats.cost * 0.27, conversions: Math.round(filteredStats.conversions * 0.30) },
-                      { name: 'Женщины 35-44', impressions: filteredStats.impressions * 0.20, clicks: filteredStats.clicks * 0.22, cost: filteredStats.cost * 0.21, conversions: Math.round(filteredStats.conversions * 0.25) },
-                      { name: 'Мужчины 25-34', impressions: filteredStats.impressions * 0.18, clicks: filteredStats.clicks * 0.17, cost: filteredStats.cost * 0.18, conversions: Math.round(filteredStats.conversions * 0.15) },
-                      { name: 'Женщины 45-54', impressions: filteredStats.impressions * 0.15, clicks: filteredStats.clicks * 0.14, cost: filteredStats.cost * 0.15, conversions: Math.round(filteredStats.conversions * 0.12) },
-                      { name: 'Мужчины 35-44', impressions: filteredStats.impressions * 0.12, clicks: filteredStats.clicks * 0.11, cost: filteredStats.cost * 0.11, conversions: Math.round(filteredStats.conversions * 0.10) },
-                    ],
+                    data: [],
                   };
                 case 'search':
+                  // Используем реальные данные по поисковым запросам
+                  if (Array.isArray(searchQueriesData) && searchQueriesData.length > 0) {
+                    return {
+                      columnName: 'Поисковый запрос',
+                      data: searchQueriesData.map((item: any) => ({
+                        name: item.query,
+                        impressions: item.impressions || 0,
+                        clicks: item.clicks || 0,
+                        cost: item.cost || 0,
+                        conversions: item.conversions || 0,
+                      })).sort((a: any, b: any) => b.cost - a.cost).slice(0, 10),
+                    };
+                  }
                   return {
                     columnName: 'Поисковый запрос',
-                    data: [
-                      { name: 'нейродиректолог москва', impressions: filteredStats.impressions * 0.15, clicks: filteredStats.clicks * 0.18, cost: filteredStats.cost * 0.17, conversions: Math.round(filteredStats.conversions * 0.20) },
-                      { name: 'настройка яндекс директ', impressions: filteredStats.impressions * 0.12, clicks: filteredStats.clicks * 0.14, cost: filteredStats.cost * 0.13, conversions: Math.round(filteredStats.conversions * 0.15) },
-                      { name: 'контекстная реклама', impressions: filteredStats.impressions * 0.10, clicks: filteredStats.clicks * 0.11, cost: filteredStats.cost * 0.10, conversions: Math.round(filteredStats.conversions * 0.12) },
-                      { name: 'директолог цена', impressions: filteredStats.impressions * 0.08, clicks: filteredStats.clicks * 0.09, cost: filteredStats.cost * 0.09, conversions: Math.round(filteredStats.conversions * 0.10) },
-                      { name: 'реклама в яндексе', impressions: filteredStats.impressions * 0.07, clicks: filteredStats.clicks * 0.07, cost: filteredStats.cost * 0.07, conversions: Math.round(filteredStats.conversions * 0.08) },
-                    ],
-                  };
-                case 'income':
-                  return {
-                    columnName: 'Уровень дохода',
-                    data: [
-                      { name: 'Средний', impressions: filteredStats.impressions * 0.45, clicks: filteredStats.clicks * 0.42, cost: filteredStats.cost * 0.40, conversions: Math.round(filteredStats.conversions * 0.38) },
-                      { name: 'Выше среднего', impressions: filteredStats.impressions * 0.30, clicks: filteredStats.clicks * 0.33, cost: filteredStats.cost * 0.35, conversions: Math.round(filteredStats.conversions * 0.40) },
-                      { name: 'Высокий', impressions: filteredStats.impressions * 0.15, clicks: filteredStats.clicks * 0.17, cost: filteredStats.cost * 0.18, conversions: Math.round(filteredStats.conversions * 0.17) },
-                      { name: 'Ниже среднего', impressions: filteredStats.impressions * 0.10, clicks: filteredStats.clicks * 0.08, cost: filteredStats.cost * 0.07, conversions: Math.round(filteredStats.conversions * 0.05) },
-                    ],
+                    data: [],
                   };
                 case 'region':
+                  // Используем реальные данные по регионам (из geoReportData или geoStatsData)
+                  const geoData = Array.isArray(geoReportData) && geoReportData.length > 0
+                    ? geoReportData
+                    : (Array.isArray(geoStatsData) && geoStatsData.length > 0 ? geoStatsData : []);
+                  if (geoData.length > 0) {
+                    return {
+                      columnName: 'Регион',
+                      data: geoData.map((item: any) => ({
+                        name: item.region,
+                        impressions: item.impressions || 0,
+                        clicks: item.clicks || 0,
+                        cost: item.cost || 0,
+                        conversions: item.conversions || 0,
+                      })).sort((a: any, b: any) => b.cost - a.cost).slice(0, 10),
+                    };
+                  }
                   return {
                     columnName: 'Регион',
-                    data: [
-                      { name: 'Москва', impressions: filteredStats.impressions * 0.35, clicks: filteredStats.clicks * 0.40, cost: filteredStats.cost * 0.42, conversions: Math.round(filteredStats.conversions * 0.45) },
-                      { name: 'Санкт-Петербург', impressions: filteredStats.impressions * 0.15, clicks: filteredStats.clicks * 0.16, cost: filteredStats.cost * 0.17, conversions: Math.round(filteredStats.conversions * 0.18) },
-                      { name: 'Московская область', impressions: filteredStats.impressions * 0.12, clicks: filteredStats.clicks * 0.11, cost: filteredStats.cost * 0.10, conversions: Math.round(filteredStats.conversions * 0.10) },
-                      { name: 'Краснодарский край', impressions: filteredStats.impressions * 0.08, clicks: filteredStats.clicks * 0.07, cost: filteredStats.cost * 0.07, conversions: Math.round(filteredStats.conversions * 0.06) },
-                      { name: 'Новосибирская область', impressions: filteredStats.impressions * 0.05, clicks: filteredStats.clicks * 0.05, cost: filteredStats.cost * 0.05, conversions: Math.round(filteredStats.conversions * 0.05) },
-                    ],
-                  };
-                case 'categories':
-                  return {
-                    columnName: 'Категория',
-                    data: [
-                      { name: 'Маркетинг и реклама', impressions: filteredStats.impressions * 0.40, clicks: filteredStats.clicks * 0.45, cost: filteredStats.cost * 0.43, conversions: Math.round(filteredStats.conversions * 0.48) },
-                      { name: 'Бизнес-услуги', impressions: filteredStats.impressions * 0.25, clicks: filteredStats.clicks * 0.23, cost: filteredStats.cost * 0.25, conversions: Math.round(filteredStats.conversions * 0.22) },
-                      { name: 'Интернет и IT', impressions: filteredStats.impressions * 0.20, clicks: filteredStats.clicks * 0.18, cost: filteredStats.cost * 0.18, conversions: Math.round(filteredStats.conversions * 0.17) },
-                      { name: 'Консалтинг', impressions: filteredStats.impressions * 0.15, clicks: filteredStats.clicks * 0.14, cost: filteredStats.cost * 0.14, conversions: Math.round(filteredStats.conversions * 0.13) },
-                    ],
+                    data: [],
                   };
                 case 'text':
+                  // Используем реальные данные по текстам объявлений
+                  if (Array.isArray(adTextsData) && adTextsData.length > 0) {
+                    return {
+                      columnName: 'Текст объявления',
+                      data: adTextsData.map((item: any) => ({
+                        name: item.text || item.fullText || `Объявление ${item.adId}`,
+                        impressions: item.impressions || 0,
+                        clicks: item.clicks || 0,
+                        cost: item.cost || 0,
+                        conversions: 0,
+                      })).sort((a: any, b: any) => b.cost - a.cost).slice(0, 10),
+                    };
+                  }
                   return {
                     columnName: 'Текст объявления',
-                    data: [
-                      { name: 'Настройка рекламы от профессионала...', impressions: filteredStats.impressions * 0.35, clicks: filteredStats.clicks * 0.38, cost: filteredStats.cost * 0.36, conversions: Math.round(filteredStats.conversions * 0.40) },
-                      { name: 'Увеличим продажи с помощью...', impressions: filteredStats.impressions * 0.30, clicks: filteredStats.clicks * 0.32, cost: filteredStats.cost * 0.32, conversions: Math.round(filteredStats.conversions * 0.30) },
-                      { name: 'Эффективная реклама для вашего...', impressions: filteredStats.impressions * 0.20, clicks: filteredStats.clicks * 0.18, cost: filteredStats.cost * 0.19, conversions: Math.round(filteredStats.conversions * 0.18) },
-                      { name: 'Привлечём клиентов уже сегодня...', impressions: filteredStats.impressions * 0.15, clicks: filteredStats.clicks * 0.12, cost: filteredStats.cost * 0.13, conversions: Math.round(filteredStats.conversions * 0.12) },
-                    ],
+                    data: [],
                   };
                 case 'placements':
+                  // Используем реальные данные по площадкам
+                  if (Array.isArray(placementsData) && placementsData.length > 0) {
+                    return {
+                      columnName: 'Площадка',
+                      data: placementsData.map((item: any) => ({
+                        name: item.placement,
+                        placementType: item.placementType || 'РСЯ',
+                        impressions: item.impressions || 0,
+                        clicks: item.clicks || 0,
+                        cost: item.cost || 0,
+                        ctr: item.ctr || 0,
+                        avgCpc: item.avgCpc || 0,
+                        conversions: item.conversions || 0,
+                      })).sort((a: any, b: any) => b.cost - a.cost).slice(0, 15),
+                    };
+                  }
                   return {
                     columnName: 'Площадка',
-                    data: [
-                      { name: 'Яндекс Поиск', impressions: filteredStats.impressions * 0.50, clicks: filteredStats.clicks * 0.60, cost: filteredStats.cost * 0.55, conversions: Math.round(filteredStats.conversions * 0.65) },
-                      { name: 'РСЯ: dzen.ru', impressions: filteredStats.impressions * 0.20, clicks: filteredStats.clicks * 0.18, cost: filteredStats.cost * 0.20, conversions: Math.round(filteredStats.conversions * 0.15) },
-                      { name: 'РСЯ: mail.ru', impressions: filteredStats.impressions * 0.15, clicks: filteredStats.clicks * 0.12, cost: filteredStats.cost * 0.13, conversions: Math.round(filteredStats.conversions * 0.10) },
-                      { name: 'РСЯ: avito.ru', impressions: filteredStats.impressions * 0.10, clicks: filteredStats.clicks * 0.07, cost: filteredStats.cost * 0.08, conversions: Math.round(filteredStats.conversions * 0.07) },
-                      { name: 'РСЯ: другие', impressions: filteredStats.impressions * 0.05, clicks: filteredStats.clicks * 0.03, cost: filteredStats.cost * 0.04, conversions: Math.round(filteredStats.conversions * 0.03) },
-                    ],
+                    data: [],
+                  };
+                case 'income':
+                  // Используем реальные данные по платежеспособности
+                  if (Array.isArray(incomeData) && incomeData.length > 0) {
+                    return {
+                      columnName: 'Платежеспособность',
+                      data: incomeData.map((item: any) => ({
+                        name: item.incomeGrade || item.incomeGradeRaw,
+                        impressions: item.impressions || 0,
+                        clicks: item.clicks || 0,
+                        cost: item.cost || 0,
+                        conversions: 0,
+                      })).sort((a: any, b: any) => b.cost - a.cost),
+                    };
+                  }
+                  return {
+                    columnName: 'Платежеспособность',
+                    data: [],
+                  };
+                case 'categories':
+                  // Используем реальные данные по категориям таргетинга
+                  if (Array.isArray(targetingCategoriesData) && targetingCategoriesData.length > 0) {
+                    return {
+                      columnName: 'Категория таргетинга',
+                      data: targetingCategoriesData.map((item: any) => ({
+                        name: item.category || item.categoryRaw,
+                        impressions: item.impressions || 0,
+                        clicks: item.clicks || 0,
+                        cost: item.cost || 0,
+                        conversions: 0,
+                      })).sort((a: any, b: any) => b.cost - a.cost),
+                    };
+                  }
+                  return {
+                    columnName: 'Категория таргетинга',
+                    data: [],
                   };
                 default:
                   return { columnName: 'Название', data: [] };
               }
             };
 
-            // Рендер таблицы отчёта
+            // Рендер таблицы отчёта с расширенными метриками
             const renderReportTable = (reportId: string, isMock: boolean) => {
               const report = getReportData(reportId);
+              const isPlacementsReport = reportId === 'placements';
+              const colCount = isPlacementsReport ? 8 : 7;
+
               return (
                 <div className="overflow-x-auto">
                   <table className="w-full text-sm">
@@ -2730,15 +3164,23 @@ export default function YandexDashboard() {
                           {report.columnName}
                           {isMock && <span className="ml-2 text-[10px] bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded normal-case">демо</span>}
                         </th>
+                        {isPlacementsReport && (
+                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Тип</th>
+                        )}
+                        <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Показы</th>
                         <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Клики</th>
+                        <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">CTR</th>
                         <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Расход</th>
-                        <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Конверсии</th>
+                        <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">CPC</th>
+                        <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Конв.</th>
                         <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">CPL</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-100">
                       {report.data.length > 0 ? report.data.map((item: any, idx: number) => {
                         const cpl = item.conversions > 0 ? item.cost / item.conversions : 0;
+                        const cpc = item.clicks > 0 ? item.cost / item.clicks : 0;
+                        const ctr = item.impressions > 0 ? (item.clicks / item.impressions) * 100 : 0;
                         const ItemIcon = item.icon;
                         return (
                           <tr key={idx} className="hover:bg-gray-50">
@@ -2752,15 +3194,23 @@ export default function YandexDashboard() {
                                 <span className="truncate block max-w-[300px]" title={item.name}>{item.name}</span>
                               )}
                             </td>
+                            {isPlacementsReport && (
+                              <td className="px-4 py-3 text-gray-500 text-xs">
+                                <span className="px-2 py-0.5 bg-gray-100 rounded">{item.placementType || 'РСЯ'}</span>
+                              </td>
+                            )}
+                            <td className="px-4 py-3 text-right text-gray-500">{(item.impressions || 0).toLocaleString('ru-RU')}</td>
                             <td className="px-4 py-3 text-right text-gray-600">{Math.round(item.clicks).toLocaleString('ru-RU')}</td>
+                            <td className="px-4 py-3 text-right text-gray-500">{ctr.toFixed(2)}%</td>
                             <td className="px-4 py-3 text-right font-medium text-gray-900">{Math.round(item.cost).toLocaleString('ru-RU')} ₽</td>
-                            <td className="px-4 py-3 text-right text-gray-600">{item.conversions}</td>
+                            <td className="px-4 py-3 text-right text-gray-500">{cpc > 0 ? `${cpc.toFixed(0)} ₽` : '—'}</td>
+                            <td className="px-4 py-3 text-right text-gray-600">{item.conversions || 0}</td>
                             <td className="px-4 py-3 text-right text-gray-600">{cpl > 0 ? `${Math.round(cpl).toLocaleString('ru-RU')} ₽` : '—'}</td>
                           </tr>
                         );
                       }) : (
                         <tr>
-                          <td colSpan={5} className="px-4 py-8 text-center text-gray-500">
+                          <td colSpan={colCount} className="px-4 py-8 text-center text-gray-500">
                             Нет данных
                           </td>
                         </tr>
@@ -3010,6 +3460,124 @@ export default function YandexDashboard() {
               </div>
             );
           })()}
+        </div>
+      )}
+
+      {/* AI-рекомендации */}
+      {activeConnectionId && (
+        <div className="bg-white rounded-xl shadow-sm border border-gray-200 mb-6 overflow-hidden">
+          {/* Заголовок аккордеона */}
+          <div
+            className="flex items-center justify-between p-4 cursor-pointer hover:bg-gray-50 transition-colors"
+            onClick={() => setIsRecommendationsOpen(!isRecommendationsOpen)}
+          >
+            <div className="flex items-center gap-3">
+              <ChevronDown
+                size={20}
+                className={`text-gray-400 transition-transform ${!isRecommendationsOpen ? '-rotate-90' : ''}`}
+              />
+              <Sparkles size={20} className="text-purple-600" />
+              <h3 className="text-lg font-semibold text-gray-900">AI-рекомендации</h3>
+              {Array.isArray(recommendationsData) && recommendationsData.length > 0 && (
+                <span className="text-sm text-gray-500">
+                  {recommendationsData.filter((r: any) => r.type === 'critical' || r.type === 'warning').length} проблем
+                </span>
+              )}
+            </div>
+            {Array.isArray(recommendationsData) && recommendationsData.some((r: any) => r.type === 'critical') && (
+              <div className="flex items-center gap-2 px-3 py-1 bg-red-100 text-red-700 rounded-full text-sm font-medium">
+                <AlertTriangle size={14} />
+                Требует внимания
+              </div>
+            )}
+          </div>
+
+          {/* Содержимое */}
+          {isRecommendationsOpen && (
+            <div className="px-6 pb-6 pt-2">
+              {recommendationsLoading ? (
+                <div className="text-center py-6 text-gray-500">
+                  <Loader2 size={32} className="mx-auto mb-3 animate-spin text-gray-300" />
+                  <p className="text-sm">Анализируем данные...</p>
+                </div>
+              ) : Array.isArray(recommendationsData) && recommendationsData.length > 0 ? (
+                <div className="space-y-3">
+                  {recommendationsData.map((rec: any, index: number) => {
+                    const getBgColor = () => {
+                      switch (rec.type) {
+                        case 'critical': return 'bg-gradient-to-r from-red-50 to-orange-50 border-red-200';
+                        case 'warning': return 'bg-gradient-to-r from-amber-50 to-yellow-50 border-amber-200';
+                        case 'success': return 'bg-gradient-to-r from-green-50 to-emerald-50 border-green-200';
+                        default: return 'bg-gradient-to-r from-blue-50 to-indigo-50 border-blue-200';
+                      }
+                    };
+                    const getIconColor = () => {
+                      switch (rec.type) {
+                        case 'critical': return 'text-red-600';
+                        case 'warning': return 'text-amber-600';
+                        case 'success': return 'text-green-600';
+                        default: return 'text-blue-600';
+                      }
+                    };
+                    const getIcon = () => {
+                      switch (rec.type) {
+                        case 'critical': return <AlertTriangle size={18} className={getIconColor()} />;
+                        case 'warning': return <AlertCircle size={18} className={getIconColor()} />;
+                        case 'success': return <CheckCircle size={18} className={getIconColor()} />;
+                        default: return <Sparkles size={18} className={getIconColor()} />;
+                      }
+                    };
+                    const getCategoryIcon = () => {
+                      switch (rec.category) {
+                        case 'ctr': return <MousePointer size={14} className="text-gray-400" />;
+                        case 'conversions': return <Target size={14} className="text-gray-400" />;
+                        case 'budget': return <DollarSign size={14} className="text-gray-400" />;
+                        default: return <BarChart3 size={14} className="text-gray-400" />;
+                      }
+                    };
+
+                    return (
+                      <div
+                        key={index}
+                        className={`rounded-xl p-4 border ${getBgColor()}`}
+                      >
+                        <div className="flex items-start gap-3">
+                          <div className="flex-shrink-0 mt-0.5">
+                            {getIcon()}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 mb-1">
+                              <h4 className="font-semibold text-gray-900 text-sm">{rec.title}</h4>
+                              <div className="flex items-center gap-1 text-xs text-gray-500">
+                                {getCategoryIcon()}
+                                <span>
+                                  {rec.category === 'ctr' ? 'CTR' :
+                                   rec.category === 'conversions' ? 'Конверсии' :
+                                   rec.category === 'budget' ? 'Бюджет' :
+                                   rec.category === 'keywords' ? 'Ключевые слова' : 'Общее'}
+                                </span>
+                              </div>
+                            </div>
+                            <p className="text-sm text-gray-600 mb-2">{rec.description}</p>
+                            <div className="flex items-center gap-2">
+                              <ArrowRight size={14} className="text-gray-400" />
+                              <span className="text-sm font-medium text-gray-700">{rec.actionText}</span>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="text-center py-6 text-gray-500">
+                  <CheckCircle size={40} className="mx-auto mb-3 text-green-300" />
+                  <p className="text-sm font-medium text-green-700">Всё отлично!</p>
+                  <p className="text-xs text-gray-500 mt-1">Критических проблем не обнаружено</p>
+                </div>
+              )}
+            </div>
+          )}
         </div>
       )}
 
