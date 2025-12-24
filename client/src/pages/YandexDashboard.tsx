@@ -27,6 +27,12 @@ import {
   Save,
   Key,
   CheckSquare,
+  ChevronDown,
+  ChevronRight,
+  ChevronUp,
+  Plus,
+  MoreVertical,
+  ArrowUpDown,
 } from 'lucide-react';
 
 // API Service для получения данных дашборда
@@ -48,7 +54,7 @@ const dashboardService = {
     return response.json();
   },
 
-  async getDetailedStats(projectId: string, days: number = 30, goalId?: string, startDate?: string, endDate?: string, connectionId?: string) {
+  async getDetailedStats(projectId: string, days: number = 30, goalIds?: string[], startDate?: string, endDate?: string, connectionId?: string) {
     let url = `${API_BASE_URL}/api/yandex/detailed-stats/${projectId}?`;
 
     if (startDate && endDate) {
@@ -57,8 +63,8 @@ const dashboardService = {
       url += `days=${days}`;
     }
 
-    if (goalId) {
-      url += `&goalId=${goalId}`;
+    if (goalIds && goalIds.length > 0) {
+      url += `&goalIds=${goalIds.join(',')}`;
     }
 
     if (connectionId) {
@@ -84,6 +90,27 @@ const dashboardService = {
     });
     return response.json();
   },
+
+  async getHierarchicalStats(projectId: string, days: number = 30, goalIds?: string[], startDate?: string, endDate?: string, connectionId?: string) {
+    let url = `${API_BASE_URL}/api/yandex/hierarchical-stats/${projectId}?`;
+
+    if (startDate && endDate) {
+      url += `startDate=${startDate}&endDate=${endDate}`;
+    } else {
+      url += `days=${days}`;
+    }
+
+    if (goalIds && goalIds.length > 0) {
+      url += `&goalIds=${goalIds.join(',')}`;
+    }
+
+    if (connectionId) {
+      url += `&connectionId=${connectionId}`;
+    }
+
+    const response = await fetch(url);
+    return response.json();
+  },
 };
 
 export default function YandexDashboard() {
@@ -91,7 +118,8 @@ export default function YandexDashboard() {
   const [selectedProjectId, setSelectedProjectId] = useState<string>('');
   const [selectedConnectionId, setSelectedConnectionId] = useState<string>('');
   const [dateRange, setDateRange] = useState<number>(30);
-  const [selectedGoalId, setSelectedGoalId] = useState<string>('');
+  const [selectedGoalIds, setSelectedGoalIds] = useState<string[]>([]);
+  const [showGoalsDropdown, setShowGoalsDropdown] = useState<boolean>(false);
   const [groupBy, setGroupBy] = useState<string>('day');
   const [customDateMode, setCustomDateMode] = useState<boolean>(false);
   const [customStartDate, setCustomStartDate] = useState<string>('');
@@ -106,12 +134,25 @@ export default function YandexDashboard() {
   const [editAvailableGoals, setEditAvailableGoals] = useState<Array<{ id: number; name: string }>>([]);
   const [isLoadingGoals, setIsLoadingGoals] = useState(false);
   const [isSavingConnection, setIsSavingConnection] = useState(false);
+  const [showAccountMenu, setShowAccountMenu] = useState(false);
+  const [expandedCampaigns, setExpandedCampaigns] = useState<Set<string>>(new Set());
+  const [expandedAdGroups, setExpandedAdGroups] = useState<Set<string>>(new Set());
+  const [sortColumn, setSortColumn] = useState<string>('totalCost');
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
 
   // Загрузка проектов
-  const { data: projects = [], isLoading: projectsLoading } = useQuery({
+  const { data: projects = [], isLoading: projectsLoading, isError: projectsError } = useQuery({
     queryKey: ['projects'],
     queryFn: () => projectsService.list(),
+    retry: false, // Не повторять при ошибке авторизации
   });
+
+  // Если ошибка загрузки проектов - скорее всего токен истёк, редирект на логин
+  if (projectsError) {
+    localStorage.removeItem('token');
+    window.location.href = '/login';
+    return null;
+  }
 
   // Автоматически выбираем первый проект
   const activeProjectId = selectedProjectId || projects[0]?.id || '';
@@ -135,13 +176,27 @@ export default function YandexDashboard() {
     enabled: !!activeProjectId && !!activeConnectionId,
   });
 
-  // Загрузка статистики
+  // Загрузка статистики (для общих метрик)
   const { data: statsData, isLoading: statsLoading, refetch: refetchStats } = useQuery({
-    queryKey: ['yandex-detailed-stats', activeProjectId, activeConnectionId, dateRange, selectedGoalId, customDateMode, customStartDate, customEndDate],
+    queryKey: ['yandex-detailed-stats', activeProjectId, activeConnectionId, dateRange, selectedGoalIds, customDateMode, customStartDate, customEndDate],
     queryFn: () => dashboardService.getDetailedStats(
       activeProjectId,
       dateRange,
-      selectedGoalId || undefined,
+      selectedGoalIds.length > 0 ? selectedGoalIds : undefined,
+      customDateMode ? customStartDate : undefined,
+      customDateMode ? customEndDate : undefined,
+      activeConnectionId
+    ),
+    enabled: !!activeProjectId && !!activeConnectionId,
+  });
+
+  // Загрузка иерархических данных (Кампании → Группы → Объявления)
+  const { data: hierarchicalData, isLoading: hierarchicalLoading, refetch: refetchHierarchical } = useQuery({
+    queryKey: ['yandex-hierarchical-stats', activeProjectId, activeConnectionId, dateRange, selectedGoalIds, customDateMode, customStartDate, customEndDate],
+    queryFn: () => dashboardService.getHierarchicalStats(
+      activeProjectId,
+      dateRange,
+      selectedGoalIds.length > 0 ? selectedGoalIds : undefined,
       customDateMode ? customStartDate : undefined,
       customDateMode ? customEndDate : undefined,
       activeConnectionId
@@ -150,16 +205,76 @@ export default function YandexDashboard() {
   });
 
   const stats = Array.isArray(statsData) ? statsData : [];
+  const rawCampaigns = Array.isArray(hierarchicalData) ? hierarchicalData : (hierarchicalData?.campaigns || []);
+
+  // Функция сортировки
+  const handleSort = (column: string) => {
+    if (sortColumn === column) {
+      setSortDirection(prev => prev === 'desc' ? 'asc' : 'desc');
+    } else {
+      setSortColumn(column);
+      setSortDirection('desc');
+    }
+  };
+
+  // Получение значения для сортировки
+  const getSortValue = (item: any, column: string): number => {
+    switch (column) {
+      case 'totalImpressions': return item.totalImpressions || 0;
+      case 'totalClicks': return item.totalClicks || 0;
+      case 'totalCost': return item.totalCost || 0;
+      case 'avgCpc': return item.avgCpc || 0;
+      case 'avgCtr': return item.avgCtr || 0;
+      case 'avgBounceRate': return item.avgBounceRate || 0;
+      case 'totalConversions': return item.totalConversions || 0;
+      case 'cr': return item.totalClicks > 0 ? (item.totalConversions || 0) / item.totalClicks * 100 : 0;
+      case 'cpl': return item.totalConversions > 0 ? (item.totalCost || 0) / item.totalConversions : 0;
+      default: return 0;
+    }
+  };
+
+  // Сортированные кампании
+  const campaigns = [...rawCampaigns].sort((a: any, b: any) => {
+    const aVal = getSortValue(a, sortColumn);
+    const bVal = getSortValue(b, sortColumn);
+    return sortDirection === 'desc' ? bVal - aVal : aVal - bVal;
+  });
 
   // Синхронизация данных
   const handleSync = async () => {
     setIsSyncing(true);
     try {
       await dashboardService.syncManual(activeProjectId);
-      await refetchStats();
+      await Promise.all([refetchStats(), refetchHierarchical()]);
     } finally {
       setIsSyncing(false);
     }
+  };
+
+  // Переключение раскрытия кампании
+  const toggleCampaign = (campaignId: string) => {
+    setExpandedCampaigns(prev => {
+      const next = new Set(prev);
+      if (next.has(campaignId)) {
+        next.delete(campaignId);
+      } else {
+        next.add(campaignId);
+      }
+      return next;
+    });
+  };
+
+  // Переключение раскрытия группы
+  const toggleAdGroup = (adGroupId: string) => {
+    setExpandedAdGroups(prev => {
+      const next = new Set(prev);
+      if (next.has(adGroupId)) {
+        next.delete(adGroupId);
+      } else {
+        next.add(adGroupId);
+      }
+      return next;
+    });
   };
 
   // Форматирование времени последней синхронизации
@@ -255,14 +370,14 @@ export default function YandexDashboard() {
   // Средний расход в день
   const avgCostPerDay = totalStats.cost / Math.max(1, dateRange);
 
-  const isLoading = statsLoading || connectionsLoading || goalsLoading;
+  const isLoading = statsLoading || connectionsLoading || goalsLoading || hierarchicalLoading;
 
   return (
     <div className="max-w-7xl">
       {/* Улучшенная шапка */}
       <div className="mb-6">
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-          {/* Первая строка: Заголовок и основные действия */}
+          {/* Первая строка: Заголовок и кнопка обновления */}
           <div className="flex items-start justify-between mb-6">
             <div>
               <h1 className="text-3xl font-bold text-gray-900 mb-2">
@@ -272,87 +387,203 @@ export default function YandexDashboard() {
                 <div className="flex items-center gap-4 text-sm text-gray-600">
                   <div className="flex items-center gap-2">
                     <Clock size={16} />
-                    <span>Последняя синхронизация: {formatLastSync(activeConnection.lastSyncAt)}</span>
-                  </div>
-                  <div className="flex items-center gap-1">
-                    <div className="w-2 h-2 rounded-full bg-green-500"></div>
-                    <span className="font-medium">Подключен: {activeConnection.login}</span>
+                    <span>Синхронизация: {formatLastSync(activeConnection.lastSyncAt)}</span>
                   </div>
                 </div>
               )}
             </div>
-            <div className="flex items-center gap-2">
-              <button
-                onClick={handleSync}
-                disabled={isSyncing}
-                className="flex items-center gap-2 bg-primary-600 text-white px-4 py-2.5 rounded-lg hover:bg-primary-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {isSyncing ? (
-                  <Loader2 className="animate-spin" size={18} />
-                ) : (
-                  <RefreshCw size={18} />
-                )}
-                {isSyncing ? 'Синхронизация...' : 'Обновить'}
-              </button>
-              <button
-                onClick={() => setShowConnectionsModal(true)}
-                className="flex items-center gap-2 bg-gray-100 text-gray-700 px-4 py-2.5 rounded-lg hover:bg-gray-200 transition-colors border border-gray-300"
-              >
-                <Settings size={18} />
-                Управление подключениями
-              </button>
-              <button
-                onClick={() => navigate('/connect-yandex-simple')}
-                className="flex items-center gap-2 bg-gray-600 text-white px-4 py-2.5 rounded-lg hover:bg-gray-700 transition-colors"
-              >
-                <LinkIcon size={18} />
-                Добавить аккаунт
-              </button>
-            </div>
+            <button
+              onClick={handleSync}
+              disabled={isSyncing}
+              className="flex items-center gap-2 bg-primary-600 text-white px-4 py-2.5 rounded-lg hover:bg-primary-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {isSyncing ? (
+                <Loader2 className="animate-spin" size={18} />
+              ) : (
+                <RefreshCw size={18} />
+              )}
+              {isSyncing ? 'Синхронизация...' : 'Обновить данные'}
+            </button>
           </div>
 
           {/* Вторая строка: Селекторы */}
           <div className="flex items-start gap-4 flex-wrap">
-            {/* Селектор аккаунтов */}
+            {/* Селектор аккаунтов с меню управления */}
             {connections.length > 0 && (
-              <div className="flex flex-col gap-1.5">
+              <div className="flex flex-col gap-1.5 relative">
                 <label className="text-xs font-medium text-gray-600 flex items-center gap-1.5">
                   <Building2 size={14} className="text-gray-500" />
                   Аккаунт
                 </label>
-                <select
-                  value={activeConnectionId}
-                  onChange={(e) => setSelectedConnectionId(e.target.value)}
-                  className="bg-blue-50 border border-blue-200 rounded-lg px-3 py-2 text-sm font-medium text-blue-900 focus:ring-2 focus:ring-blue-400 focus:border-transparent min-w-[200px]"
-                >
-                  {connections.map((conn: any) => (
-                    <option key={conn.id} value={conn.id}>
-                      {conn.login}
-                    </option>
-                  ))}
-                </select>
+                <div className="flex items-center gap-1">
+                  {/* Селектор аккаунта */}
+                  <select
+                    value={activeConnectionId}
+                    onChange={(e) => setSelectedConnectionId(e.target.value)}
+                    className="bg-blue-50 border border-blue-200 rounded-lg px-3 py-2 text-sm font-medium text-blue-900 focus:ring-2 focus:ring-blue-400 focus:border-transparent min-w-[180px]"
+                  >
+                    {connections.map((conn: any) => (
+                      <option key={conn.id} value={conn.id}>
+                        {conn.login}
+                      </option>
+                    ))}
+                  </select>
+                  {/* Кнопка меню */}
+                  <div className="relative">
+                    <button
+                      onClick={() => setShowAccountMenu(!showAccountMenu)}
+                      className="p-2 bg-gray-100 hover:bg-gray-200 border border-gray-300 rounded-lg transition-colors"
+                      title="Управление аккаунтами"
+                    >
+                      <MoreVertical size={18} className="text-gray-600" />
+                    </button>
+                    {/* Выпадающее меню */}
+                    {showAccountMenu && (
+                      <>
+                        <div
+                          className="fixed inset-0 z-40"
+                          onClick={() => setShowAccountMenu(false)}
+                        />
+                        <div className="absolute right-0 top-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg z-50 min-w-[200px] py-1">
+                          <button
+                            onClick={() => {
+                              setShowAccountMenu(false);
+                              navigate('/connect-yandex-simple');
+                            }}
+                            className="w-full px-4 py-2.5 text-left text-sm hover:bg-gray-50 flex items-center gap-2 text-gray-700"
+                          >
+                            <Plus size={16} className="text-green-600" />
+                            Добавить аккаунт
+                          </button>
+                          <button
+                            onClick={async () => {
+                              setShowAccountMenu(false);
+                              const conn = activeConnection;
+                              if (conn) {
+                                setEditingConnection(conn);
+                                setEditForm({
+                                  accessToken: '',
+                                  selectedGoals: conn.conversionGoals ? JSON.parse(conn.conversionGoals).map(Number) : [],
+                                });
+                                setIsLoadingGoals(true);
+                                try {
+                                  const response = await fetch(`${API_BASE_URL}/api/yandex/connection/${conn.id}/goals`);
+                                  const data = await response.json();
+                                  setEditAvailableGoals(data.goals || []);
+                                } catch (error) {
+                                  setEditAvailableGoals([]);
+                                }
+                                setIsLoadingGoals(false);
+                              }
+                            }}
+                            className="w-full px-4 py-2.5 text-left text-sm hover:bg-gray-50 flex items-center gap-2 text-gray-700"
+                          >
+                            <Edit3 size={16} className="text-blue-600" />
+                            Редактировать текущий
+                          </button>
+                          <button
+                            onClick={() => {
+                              setShowAccountMenu(false);
+                              setShowConnectionsModal(true);
+                            }}
+                            className="w-full px-4 py-2.5 text-left text-sm hover:bg-gray-50 flex items-center gap-2 text-gray-700"
+                          >
+                            <Settings size={16} className="text-gray-500" />
+                            Все подключения
+                          </button>
+                          <div className="border-t border-gray-100 my-1" />
+                          <button
+                            onClick={async () => {
+                              setShowAccountMenu(false);
+                              if (activeConnection && confirm(`Удалить подключение ${activeConnection.login}?`)) {
+                                try {
+                                  await fetch(`${API_BASE_URL}/api/yandex/connection/${activeConnection.id}`, {
+                                    method: 'DELETE',
+                                  });
+                                  window.location.reload();
+                                } catch (error) {
+                                  alert('Ошибка при удалении');
+                                }
+                              }
+                            }}
+                            className="w-full px-4 py-2.5 text-left text-sm hover:bg-red-50 flex items-center gap-2 text-red-600"
+                          >
+                            <Trash2 size={16} />
+                            Удалить текущий
+                          </button>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                </div>
               </div>
             )}
 
-            {/* Селектор целей */}
+            {/* Селектор целей (мультиселект) */}
             {availableGoals.length > 0 && (
-              <div className="flex flex-col gap-1.5">
+              <div className="flex flex-col gap-1.5 relative">
                 <label className="text-xs font-medium text-gray-600 flex items-center gap-1.5">
                   <Target size={14} className="text-gray-500" />
-                  Цель
+                  Цели
                 </label>
-                <select
-                  value={selectedGoalId}
-                  onChange={(e) => setSelectedGoalId(e.target.value)}
-                  className="bg-white border border-gray-300 rounded-lg px-3 py-2 text-sm font-medium focus:ring-2 focus:ring-blue-400 focus:border-transparent"
-                >
-                  <option value="">Все цели</option>
-                  {availableGoals.map((goal: any) => (
-                    <option key={goal.goalId} value={goal.goalId}>
-                      {goal.goalName || `Цель ${goal.goalId}`}
-                    </option>
-                  ))}
-                </select>
+                <div className="relative">
+                  <button
+                    type="button"
+                    onClick={() => setShowGoalsDropdown(!showGoalsDropdown)}
+                    className="bg-white border border-gray-300 rounded-lg px-3 py-2 text-sm font-medium focus:ring-2 focus:ring-blue-400 focus:border-transparent min-w-[180px] text-left flex items-center justify-between gap-2"
+                  >
+                    <span className="truncate">
+                      {selectedGoalIds.length === 0
+                        ? 'Все цели'
+                        : selectedGoalIds.length === 1
+                        ? availableGoals.find((g: any) => g.goalId === selectedGoalIds[0])?.goalName || `Цель ${selectedGoalIds[0]}`
+                        : `${selectedGoalIds.length} целей`}
+                    </span>
+                    <svg className={`w-4 h-4 transition-transform ${showGoalsDropdown ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                    </svg>
+                  </button>
+                  {showGoalsDropdown && (
+                    <div className="absolute top-full left-0 mt-1 bg-white border border-gray-300 rounded-lg shadow-lg z-50 min-w-[220px] max-h-60 overflow-y-auto">
+                      <div
+                        className="px-3 py-2 hover:bg-gray-50 cursor-pointer flex items-center gap-2 border-b border-gray-200"
+                        onClick={() => {
+                          setSelectedGoalIds([]);
+                          setShowGoalsDropdown(false);
+                        }}
+                      >
+                        <input
+                          type="radio"
+                          checked={selectedGoalIds.length === 0}
+                          readOnly
+                          className="w-4 h-4 text-blue-600"
+                        />
+                        <span className="text-sm">Все цели</span>
+                      </div>
+                      {availableGoals.map((goal: any) => (
+                        <div
+                          key={goal.goalId}
+                          className="px-3 py-2 hover:bg-gray-50 cursor-pointer flex items-center gap-2"
+                          onClick={() => {
+                            if (selectedGoalIds.includes(goal.goalId)) {
+                              setSelectedGoalIds(selectedGoalIds.filter(id => id !== goal.goalId));
+                            } else {
+                              setSelectedGoalIds([...selectedGoalIds, goal.goalId]);
+                            }
+                          }}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={selectedGoalIds.includes(goal.goalId)}
+                            readOnly
+                            className="w-4 h-4 text-blue-600 rounded"
+                          />
+                          <span className="text-sm">{goal.goalName || `Цель ${goal.goalId}`}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
               </div>
             )}
 
@@ -504,132 +735,346 @@ export default function YandexDashboard() {
         </div>
       </div>
 
-      {/* Таблица кампаний */}
+      {/* Иерархическая таблица: Кампании → Группы → Объявления */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden mb-8">
         <div className="px-6 py-4 border-b border-gray-200">
           <h2 className="text-xl font-bold text-gray-900">Кампании</h2>
+          <p className="text-sm text-gray-500 mt-1">Нажмите на строку для раскрытия групп и объявлений</p>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full">
             <thead className="bg-gray-50 border-b border-gray-200">
               <tr>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">
-                  Кампания
+                  Название
                 </th>
-                <th className="px-6 py-3 text-center text-xs font-medium text-gray-700 uppercase tracking-wider">
-                  Статус
+                <th
+                  className="px-6 py-3 text-right text-xs font-medium text-gray-700 uppercase tracking-wider cursor-pointer hover:bg-gray-100 select-none"
+                  onClick={() => handleSort('totalImpressions')}
+                >
+                  <div className="flex items-center justify-end gap-1">
+                    Показы
+                    {sortColumn === 'totalImpressions' ? (
+                      sortDirection === 'desc' ? <ChevronDown size={14} /> : <ChevronUp size={14} />
+                    ) : <ArrowUpDown size={14} className="opacity-30" />}
+                  </div>
                 </th>
-                <th className="px-6 py-3 text-right text-xs font-medium text-gray-700 uppercase tracking-wider">
-                  Показы
+                <th
+                  className="px-6 py-3 text-right text-xs font-medium text-gray-700 uppercase tracking-wider cursor-pointer hover:bg-gray-100 select-none"
+                  onClick={() => handleSort('totalClicks')}
+                >
+                  <div className="flex items-center justify-end gap-1">
+                    Клики
+                    {sortColumn === 'totalClicks' ? (
+                      sortDirection === 'desc' ? <ChevronDown size={14} /> : <ChevronUp size={14} />
+                    ) : <ArrowUpDown size={14} className="opacity-30" />}
+                  </div>
                 </th>
-                <th className="px-6 py-3 text-right text-xs font-medium text-gray-700 uppercase tracking-wider">
-                  Клики
+                <th
+                  className="px-6 py-3 text-right text-xs font-medium text-gray-700 uppercase tracking-wider cursor-pointer hover:bg-gray-100 select-none"
+                  onClick={() => handleSort('totalCost')}
+                >
+                  <div className="flex items-center justify-end gap-1">
+                    Расход
+                    {sortColumn === 'totalCost' ? (
+                      sortDirection === 'desc' ? <ChevronDown size={14} /> : <ChevronUp size={14} />
+                    ) : <ArrowUpDown size={14} className="opacity-30" />}
+                  </div>
                 </th>
-                <th className="px-6 py-3 text-right text-xs font-medium text-gray-700 uppercase tracking-wider">
-                  Расход
+                <th
+                  className="px-6 py-3 text-right text-xs font-medium text-gray-700 uppercase tracking-wider cursor-pointer hover:bg-gray-100 select-none"
+                  onClick={() => handleSort('avgCpc')}
+                >
+                  <div className="flex items-center justify-end gap-1">
+                    CPC
+                    {sortColumn === 'avgCpc' ? (
+                      sortDirection === 'desc' ? <ChevronDown size={14} /> : <ChevronUp size={14} />
+                    ) : <ArrowUpDown size={14} className="opacity-30" />}
+                  </div>
                 </th>
-                <th className="px-6 py-3 text-right text-xs font-medium text-gray-700 uppercase tracking-wider">
-                  CPC
+                <th
+                  className="px-6 py-3 text-right text-xs font-medium text-gray-700 uppercase tracking-wider cursor-pointer hover:bg-gray-100 select-none"
+                  onClick={() => handleSort('avgCtr')}
+                >
+                  <div className="flex items-center justify-end gap-1">
+                    CTR
+                    {sortColumn === 'avgCtr' ? (
+                      sortDirection === 'desc' ? <ChevronDown size={14} /> : <ChevronUp size={14} />
+                    ) : <ArrowUpDown size={14} className="opacity-30" />}
+                  </div>
                 </th>
-                <th className="px-6 py-3 text-right text-xs font-medium text-gray-700 uppercase tracking-wider">
-                  CTR
+                <th
+                  className="px-6 py-3 text-right text-xs font-medium text-gray-700 uppercase tracking-wider cursor-pointer hover:bg-gray-100 select-none"
+                  onClick={() => handleSort('avgBounceRate')}
+                >
+                  <div className="flex items-center justify-end gap-1">
+                    Отказы
+                    {sortColumn === 'avgBounceRate' ? (
+                      sortDirection === 'desc' ? <ChevronDown size={14} /> : <ChevronUp size={14} />
+                    ) : <ArrowUpDown size={14} className="opacity-30" />}
+                  </div>
                 </th>
-                <th className="px-6 py-3 text-right text-xs font-medium text-gray-700 uppercase tracking-wider">
-                  Отказы
+                <th
+                  className="px-6 py-3 text-right text-xs font-medium text-gray-700 uppercase tracking-wider cursor-pointer hover:bg-gray-100 select-none"
+                  onClick={() => handleSort('totalConversions')}
+                >
+                  <div className="flex items-center justify-end gap-1">
+                    Конверсии
+                    {sortColumn === 'totalConversions' ? (
+                      sortDirection === 'desc' ? <ChevronDown size={14} /> : <ChevronUp size={14} />
+                    ) : <ArrowUpDown size={14} className="opacity-30" />}
+                  </div>
                 </th>
-                <th className="px-6 py-3 text-right text-xs font-medium text-gray-700 uppercase tracking-wider">
-                  Конверсии
+                <th
+                  className="px-6 py-3 text-right text-xs font-medium text-gray-700 uppercase tracking-wider cursor-pointer hover:bg-gray-100 select-none"
+                  onClick={() => handleSort('cr')}
+                >
+                  <div className="flex items-center justify-end gap-1">
+                    CR %
+                    {sortColumn === 'cr' ? (
+                      sortDirection === 'desc' ? <ChevronDown size={14} /> : <ChevronUp size={14} />
+                    ) : <ArrowUpDown size={14} className="opacity-30" />}
+                  </div>
                 </th>
-                <th className="px-6 py-3 text-right text-xs font-medium text-gray-700 uppercase tracking-wider">
-                  CR %
-                </th>
-                <th className="px-6 py-3 text-right text-xs font-medium text-gray-700 uppercase tracking-wider">
-                  CPL
+                <th
+                  className="px-6 py-3 text-right text-xs font-medium text-gray-700 uppercase tracking-wider cursor-pointer hover:bg-gray-100 select-none"
+                  onClick={() => handleSort('cpl')}
+                >
+                  <div className="flex items-center justify-end gap-1">
+                    CPL
+                    {sortColumn === 'cpl' ? (
+                      sortDirection === 'desc' ? <ChevronDown size={14} /> : <ChevronUp size={14} />
+                    ) : <ArrowUpDown size={14} className="opacity-30" />}
+                  </div>
                 </th>
               </tr>
             </thead>
-            <tbody className="bg-white divide-y divide-gray-200">
-              {stats.map((campaign: any, index: number) => {
-                const ctr = campaign.avgCtr;
+            <tbody className="bg-white">
+              {campaigns.map((campaign: any) => {
+                const campaignId = campaign.campaignId;
+                const isExpanded = expandedCampaigns.has(campaignId);
+                const adGroups = campaign.adGroups || [];
+                const ctr = campaign.avgCtr || 0;
                 const campaignCr = campaign.totalClicks > 0 ? (campaign.totalConversions / campaign.totalClicks) * 100 : 0;
                 const campaignCpl = campaign.totalConversions > 0 ? campaign.totalCost / campaign.totalConversions : 0;
 
-                // Определяем статус: если расход > 0, то активна
-                const isActive = campaign.totalCost > 0;
-
-                // Процент отказов (bounce rate) - если есть в данных
-                const bounceRate = campaign.avgBounceRate || 0;
-
                 return (
-                  <tr key={index} className="hover:bg-gray-50 transition-colors">
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <span className="text-sm font-medium text-gray-900">
-                        {campaign.campaignName || campaign.campaignId}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-center">
-                      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                        isActive ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'
-                      }`}>
-                        {isActive ? 'Активна' : 'Неактивна'}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm text-gray-900">
-                      {campaign.totalImpressions.toLocaleString('ru-RU')}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm text-gray-900">
-                      {campaign.totalClicks.toLocaleString('ru-RU')}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-semibold text-gray-900">
-                      {campaign.totalCost.toLocaleString('ru-RU')} ₽
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm text-gray-900">
-                      {campaign.avgCpc.toFixed(2)} ₽
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-right">
-                      <span className={`text-sm font-medium ${
-                        ctr >= 5 ? 'text-green-600' : ctr >= 3 ? 'text-yellow-600' : 'text-red-600'
-                      }`}>
-                        {ctr.toFixed(2)}%
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm text-gray-900">
-                      {typeof campaign.avgBounceRate === 'number' ? `${bounceRate.toFixed(2)}%` : '—'}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-right">
-                      <span className={`text-sm font-medium ${
-                        campaign.totalConversions > 0 ? 'text-green-600' : 'text-gray-400'
-                      }`}>
-                        {campaign.totalConversions.toLocaleString('ru-RU')}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-right">
-                      <span className={`text-sm font-medium ${
-                        campaignCr >= 10 ? 'text-green-600' : campaignCr >= 5 ? 'text-yellow-600' : 'text-gray-600'
-                      }`}>
-                        {campaignCr > 0 ? `${campaignCr.toFixed(2)}%` : '—'}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-right">
-                      {campaignCpl > 0 ? (
-                        <span className="text-sm font-medium text-gray-900">
-                          {Math.round(campaignCpl).toLocaleString('ru-RU')} ₽
+                  <>
+                    {/* Строка кампании */}
+                    <tr
+                      key={`campaign-${campaignId}`}
+                      className="hover:bg-blue-50 transition-colors cursor-pointer border-b border-gray-200"
+                      onClick={() => toggleCampaign(campaignId)}
+                    >
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="flex items-center gap-2">
+                          {adGroups.length > 0 ? (
+                            isExpanded ? (
+                              <ChevronDown size={18} className="text-gray-500" />
+                            ) : (
+                              <ChevronRight size={18} className="text-gray-500" />
+                            )
+                          ) : (
+                            <span className="w-[18px]" />
+                          )}
+                          <span className="text-sm font-semibold text-gray-900">
+                            {campaign.campaignName || campaignId}
+                          </span>
+                          {adGroups.length > 0 && (
+                            <span className="text-xs text-gray-400">({adGroups.length} групп)</span>
+                          )}
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-right text-sm text-gray-900">
+                        {(campaign.totalImpressions || 0).toLocaleString('ru-RU')}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-right text-sm text-gray-900">
+                        {(campaign.totalClicks || 0).toLocaleString('ru-RU')}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-semibold text-gray-900">
+                        {(campaign.totalCost || 0).toLocaleString('ru-RU')} ₽
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-right text-sm text-gray-900">
+                        {(campaign.avgCpc || 0).toFixed(2)} ₽
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-right">
+                        <span className={`text-sm font-medium ${
+                          ctr >= 5 ? 'text-green-600' : ctr >= 3 ? 'text-yellow-600' : 'text-red-600'
+                        }`}>
+                          {ctr.toFixed(2)}%
                         </span>
-                      ) : (
-                        <span className="text-sm text-gray-400">—</span>
-                      )}
-                    </td>
-                  </tr>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-right text-sm text-gray-900">
+                        {typeof campaign.avgBounceRate === 'number' ? `${campaign.avgBounceRate.toFixed(2)}%` : '—'}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-right">
+                        <span className={`text-sm font-medium ${
+                          (campaign.totalConversions || 0) > 0 ? 'text-green-600' : 'text-gray-400'
+                        }`}>
+                          {(campaign.totalConversions || 0).toLocaleString('ru-RU')}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-right">
+                        <span className={`text-sm font-medium ${
+                          campaignCr >= 10 ? 'text-green-600' : campaignCr >= 5 ? 'text-yellow-600' : 'text-gray-600'
+                        }`}>
+                          {campaignCr > 0 ? `${campaignCr.toFixed(2)}%` : '—'}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-right">
+                        {campaignCpl > 0 ? (
+                          <span className="text-sm font-medium text-gray-900">
+                            {Math.round(campaignCpl).toLocaleString('ru-RU')} ₽
+                          </span>
+                        ) : (
+                          <span className="text-sm text-gray-400">—</span>
+                        )}
+                      </td>
+                    </tr>
+
+                    {/* Строки групп объявлений */}
+                    {isExpanded && adGroups.map((adGroup: any) => {
+                      const adGroupKey = `${campaignId}-${adGroup.adGroupId}`;
+                      const isAdGroupExpanded = expandedAdGroups.has(adGroupKey);
+                      const ads = adGroup.ads || [];
+                      const adGroupCtr = adGroup.avgCtr || 0;
+                      const adGroupCr = adGroup.totalClicks > 0 ? (adGroup.totalConversions / adGroup.totalClicks) * 100 : 0;
+                      const adGroupCpl = adGroup.totalConversions > 0 ? adGroup.totalCost / adGroup.totalConversions : 0;
+
+                      return (
+                        <>
+                          {/* Строка группы */}
+                          <tr
+                            key={`adgroup-${adGroupKey}`}
+                            className="hover:bg-green-50 transition-colors cursor-pointer bg-gray-50 border-b border-gray-100"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              toggleAdGroup(adGroupKey);
+                            }}
+                          >
+                            <td className="px-6 py-3 whitespace-nowrap">
+                              <div className="flex items-center gap-2 pl-6">
+                                {ads.length > 0 ? (
+                                  isAdGroupExpanded ? (
+                                    <ChevronDown size={16} className="text-gray-400" />
+                                  ) : (
+                                    <ChevronRight size={16} className="text-gray-400" />
+                                  )
+                                ) : (
+                                  <span className="w-[16px]" />
+                                )}
+                                <span className="text-sm font-medium text-gray-700">
+                                  {adGroup.adGroupName || adGroup.adGroupId}
+                                </span>
+                                {ads.length > 0 && (
+                                  <span className="text-xs text-gray-400">({ads.length} объявл.)</span>
+                                )}
+                              </div>
+                            </td>
+                            <td className="px-6 py-3 whitespace-nowrap text-right text-sm text-gray-700">
+                              {(adGroup.totalImpressions || 0).toLocaleString('ru-RU')}
+                            </td>
+                            <td className="px-6 py-3 whitespace-nowrap text-right text-sm text-gray-700">
+                              {(adGroup.totalClicks || 0).toLocaleString('ru-RU')}
+                            </td>
+                            <td className="px-6 py-3 whitespace-nowrap text-right text-sm font-medium text-gray-700">
+                              {(adGroup.totalCost || 0).toLocaleString('ru-RU')} ₽
+                            </td>
+                            <td className="px-6 py-3 whitespace-nowrap text-right text-sm text-gray-700">
+                              {(adGroup.avgCpc || 0).toFixed(2)} ₽
+                            </td>
+                            <td className="px-6 py-3 whitespace-nowrap text-right">
+                              <span className={`text-sm ${
+                                adGroupCtr >= 5 ? 'text-green-600' : adGroupCtr >= 3 ? 'text-yellow-600' : 'text-red-600'
+                              }`}>
+                                {adGroupCtr.toFixed(2)}%
+                              </span>
+                            </td>
+                            <td className="px-6 py-3 whitespace-nowrap text-right text-sm text-gray-700">
+                              {typeof adGroup.avgBounceRate === 'number' ? `${adGroup.avgBounceRate.toFixed(2)}%` : '—'}
+                            </td>
+                            <td className="px-6 py-3 whitespace-nowrap text-right text-sm text-gray-700">
+                              {(adGroup.totalConversions || 0).toLocaleString('ru-RU')}
+                            </td>
+                            <td className="px-6 py-3 whitespace-nowrap text-right text-sm text-gray-700">
+                              {adGroupCr > 0 ? `${adGroupCr.toFixed(2)}%` : '—'}
+                            </td>
+                            <td className="px-6 py-3 whitespace-nowrap text-right text-sm text-gray-700">
+                              {adGroupCpl > 0 ? `${Math.round(adGroupCpl).toLocaleString('ru-RU')} ₽` : '—'}
+                            </td>
+                          </tr>
+
+                          {/* Строки объявлений */}
+                          {isAdGroupExpanded && ads.map((ad: any) => {
+                            const adCtr = ad.avgCtr || 0;
+                            const adCr = ad.totalClicks > 0 ? (ad.totalConversions / ad.totalClicks) * 100 : 0;
+                            const adCpl = ad.totalConversions > 0 ? ad.totalCost / ad.totalConversions : 0;
+
+                            return (
+                              <tr
+                                key={`ad-${campaignId}-${adGroup.adGroupId}-${ad.adId}`}
+                                className="bg-gray-100 border-b border-gray-100"
+                              >
+                                <td className="px-6 py-2 whitespace-nowrap">
+                                  <div className="flex items-center gap-2 pl-14">
+                                    <div className="flex flex-col">
+                                      <span className="text-xs text-gray-700 font-medium">
+                                        {ad.adTitle || `Объявление ${ad.adId}`}
+                                      </span>
+                                      <span className="text-[10px] text-gray-400">
+                                        ID: {ad.adId}
+                                      </span>
+                                    </div>
+                                  </div>
+                                </td>
+                                <td className="px-6 py-2 whitespace-nowrap text-right text-xs text-gray-600">
+                                  {(ad.totalImpressions || 0).toLocaleString('ru-RU')}
+                                </td>
+                                <td className="px-6 py-2 whitespace-nowrap text-right text-xs text-gray-600">
+                                  {(ad.totalClicks || 0).toLocaleString('ru-RU')}
+                                </td>
+                                <td className="px-6 py-2 whitespace-nowrap text-right text-xs text-gray-600">
+                                  {(ad.totalCost || 0).toLocaleString('ru-RU')} ₽
+                                </td>
+                                <td className="px-6 py-2 whitespace-nowrap text-right text-xs text-gray-600">
+                                  {(ad.avgCpc || 0).toFixed(2)} ₽
+                                </td>
+                                <td className="px-6 py-2 whitespace-nowrap text-right">
+                                  <span className={`text-xs ${
+                                    adCtr >= 5 ? 'text-green-600' : adCtr >= 3 ? 'text-yellow-600' : 'text-red-600'
+                                  }`}>
+                                    {adCtr.toFixed(2)}%
+                                  </span>
+                                </td>
+                                <td className="px-6 py-2 whitespace-nowrap text-right text-xs text-gray-600">
+                                  {typeof ad.avgBounceRate === 'number' ? `${ad.avgBounceRate.toFixed(2)}%` : '—'}
+                                </td>
+                                <td className="px-6 py-2 whitespace-nowrap text-right text-xs text-gray-600">
+                                  {(ad.totalConversions || 0).toLocaleString('ru-RU')}
+                                </td>
+                                <td className="px-6 py-2 whitespace-nowrap text-right text-xs text-gray-600">
+                                  {adCr > 0 ? `${adCr.toFixed(2)}%` : '—'}
+                                </td>
+                                <td className="px-6 py-2 whitespace-nowrap text-right text-xs text-gray-600">
+                                  {adCpl > 0 ? `${Math.round(adCpl).toLocaleString('ru-RU')} ₽` : '—'}
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </>
+                      );
+                    })}
+                  </>
                 );
               })}
+
               {/* Строка ИТОГО */}
-              {stats.length > 0 && (() => {
-                const totals = stats.reduce((acc: any, c: any) => ({
+              {campaigns.length > 0 && (() => {
+                const totals = campaigns.reduce((acc: any, c: any) => ({
                   impressions: acc.impressions + (c.totalImpressions || 0),
                   clicks: acc.clicks + (c.totalClicks || 0),
                   cost: acc.cost + (c.totalCost || 0),
                   conversions: acc.conversions + (c.totalConversions || 0),
-                  // Для средневзвешенного отказов: сумма (отказы * клики)
                   bounceWeighted: acc.bounceWeighted + ((c.avgBounceRate || 0) * (c.totalClicks || 0)),
                 }), { impressions: 0, clicks: 0, cost: 0, conversions: 0, bounceWeighted: 0 });
 
@@ -640,12 +1085,12 @@ export default function YandexDashboard() {
                 const avgCpl = totals.conversions > 0 ? totals.cost / totals.conversions : 0;
 
                 return (
-                  <tr className="bg-gray-100 font-semibold border-t-2 border-gray-300">
+                  <tr className="bg-gray-200 font-semibold border-t-2 border-gray-400">
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                      ИТОГО
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-center text-sm text-gray-500">
-                      —
+                      <div className="flex items-center gap-2">
+                        <span className="w-[18px]" />
+                        ИТОГО
+                      </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-right text-sm text-gray-900">
                       {totals.impressions.toLocaleString('ru-RU')}
@@ -681,7 +1126,7 @@ export default function YandexDashboard() {
           </table>
         </div>
 
-        {stats.length === 0 && !isLoading && (
+        {campaigns.length === 0 && !isLoading && (
           <div className="p-12 text-center">
             <Eye className="text-gray-300 mx-auto mb-4" size={48} />
             <p className="text-gray-500">Нет данных за выбранный период</p>
