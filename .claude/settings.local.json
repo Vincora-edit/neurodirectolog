@@ -97,7 +97,11 @@
       "Bash(sshpass -p 'c9R+eLvxtQJ-,x' ssh -o StrictHostKeyChecking=no root@91.222.239.217 \"docker run -d --name neurodirectolog-server --network neurodirectolog_neurodirectolog-network -p 3001:3001 -e NODE_ENV=production -e PORT=3001 -e CLICKHOUSE_HOST=http://neurodirectolog-clickhouse:8123 --env-file /root/neurodirectolog/.env neurodirectolog_server:latest\")",
       "Bash(sshpass -p 'c9R+eLvxtQJ-,x' ssh -o StrictHostKeyChecking=no root@91.222.239.217 \"docker ps | grep neurodirectolog-server && docker logs neurodirectolog-server --tail 20\")",
       "Bash(sshpass -p 'c9R+eLvxtQJ-,x' ssh -o StrictHostKeyChecking=no root@91.222.239.217 \"docker logs neurodirectolog-server --tail 100 2>&1 | grep -A 5 ''getAccountBalance''\")",
-      "Bash(git rm:*)"
+      "Bash(git rm:*)",
+      "Bash(git fetch:*)",
+      "Bash(git checkout:*)",
+      "Bash(/Users/artemsubbotin/Desktop/Neurodirectolog/scripts/install-hooks.sh:*)",
+      "Bash(/Users/artemsubbotin/Desktop/Neurodirectolog/scripts/status.sh:*)"
     ]
   }
 }

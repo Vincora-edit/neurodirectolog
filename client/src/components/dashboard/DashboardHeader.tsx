@@ -182,19 +182,15 @@ export function DashboardHeader({
   return (
     <>
       <div
-        className={`sticky top-[41px] z-20 mb-6 -mx-8 px-8 -mt-8 pt-4 pb-2 bg-gray-50 transition-all duration-300 ${
-          isCollapsed ? 'translate-y-[-100%] opacity-0 pointer-events-none' : ''
+        className={`sticky top-[41px] z-20 mb-6 -mx-8 px-8 -mt-8 pt-4 pb-2 bg-gray-50 ${
+          isCollapsed ? 'hidden' : ''
         }`}
       >
-        <div
-          className={`bg-white rounded-xl shadow-sm border border-gray-200 transition-all duration-300 ${
-            isScrolled ? 'p-3' : 'p-6'
-          }`}
-        >
+        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4">
           {/* Первая строка: Заголовок и кнопка обновления */}
           <div
-            className={`flex items-start justify-between transition-all duration-300 overflow-hidden ${
-              isScrolled ? 'max-h-0 mb-0 opacity-0' : 'max-h-24 mb-6 opacity-100'
+            className={`flex items-start justify-between overflow-hidden ${
+              isScrolled ? 'hidden' : 'mb-4'
             }`}
           >
             <div>
