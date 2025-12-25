@@ -1530,7 +1530,45 @@ export const yandexDirectService = {
       console.log('[getAccountBalance] GetClientInfo not available:', error.response?.data || error.message);
     }
 
-    // 2. Пробуем AccountManagement (для агентов)
+    // 2. Пробуем AccountManagement для прямого рекламодателя (без SelectionCriteria)
+    try {
+      const response = await axios.post(
+        YANDEX_API_V4_LIVE_URL,
+        {
+          method: 'AccountManagement',
+          token: accessToken,
+          param: {
+            Action: 'Get',
+            // Для прямого рекламодателя SelectionCriteria опциональный - не передаём его
+          },
+        },
+        {
+          headers: {
+            'Content-Type': 'application/json',
+            'Accept-Language': 'ru',
+          },
+        }
+      );
+
+      console.log('[getAccountBalance] AccountManagement response:', JSON.stringify(response.data, null, 2));
+
+      // Ответ может быть в data.Accounts или напрямую в data
+      const accounts = response.data.data?.Accounts || (response.data.data ? [response.data.data] : null);
+      if (accounts && accounts.length > 0) {
+        const account = accounts[0];
+        console.log('[getAccountBalance] Got shared account balance:', account.Amount);
+        return {
+          amount: account.Amount || 0,
+          currency: account.Currency || 'RUB',
+          amountAvailableForTransfer: account.AmountAvailableForTransfer || 0,
+          source: 'shared_account',
+        };
+      }
+    } catch (error: any) {
+      console.log('[getAccountBalance] AccountManagement not available:', error.response?.data || error.message);
+    }
+
+    // 2.1 Пробуем AccountManagement с логином (для агентов)
     try {
       const response = await axios.post(
         YANDEX_API_V4_LIVE_URL,
@@ -1552,12 +1590,12 @@ export const yandexDirectService = {
         }
       );
 
-      console.log('[getAccountBalance] AccountManagement response:', JSON.stringify(response.data, null, 2));
+      console.log('[getAccountBalance] AccountManagement (agency) response:', JSON.stringify(response.data, null, 2));
 
       const accounts = response.data.data?.Accounts;
       if (accounts && accounts.length > 0) {
         const account = accounts[0];
-        console.log('[getAccountBalance] Got shared account balance:', account.Amount);
+        console.log('[getAccountBalance] Got shared account balance via agency:', account.Amount);
         return {
           amount: account.Amount || 0,
           currency: account.Currency || 'RUB',
@@ -1566,7 +1604,7 @@ export const yandexDirectService = {
         };
       }
     } catch (error: any) {
-      console.log('[getAccountBalance] AccountManagement not available:', error.response?.data || error.message);
+      console.log('[getAccountBalance] AccountManagement (agency) not available:', error.response?.data || error.message);
     }
 
     // 3. Пробуем API v5 Clients.get
@@ -1686,12 +1724,52 @@ export const yandexDirectService = {
         }
       }
 
-      // Если общий счёт - возвращаем сумму дневных бюджетов как "доступный бюджет на день"
+      // Если общий счёт - пробуем GetBalance API v4 Live для получения реального баланса
       if (hasSharedAccount) {
-        console.log(`[getAccountBalance] Shared account: spend=${sharedAccountSpend}, dailyBudget=${totalDailyBudget}, activeCampaigns=${activeCampaignsCount}`);
+        console.log(`[getAccountBalance] Shared account detected, spend=${sharedAccountSpend}, trying GetBalance...`);
 
-        // Возвращаем дневной бюджет как условный "баланс" - это сколько можно потратить в день
-        // Это не реальный баланс счёта, но полезная метрика
+        // Берём ID первой кампании для GetBalance
+        const campaignIds = campaigns.map((c: any) => c.Id).slice(0, 10);
+
+        try {
+          const balanceResponse = await axios.post(
+            YANDEX_API_V4_LIVE_URL,
+            {
+              method: 'GetBalance',
+              token: accessToken,
+              param: campaignIds,
+            },
+            {
+              headers: {
+                'Content-Type': 'application/json',
+                'Accept-Language': 'ru',
+              },
+            }
+          );
+
+          console.log('[getAccountBalance] GetBalance response:', JSON.stringify(balanceResponse.data, null, 2));
+
+          // GetBalance возвращает массив с Rest (баланс общего счёта) для каждой кампании
+          const balanceData = balanceResponse.data.data;
+          if (balanceData && balanceData.length > 0) {
+            // При общем счёте Rest одинаков для всех кампаний
+            const rest = balanceData[0].Rest;
+            if (rest !== undefined && rest !== null) {
+              console.log('[getAccountBalance] Got shared account balance via GetBalance:', rest);
+              return {
+                amount: rest,
+                currency,
+                amountAvailableForTransfer: 0,
+                source: 'shared_account',
+              };
+            }
+          }
+        } catch (balanceError: any) {
+          console.log('[getAccountBalance] GetBalance not available:', balanceError.response?.data || balanceError.message);
+        }
+
+        // Fallback - возвращаем сумму дневных бюджетов
+        console.log(`[getAccountBalance] GetBalance failed, using dailyBudget=${totalDailyBudget}, activeCampaigns=${activeCampaignsCount}`);
         return {
           amount: totalDailyBudget,
           currency,
