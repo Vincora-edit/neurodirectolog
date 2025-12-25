@@ -1,0 +1,10 @@
+[
+  {
+    "id": "admin-1",
+    "email": "admin@neurodirectolog.ru",
+    "password": "$2b$10$9ER4V8.961aMHoXkF.1bbu1S5UicvM8LNFPVADMM/QNy3MyzszF8e",
+    "name": "Администратор",
+    "isAdmin": true,
+    "createdAt": "2025-12-25T09:49:39.967Z"
+  }
+]

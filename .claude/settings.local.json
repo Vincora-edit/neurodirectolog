@@ -73,7 +73,31 @@
       "Bash(host:*)",
       "Bash(DEPLOY_PASSWORD='c9R+eLvxtQJ-,x' ./deploy.sh update-env)",
       "Bash(nginx -t:*)",
-      "Bash(systemctl reload:*)"
+      "Bash(systemctl reload:*)",
+      "Bash(brew services start:*)",
+      "Bash(ollama pull:*)",
+      "Bash(npx tsc --noEmit)",
+      "Bash(npm run test:run:*)",
+      "Bash(source:*)",
+      "Bash(ssh root@31.129.33.233 \"cd /var/www/neurodirectolog && git pull && pm2 restart all\")",
+      "Bash(ssh -p 2222 root@31.129.33.233 \"cd /var/www/neurodirectolog && git pull && pm2 restart all\")",
+      "Bash(ssh root@91.222.239.217 \"cd /var/www/neurodirectolog && git pull && pm2 restart all\")",
+      "Bash(sshpass -p 'c9R+eLvxtQJ-,x' ssh -o StrictHostKeyChecking=no root@91.222.239.217 \"cd /var/www/neurodirectolog && git pull && pm2 restart all\")",
+      "Bash(sshpass -p 'c9R+eLvxtQJ-,x' ssh -o StrictHostKeyChecking=no root@91.222.239.217 \"find /var /home /root -name ''neurodirectolog'' -type d 2>/dev/null | head -5\")",
+      "Bash(sshpass -p 'c9R+eLvxtQJ-,x' ssh -o StrictHostKeyChecking=no root@91.222.239.217 \"cd /root/neurodirectolog && git pull && pm2 restart all\")",
+      "Bash(sshpass -p 'c9R+eLvxtQJ-,x' ssh -o StrictHostKeyChecking=no root@91.222.239.217 \"cd /root/neurodirectolog && git stash && git pull && pm2 restart all\")",
+      "Bash(sshpass -p 'c9R+eLvxtQJ-,x' ssh -o StrictHostKeyChecking=no root@91.222.239.217 \"cd /root/neurodirectolog && rm -f setup-domain.sh && git pull && pm2 restart all\")",
+      "Bash(sshpass -p 'c9R+eLvxtQJ-,x' ssh -o StrictHostKeyChecking=no root@91.222.239.217 \"source ~/.nvm/nvm.sh 2>/dev/null || source ~/.bashrc 2>/dev/null; pm2 restart all || /root/.nvm/versions/node/*/bin/pm2 restart all || npx pm2 restart all\")",
+      "Bash(sshpass -p 'c9R+eLvxtQJ-,x' ssh -o StrictHostKeyChecking=no root@91.222.239.217 \"which node; which pm2; ls -la /usr/local/bin/ | grep -E ''node|pm2''; docker ps\")",
+      "Bash(sshpass -p 'c9R+eLvxtQJ-,x' ssh -o StrictHostKeyChecking=no root@91.222.239.217 \"cd /root/neurodirectolog && docker-compose build server && docker-compose up -d server\")",
+      "Bash(sshpass -p 'c9R+eLvxtQJ-,x' ssh -o StrictHostKeyChecking=no root@91.222.239.217 \"cd /root/neurodirectolog && docker-compose config --services\")",
+      "Bash(sshpass -p 'c9R+eLvxtQJ-,x' ssh -o StrictHostKeyChecking=no root@91.222.239.217 \"cd /root/neurodirectolog && ls -la docker-compose*.yml && cat docker-compose.prod.yml | head -50\")",
+      "Bash(sshpass -p 'c9R+eLvxtQJ-,x' ssh -o StrictHostKeyChecking=no root@91.222.239.217 \"cd /root/neurodirectolog && docker-compose -f docker-compose.prod.yml build server && docker-compose -f docker-compose.prod.yml up -d server\")",
+      "Bash(sshpass -p 'c9R+eLvxtQJ-,x' ssh -o StrictHostKeyChecking=no root@91.222.239.217 \"docker stop neurodirectolog-server && docker rm neurodirectolog-server && cd /root/neurodirectolog && docker-compose -f docker-compose.prod.yml up -d server\")",
+      "Bash(sshpass -p 'c9R+eLvxtQJ-,x' ssh -o StrictHostKeyChecking=no root@91.222.239.217 \"docker run -d --name neurodirectolog-server --network neurodirectolog_neurodirectolog-network -p 3001:3001 -e NODE_ENV=production -e PORT=3001 -e CLICKHOUSE_HOST=http://neurodirectolog-clickhouse:8123 --env-file /root/neurodirectolog/.env neurodirectolog_server:latest\")",
+      "Bash(sshpass -p 'c9R+eLvxtQJ-,x' ssh -o StrictHostKeyChecking=no root@91.222.239.217 \"docker ps | grep neurodirectolog-server && docker logs neurodirectolog-server --tail 20\")",
+      "Bash(sshpass -p 'c9R+eLvxtQJ-,x' ssh -o StrictHostKeyChecking=no root@91.222.239.217 \"docker logs neurodirectolog-server --tail 100 2>&1 | grep -A 5 ''getAccountBalance''\")",
+      "Bash(git rm:*)"
     ]
   }
 }
