@@ -17,16 +17,32 @@ export function MetricsCards({ totalStats, budgetForecast }: MetricsCardsProps) 
   const cr = totalStats.clicks > 0 ? (totalStats.conversions / totalStats.clicks) * 100 : 0;
   const cpl = totalStats.conversions > 0 ? totalStats.cost / totalStats.conversions : 0;
 
+  // Определяем цвет карточки бюджета по количеству дней
+  const daysRemaining = budgetForecast?.forecast?.daysRemaining;
+  const getBudgetColors = () => {
+    if (daysRemaining === null || daysRemaining === undefined) {
+      return { bg: 'from-gray-500 to-gray-600', text: 'text-gray-100' };
+    }
+    if (daysRemaining < 3) {
+      return { bg: 'from-red-500 to-rose-600', text: 'text-red-100' };
+    }
+    if (daysRemaining < 7) {
+      return { bg: 'from-yellow-500 to-amber-600', text: 'text-yellow-100' };
+    }
+    return { bg: 'from-green-500 to-emerald-600', text: 'text-green-100' };
+  };
+  const budgetColors = getBudgetColors();
+
   return (
     <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4 mb-6">
       {/* Бюджет */}
-      <div className="bg-gradient-to-br from-green-500 to-emerald-600 rounded-xl shadow-lg p-4 text-white">
+      <div className={`bg-gradient-to-br ${budgetColors.bg} rounded-xl shadow-lg p-4 text-white`}>
         <div className="flex items-center gap-3">
           <div className="bg-white/20 p-2 rounded-lg shrink-0">
             <Wallet size={20} />
           </div>
           <div className="min-w-0">
-            <p className="text-xs text-green-100 mb-0.5">Бюджет</p>
+            <p className={`text-xs ${budgetColors.text} mb-0.5`}>Бюджет</p>
             <p className="text-xl font-bold truncate">
               {budgetForecast?.balance?.amount
                 ? budgetForecast.balance.amount.toLocaleString('ru-RU')
@@ -35,22 +51,21 @@ export function MetricsCards({ totalStats, budgetForecast }: MetricsCardsProps) 
             </p>
           </div>
         </div>
-        <div className="text-green-100 text-xs mt-2">
-          {budgetForecast?.forecast?.daysRemaining !== null &&
-          budgetForecast?.forecast?.daysRemaining !== undefined
-            ? `Хватит на ${budgetForecast.forecast.daysRemaining} дней`
+        <div className={`${budgetColors.text} text-xs mt-2`}>
+          {daysRemaining !== null && daysRemaining !== undefined
+            ? `Хватит на ${daysRemaining} дней`
             : ''}
         </div>
       </div>
 
       {/* Расход */}
-      <div className="bg-gradient-to-br from-red-500 to-rose-600 rounded-xl shadow-lg p-4 text-white">
+      <div className="bg-gradient-to-br from-orange-500 to-orange-600 rounded-xl shadow-lg p-4 text-white">
         <div className="flex items-center gap-3">
           <div className="bg-white/20 p-2 rounded-lg shrink-0">
             <DollarSign size={20} />
           </div>
           <div className="min-w-0">
-            <p className="text-xs text-red-100 mb-0.5">Расход</p>
+            <p className="text-xs text-orange-100 mb-0.5">Расход</p>
             <p className="text-xl font-bold truncate">{totalStats.cost.toLocaleString('ru-RU')} ₽</p>
           </div>
         </div>
