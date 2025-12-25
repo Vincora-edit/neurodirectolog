@@ -24,6 +24,8 @@ import {
   Link as LinkIcon,
   ChevronDown,
   ChevronUp,
+  ArrowUp,
+  ArrowDown,
   MousePointer,
   ArrowRight,
   X,
@@ -176,6 +178,10 @@ export function YandexDashboard() {
   const [openReportSections, setOpenReportSections] = useState(new Set(['audience']));
   const [audienceReportTab, setAudienceReportTab] = useState('search');
   const [technicalReportTab, setTechnicalReportTab] = useState('categories');
+
+  // Состояние сортировки таблиц отчётов
+  const [reportSortColumn, setReportSortColumn] = useState<string>('cost');
+  const [reportSortDirection, setReportSortDirection] = useState<'asc' | 'desc'>('desc');
   const [isLandingPagesOpen, setIsLandingPagesOpen] = useState(false);
   const [landingPages, setLandingPages] = useState<any[]>([]);
   const [isLoadingLandingPages, setIsLoadingLandingPages] = useState(false);
@@ -656,6 +662,40 @@ export function YandexDashboard() {
     }
   };
 
+  // Функция переключения сортировки
+  const handleSortClick = (column: string) => {
+    if (reportSortColumn === column) {
+      setReportSortDirection(reportSortDirection === 'asc' ? 'desc' : 'asc');
+    } else {
+      setReportSortColumn(column);
+      setReportSortDirection('desc');
+    }
+  };
+
+  // Компонент заголовка с сортировкой
+  const SortableHeader = ({ column, label, align = 'right' }: { column: string; label: string; align?: 'left' | 'right' }) => {
+    const isActive = reportSortColumn === column;
+    const SortIcon = reportSortDirection === 'asc' ? ArrowUp : ArrowDown;
+
+    return (
+      <th
+        className={`px-4 py-3 text-${align} text-xs font-medium text-gray-500 uppercase cursor-pointer hover:bg-gray-100 select-none transition-colors`}
+        onClick={() => handleSortClick(column)}
+      >
+        <div className={`flex items-center gap-1 ${align === 'right' ? 'justify-end' : ''}`}>
+          <span>{label}</span>
+          {isActive ? (
+            <SortIcon size={14} className="text-blue-600" />
+          ) : (
+            <div className="w-3.5 h-3.5 opacity-0 group-hover:opacity-30">
+              <ArrowDown size={14} className="text-gray-400" />
+            </div>
+          )}
+        </div>
+      </th>
+    );
+  };
+
   const renderReportTable = (reportId: string) => {
     const report = getReportData(reportId);
     const isPlacementsReport = reportId === 'placements';
@@ -683,29 +723,75 @@ export function YandexDashboard() {
       );
     }
 
+    // Сортируем данные
+    const sortedData = [...report.data].sort((a: any, b: any) => {
+      let aValue: number;
+      let bValue: number;
+
+      switch (reportSortColumn) {
+        case 'name':
+          const aName = (a.name || '').toString().toLowerCase();
+          const bName = (b.name || '').toString().toLowerCase();
+          return reportSortDirection === 'asc'
+            ? aName.localeCompare(bName, 'ru')
+            : bName.localeCompare(aName, 'ru');
+        case 'impressions':
+          aValue = a.impressions || 0;
+          bValue = b.impressions || 0;
+          break;
+        case 'clicks':
+          aValue = a.clicks || 0;
+          bValue = b.clicks || 0;
+          break;
+        case 'ctr':
+          aValue = a.impressions > 0 ? (a.clicks / a.impressions) * 100 : 0;
+          bValue = b.impressions > 0 ? (b.clicks / b.impressions) * 100 : 0;
+          break;
+        case 'cost':
+          aValue = a.cost || 0;
+          bValue = b.cost || 0;
+          break;
+        case 'cpc':
+          aValue = a.clicks > 0 ? a.cost / a.clicks : 0;
+          bValue = b.clicks > 0 ? b.cost / b.clicks : 0;
+          break;
+        case 'conversions':
+          aValue = a.conversions || 0;
+          bValue = b.conversions || 0;
+          break;
+        case 'cpl':
+          aValue = a.conversions > 0 ? a.cost / a.conversions : Infinity;
+          bValue = b.conversions > 0 ? b.cost / b.conversions : Infinity;
+          break;
+        default:
+          aValue = a.cost || 0;
+          bValue = b.cost || 0;
+      }
+
+      return reportSortDirection === 'asc' ? aValue - bValue : bValue - aValue;
+    });
+
     return (
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead className="bg-gray-50">
             <tr>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                {report.columnName}
-              </th>
+              <SortableHeader column="name" label={report.columnName} align="left" />
               {isPlacementsReport && (
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Тип</th>
               )}
-              <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Показы</th>
-              <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Клики</th>
-              <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">CTR</th>
-              <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Расход</th>
-              <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">CPC</th>
-              <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Конв.</th>
-              <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">CPL</th>
+              <SortableHeader column="impressions" label="Показы" />
+              <SortableHeader column="clicks" label="Клики" />
+              <SortableHeader column="ctr" label="CTR" />
+              <SortableHeader column="cost" label="Расход" />
+              <SortableHeader column="cpc" label="CPC" />
+              <SortableHeader column="conversions" label="Конв." />
+              <SortableHeader column="cpl" label="CPL" />
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
-            {report.data.length > 0 ? (
-              report.data.map((item: any, idx: number) => {
+            {sortedData.length > 0 ? (
+              sortedData.map((item: any, idx: number) => {
                 const cpl = item.conversions > 0 ? item.cost / item.conversions : 0;
                 const cpc = item.clicks > 0 ? item.cost / item.clicks : 0;
                 const ctr = item.impressions > 0 ? (item.clicks / item.impressions) * 100 : 0;
