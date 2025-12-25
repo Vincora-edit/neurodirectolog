@@ -96,7 +96,6 @@ interface DashboardHeaderProps {
   lastSyncAt?: string;
 
   // Header state
-  isScrolled: boolean;
   isCollapsed: boolean;
   onCollapsedChange: (collapsed: boolean) => void;
 }
@@ -129,7 +128,6 @@ export function DashboardHeader({
   isSyncing,
   onSync,
   lastSyncAt,
-  isScrolled,
   isCollapsed,
   onCollapsedChange,
 }: DashboardHeaderProps) {
@@ -188,11 +186,7 @@ export function DashboardHeader({
       >
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4">
           {/* Первая строка: Заголовок и кнопка обновления */}
-          <div
-            className={`flex items-start justify-between overflow-hidden ${
-              isScrolled ? 'hidden' : 'mb-4'
-            }`}
-          >
+          <div className="flex items-start justify-between mb-4">
             <div>
               <h1 className="text-3xl font-bold text-gray-900 mb-2">
                 {projectName || 'Аналитика Яндекс.Директ'}

@@ -147,7 +147,6 @@ export function YandexDashboard() {
   const [globalFilterAdId, setGlobalFilterAdId] = useState<string | null>(null);
 
   // UI состояние
-  const [isScrolled, setIsScrolled] = useState(false);
   const [isHeaderCollapsed, setIsHeaderCollapsed] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
 
@@ -168,15 +167,6 @@ export function YandexDashboard() {
   const [isLoadingGoals, setIsLoadingGoals] = useState(false);
   const [isSavingConnection, setIsSavingConnection] = useState(false);
   const [showConnectionsModal, setShowConnectionsModal] = useState(false);
-
-  // Scroll listener
-  useEffect(() => {
-    const handleScroll = () => {
-      setIsScrolled(window.scrollY > 100);
-    };
-    window.addEventListener('scroll', handleScroll);
-    return () => window.removeEventListener('scroll', handleScroll);
-  }, []);
 
   // Загрузка проектов
   const { data: projects = [], isLoading: projectsLoading } = useQuery({
@@ -799,7 +789,6 @@ export function YandexDashboard() {
         isSyncing={isSyncing}
         onSync={handleSync}
         lastSyncAt={activeConnection?.lastSyncAt}
-        isScrolled={isScrolled}
         isCollapsed={isHeaderCollapsed}
         onCollapsedChange={setIsHeaderCollapsed}
       />
