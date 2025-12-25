@@ -1645,6 +1645,7 @@ router.get('/criteria/:projectId', async (req, res) => {
 /**
  * GET /api/yandex/ad-texts/:projectId
  * Получить статистику по текстам объявлений
+ * Читаем из ClickHouse (ad_performance + ad_contents), fallback на Яндекс API
  */
 router.get('/ad-texts/:projectId', async (req, res) => {
   try {
@@ -1674,7 +1675,21 @@ router.get('/ad-texts/:projectId', async (req, res) => {
       startDate.setDate(startDate.getDate() - parseInt((days as string) || '30'));
     }
 
-    // Получаем список кампаний для этого подключения
+    const dateFrom = startDate.toISOString().split('T')[0];
+    const dateTo = endDate.toISOString().split('T')[0];
+
+    // Сначала пробуем из ClickHouse
+    try {
+      const cachedData = await clickhouseService.getAdTexts(connection.id, dateFrom, dateTo);
+      if (cachedData && cachedData.length > 0) {
+        console.log(`[ad-texts] Returning ${cachedData.length} cached records from ClickHouse`);
+        return res.json(cachedData);
+      }
+    } catch (cacheError) {
+      console.log(`[ad-texts] ClickHouse cache miss, falling back to API`);
+    }
+
+    // Fallback на Яндекс API
     const campaigns = await clickhouseService.getCampaignsByConnectionId(connection.id);
     const campaignIds = campaigns.map(c => parseInt(c.externalId));
 
@@ -1682,11 +1697,6 @@ router.get('/ad-texts/:projectId', async (req, res) => {
       return res.json([]);
     }
 
-    // Форматируем даты для API
-    const dateFrom = startDate.toISOString().split('T')[0];
-    const dateTo = endDate.toISOString().split('T')[0];
-
-    // Получаем статистику по текстам объявлений
     const adTextsData = await yandexDirectService.getAdTextReport(
       connection.accessToken,
       connection.login,

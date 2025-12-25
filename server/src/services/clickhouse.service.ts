@@ -2205,4 +2205,41 @@ export const clickhouseService = {
       cost: parseFloat(row.cost) || 0,
     }));
   },
+
+  // Ad Texts - объединяем ad_contents (заголовки) с ad_performance (статистика)
+  async getAdTexts(connectionId: string, startDate: string, endDate: string): Promise<any[]> {
+    const result = await client.query({
+      query: `
+        SELECT
+          ap.ad_id,
+          ac.title,
+          ac.title2,
+          SUM(ap.impressions) as impressions,
+          SUM(ap.clicks) as clicks,
+          SUM(ap.cost) as cost
+        FROM ad_performance ap
+        LEFT JOIN ad_contents ac ON ap.ad_id = ac.ad_id AND ap.connection_id = ac.connection_id
+        WHERE ap.connection_id = {connectionId:String}
+          AND ap.date >= {startDate:Date}
+          AND ap.date <= {endDate:Date}
+        GROUP BY ap.ad_id, ac.title, ac.title2
+        ORDER BY cost DESC
+        LIMIT 50
+      `,
+      query_params: { connectionId, startDate, endDate },
+      format: 'JSONEachRow',
+    });
+
+    const rows = await result.json<any>();
+    return rows.map((row: any) => ({
+      adId: row.ad_id,
+      title: row.title || 'Без заголовка',
+      title2: row.title2 || '',
+      impressions: parseInt(row.impressions) || 0,
+      clicks: parseInt(row.clicks) || 0,
+      cost: parseFloat(row.cost) || 0,
+      ctr: row.impressions > 0 ? (row.clicks / row.impressions) * 100 : 0,
+      avgCpc: row.clicks > 0 ? row.cost / row.clicks : 0,
+    }));
+  },
 };
