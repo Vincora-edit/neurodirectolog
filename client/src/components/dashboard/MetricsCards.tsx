@@ -36,82 +36,78 @@ export function MetricsCards({ totalStats, budgetForecast }: MetricsCardsProps) 
   return (
     <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4 mb-6">
       {/* Бюджет */}
-      <div className={`bg-gradient-to-br ${budgetColors.bg} rounded-xl shadow-lg p-4 text-white`}>
-        <div className="flex items-center gap-3 h-full">
+      <div className={`bg-gradient-to-br ${budgetColors.bg} rounded-xl shadow-lg p-4 text-white flex items-center`}>
+        <div className="flex items-center gap-3">
           <div className="bg-white/20 p-2 rounded-lg shrink-0">
             <Wallet size={20} />
           </div>
           <div className="min-w-0">
-            <p className={`text-xs ${budgetColors.text} mb-0.5`}>Бюджет</p>
-            <p className="text-xl font-bold truncate">
+            <p className={`text-xs ${budgetColors.text}`}>Бюджет</p>
+            <p className="text-xl font-bold truncate leading-tight">
               {budgetForecast?.balance?.amount
                 ? budgetForecast.balance.amount.toLocaleString('ru-RU')
                 : '—'}{' '}
               ₽
             </p>
-            <p className={`${budgetColors.text} text-xs mt-0.5`}>
-              {daysRemaining !== null && daysRemaining !== undefined
-                ? `Хватит на ${daysRemaining} дней`
-                : '\u00A0'}
-            </p>
+            {daysRemaining !== null && daysRemaining !== undefined && (
+              <p className={`${budgetColors.text} text-xs`}>
+                Хватит на {daysRemaining} дней
+              </p>
+            )}
           </div>
         </div>
       </div>
 
       {/* Расход */}
-      <div className="bg-gradient-to-br from-orange-500 to-orange-600 rounded-xl shadow-lg p-4 text-white">
-        <div className="flex items-center gap-3 h-full">
+      <div className="bg-gradient-to-br from-orange-500 to-orange-600 rounded-xl shadow-lg p-4 text-white flex items-center">
+        <div className="flex items-center gap-3">
           <div className="bg-white/20 p-2 rounded-lg shrink-0">
             <DollarSign size={20} />
           </div>
           <div className="min-w-0">
-            <p className="text-xs text-orange-100 mb-0.5">Расход</p>
-            <p className="text-xl font-bold truncate">{totalStats.cost.toLocaleString('ru-RU')} ₽</p>
-            <p className="text-xs text-transparent mt-0.5">&nbsp;</p>
+            <p className="text-xs text-orange-100">Расход</p>
+            <p className="text-xl font-bold truncate leading-tight">{totalStats.cost.toLocaleString('ru-RU')} ₽</p>
           </div>
         </div>
       </div>
 
       {/* CR */}
-      <div className="bg-gradient-to-br from-blue-500 to-indigo-600 rounded-xl shadow-lg p-4 text-white">
-        <div className="flex items-center gap-3 h-full">
+      <div className="bg-gradient-to-br from-blue-500 to-indigo-600 rounded-xl shadow-lg p-4 text-white flex items-center">
+        <div className="flex items-center gap-3">
           <div className="bg-white/20 p-2 rounded-lg shrink-0">
             <TrendingUp size={20} />
           </div>
           <div className="min-w-0">
-            <p className="text-xs text-blue-100 mb-0.5">CR</p>
-            <p className="text-xl font-bold">{cr.toFixed(2)}%</p>
-            <p className="text-xs text-transparent mt-0.5">&nbsp;</p>
+            <p className="text-xs text-blue-100">CR</p>
+            <p className="text-xl font-bold leading-tight">{cr.toFixed(2)}%</p>
           </div>
         </div>
       </div>
 
       {/* CPL */}
-      <div className="bg-gradient-to-br from-gray-500 to-gray-600 rounded-xl shadow-lg p-4 text-white">
-        <div className="flex items-center gap-3 h-full">
+      <div className="bg-gradient-to-br from-gray-500 to-gray-600 rounded-xl shadow-lg p-4 text-white flex items-center">
+        <div className="flex items-center gap-3">
           <div className="bg-white/20 p-2 rounded-lg shrink-0">
             <TrendingDown size={20} />
           </div>
           <div className="min-w-0">
-            <p className="text-xs text-gray-100 mb-0.5">CPL</p>
-            <p className="text-xl font-bold truncate">
+            <p className="text-xs text-gray-100">CPL</p>
+            <p className="text-xl font-bold truncate leading-tight">
               {cpl > 0 ? Math.round(cpl).toLocaleString('ru-RU') : '—'} ₽
             </p>
-            <p className="text-xs text-transparent mt-0.5">&nbsp;</p>
           </div>
         </div>
       </div>
 
       {/* Конверсии */}
-      <div className="bg-gradient-to-br from-purple-500 to-violet-600 rounded-xl shadow-lg p-4 text-white">
-        <div className="flex items-center gap-3 h-full">
+      <div className="bg-gradient-to-br from-purple-500 to-violet-600 rounded-xl shadow-lg p-4 text-white flex items-center">
+        <div className="flex items-center gap-3">
           <div className="bg-white/20 p-2 rounded-lg shrink-0">
             <Target size={20} />
           </div>
           <div className="min-w-0">
-            <p className="text-xs text-purple-100 mb-0.5">Конверсии</p>
-            <p className="text-xl font-bold">{totalStats.conversions.toLocaleString('ru-RU')}</p>
-            <p className="text-xs text-transparent mt-0.5">&nbsp;</p>
+            <p className="text-xs text-purple-100">Конверсии</p>
+            <p className="text-xl font-bold leading-tight">{totalStats.conversions.toLocaleString('ru-RU')}</p>
           </div>
         </div>
       </div>
