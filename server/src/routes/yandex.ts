@@ -165,6 +165,134 @@ router.post('/connect-simple', authenticate, async (req, res, next) => {
 });
 
 /**
+ * POST /api/yandex/exchange-code
+ * Обменять код авторизации на токен и проверить тип аккаунта (agency/direct)
+ * Возвращает информацию о пользователе и список клиентов для агентского аккаунта
+ */
+router.post('/exchange-code', authenticate, async (req, res) => {
+  try {
+    const { code } = req.body;
+    if (!code) {
+      return res.status(400).json({ error: 'Authorization code is required' });
+    }
+
+    // 1. Обмениваем код на токены
+    const tokens = await yandexDirectService.getTokens(
+      code,
+      YANDEX_CLIENT_ID,
+      YANDEX_CLIENT_SECRET,
+      REDIRECT_URI
+    );
+
+    // 2. Получаем информацию о пользователе
+    const userInfo = await yandexDirectService.getUserInfo(tokens.access_token);
+
+    // 3. Проверяем, является ли это агентским аккаунтом
+    const agencyInfo = await yandexDirectService.getAgencyClients(tokens.access_token);
+
+    res.json({
+      accessToken: tokens.access_token,
+      refreshToken: tokens.refresh_token,
+      login: userInfo.login,
+      isAgency: agencyInfo?.isAgency || false,
+      agencyClients: agencyInfo?.clients || []
+    });
+  } catch (error: any) {
+    console.error('Failed to exchange code:', error);
+    res.status(500).json({ error: error.message || 'Failed to exchange authorization code' });
+  }
+});
+
+/**
+ * GET /api/yandex/agency-clients
+ * Получить список клиентов агентства по accessToken
+ */
+router.get('/agency-clients', authenticate, async (req, res) => {
+  try {
+    const { accessToken } = req.query;
+    if (!accessToken) {
+      return res.status(400).json({ error: 'Access token is required' });
+    }
+
+    const agencyInfo = await yandexDirectService.getAgencyClients(accessToken as string);
+
+    if (!agencyInfo) {
+      return res.status(500).json({ error: 'Failed to fetch agency clients' });
+    }
+
+    res.json({
+      isAgency: agencyInfo.isAgency,
+      clients: agencyInfo.clients
+    });
+  } catch (error: any) {
+    console.error('Failed to get agency clients:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * POST /api/yandex/connect-agency-client
+ * Подключить конкретного клиента агентства
+ */
+router.post('/connect-agency-client', authenticate, async (req, res) => {
+  try {
+    const { accessToken, refreshToken, agencyLogin, clientLogin, projectId, metrikaCounterId, metrikaToken, conversionGoals } = req.body;
+    const userId = (req as AuthRequest).userId;
+
+    if (!accessToken || !clientLogin || !projectId) {
+      return res.status(400).json({ error: 'accessToken, clientLogin and projectId are required' });
+    }
+
+    // 1. Проверяем доступ к клиенту - пытаемся получить кампании с Client-Login
+    try {
+      await yandexDirectService.getCampaigns(accessToken, clientLogin);
+    } catch (error: any) {
+      console.error('Failed to access client campaigns:', error);
+      return res.status(400).json({ error: 'Cannot access client campaigns. Check permissions.' });
+    }
+
+    // 2. Валидируем токен Метрики если указан
+    if (metrikaToken && metrikaCounterId) {
+      const isValid = await yandexMetrikaService.validateToken(metrikaToken, metrikaCounterId);
+      if (!isValid) {
+        return res.status(400).json({ error: 'Invalid Metrika token or counter ID' });
+      }
+    }
+
+    // 3. Сохраняем подключение в ClickHouse
+    // Для агентского аккаунта в login храним clientLogin (логин клиента)
+    // Это важно, т.к. Client-Login header должен содержать именно логин клиента
+    const connectionId = await clickhouseService.createConnection({
+      userId,
+      projectId,
+      login: clientLogin, // Логин клиента, который будет использоваться в Client-Login header
+      accessToken,
+      refreshToken: refreshToken || '',
+      metrikaCounterId: metrikaCounterId || '',
+      metrikaToken: metrikaToken || '',
+      conversionGoals: JSON.stringify(conversionGoals || []),
+      status: 'active',
+      lastSyncAt: new Date(),
+    });
+
+    // 4. Запускаем первую синхронизацию
+    runManualSync(connectionId).catch(err => {
+      console.error('Initial sync failed:', err);
+    });
+
+    res.json({
+      success: true,
+      connectionId,
+      login: clientLogin,
+      isAgencyClient: true
+    });
+  } catch (error: any) {
+    console.error('Failed to connect agency client:', error);
+    res.status(500).json({ error: error.message || 'Failed to connect agency client' });
+  }
+});
+
+/**
  * GET /api/yandex/connections/:projectId
  * Получить все подключения для проекта (мультиаккаунтность)
  */

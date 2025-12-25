@@ -276,6 +276,90 @@ export const yandexDirectService = {
   },
 
   /**
+   * Проверить, является ли аккаунт агентским, и получить список клиентов
+   * Возвращает список клиентов агентства или null если это обычный рекламодатель
+   */
+  async getAgencyClients(accessToken: string): Promise<{
+    isAgency: boolean;
+    clients: Array<{
+      login: string;
+      clientId: number;
+      clientInfo: string;
+      currency: string;
+      archived: boolean;
+    }>;
+  } | null> {
+    try {
+      console.log('[getAgencyClients] Checking if account is agency...');
+
+      const response = await axios.post(
+        `${YANDEX_API_URL}/agencyclients`,
+        {
+          method: 'get',
+          params: {
+            SelectionCriteria: {
+              Archived: 'NO'
+            },
+            FieldNames: ['Login', 'ClientId', 'ClientInfo', 'Currency', 'Archived'],
+            Page: {
+              Limit: 10000,
+              Offset: 0
+            }
+          }
+        },
+        {
+          headers: {
+            'Authorization': `Bearer ${accessToken}`,
+            'Accept-Language': 'ru',
+          },
+        }
+      );
+
+      console.log('[getAgencyClients] Response:', JSON.stringify(response.data, null, 2));
+
+      if (response.data.error) {
+        // Код ошибки 53 = "Authorization error" - это не агентский аккаунт
+        // Код ошибки 152 = "The given login is not a representative of an agency"
+        const errorCode = response.data.error.error_code;
+        if (errorCode === 53 || errorCode === 152) {
+          console.log('[getAgencyClients] Not an agency account');
+          return { isAgency: false, clients: [] };
+        }
+        console.error('[getAgencyClients] API Error:', response.data.error);
+        return null;
+      }
+
+      const clients = response.data.result?.Clients || [];
+
+      if (clients.length === 0) {
+        console.log('[getAgencyClients] No clients found, might not be agency');
+        return { isAgency: false, clients: [] };
+      }
+
+      console.log(`[getAgencyClients] Found ${clients.length} agency clients`);
+
+      return {
+        isAgency: true,
+        clients: clients.map((c: any) => ({
+          login: c.Login,
+          clientId: c.ClientId,
+          clientInfo: c.ClientInfo || c.Login,
+          currency: c.Currency || 'RUB',
+          archived: c.Archived === 'YES'
+        }))
+      };
+    } catch (error: any) {
+      // Ошибка 403 или подобные - не агентский аккаунт
+      if (error.response?.status === 403 || error.response?.status === 401) {
+        console.log('[getAgencyClients] Not authorized as agency');
+        return { isAgency: false, clients: [] };
+      }
+      console.error('[getAgencyClients] Error:', error.message);
+      return null;
+    }
+  },
+
+  /**
    * Вычислить метрики на основе сырых данных
    */
   calculateMetrics(stats: YandexCampaignStats, conversions: number = 0, revenue: number = 0) {
