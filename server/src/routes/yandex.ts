@@ -1123,12 +1123,23 @@ router.get('/device-stats/:projectId', async (req, res) => {
       return res.json([]);
     }
 
+    // Получаем goalIds для запроса реальных конверсий
+    let goalIds: string[] = [];
+    try {
+      if (connection.conversionGoals) {
+        goalIds = JSON.parse(connection.conversionGoals);
+      }
+    } catch (e) {
+      console.log('[device-stats] No conversion goals configured');
+    }
+
     const deviceStats = await yandexDirectService.getDeviceStats(
       connection.accessToken,
       connection.login,
       campaignIds,
       dateFrom,
-      dateTo
+      dateTo,
+      goalIds.length > 0 ? goalIds : undefined
     );
 
     // Агрегируем данные по устройствам
@@ -1138,6 +1149,7 @@ router.get('/device-stats/:projectId', async (req, res) => {
       clicks: number;
       cost: number;
       bounces: number;
+      conversions: number;
     }>();
 
     deviceStats.forEach((row: any) => {
@@ -1148,11 +1160,13 @@ router.get('/device-stats/:projectId', async (req, res) => {
         clicks: 0,
         cost: 0,
         bounces: 0,
+        conversions: 0,
       };
 
       existing.impressions += parseInt(row.Impressions) || 0;
       existing.clicks += parseInt(row.Clicks) || 0;
       existing.cost += parseFloat(row.Cost) || 0;
+      existing.conversions += parseInt(row.Conversions) || 0;
       const bounceRate = parseFloat(row.BounceRate) || 0;
       const clicks = parseInt(row.Clicks) || 0;
       existing.bounces += Math.round(clicks * bounceRate / 100);
@@ -1171,20 +1185,12 @@ router.get('/device-stats/:projectId', async (req, res) => {
       ctr: d.impressions > 0 ? Math.round((d.clicks / d.impressions) * 10000) / 100 : 0,
       avgCpc: d.clicks > 0 ? Math.round((d.cost / d.clicks) * 100) / 100 : 0,
       bounceRate: d.clicks > 0 ? Math.round((d.bounces / d.clicks) * 10000) / 100 : 0,
+      conversions: d.conversions,
     }));
 
     result.sort((a, b) => b.clicks - a.clicks);
 
-    // Получаем общее количество конверсий для пропорционального распределения
-    const totalConversions = await clickhouseService.getTotalConversions(connection.id, dateFrom, dateTo);
-    const totalClicks = result.reduce((sum: number, d: any) => sum + (d.clicks || 0), 0);
-
-    const enrichedResult = result.map((d: any) => ({
-      ...d,
-      conversions: totalClicks > 0 ? Math.round(((d.clicks || 0) / totalClicks) * totalConversions) : 0,
-    }));
-
-    res.json(enrichedResult);
+    res.json(result);
   } catch (error: any) {
     console.error('Failed to get device stats:', error);
     res.status(500).json({ error: error.message });
@@ -1246,24 +1252,27 @@ router.get('/search-queries/:projectId', async (req, res) => {
     const dateFrom = startDate.toISOString().split('T')[0];
     const dateTo = endDate.toISOString().split('T')[0];
 
+    // Получаем goalIds для запроса реальных конверсий
+    let goalIds: string[] = [];
+    try {
+      if (connection.conversionGoals) {
+        goalIds = JSON.parse(connection.conversionGoals);
+      }
+    } catch (e) {
+      console.log('[search-queries] No conversion goals configured');
+    }
+
     const searchQueries = await yandexDirectService.getSearchQueryReport(
       connection.accessToken,
       connection.login,
       campaignIds,
       dateFrom,
-      dateTo
+      dateTo,
+      goalIds.length > 0 ? goalIds : undefined
     );
 
-    // Получаем общее количество конверсий для пропорционального распределения
-    const totalConversions = await clickhouseService.getTotalConversions(connection.id, dateFrom, dateTo);
-    const totalClicks = searchQueries.reduce((sum: number, d: any) => sum + (d.clicks || 0), 0);
-
-    const enrichedData = searchQueries.map((d: any) => ({
-      ...d,
-      conversions: totalClicks > 0 ? Math.round(((d.clicks || 0) / totalClicks) * totalConversions) : 0,
-    }));
-
-    res.json(enrichedData);
+    // Данные уже содержат реальные конверсии (или 0 если API не поддерживает)
+    res.json(searchQueries);
   } catch (error: any) {
     console.error('Failed to get search queries:', error);
     res.status(500).json({ error: error.message });
@@ -1325,24 +1334,27 @@ router.get('/demographics/:projectId', async (req, res) => {
       return res.json([]);
     }
 
+    // Получаем goalIds для запроса реальных конверсий
+    let goalIds: string[] = [];
+    try {
+      if (connection.conversionGoals) {
+        goalIds = JSON.parse(connection.conversionGoals);
+      }
+    } catch (e) {
+      console.log('[demographics] No conversion goals configured');
+    }
+
     const demographics = await yandexDirectService.getDemographicsReport(
       connection.accessToken,
       connection.login,
       campaignIds,
       dateFrom,
-      dateTo
+      dateTo,
+      goalIds.length > 0 ? goalIds : undefined
     );
 
-    // Получаем общее количество конверсий для пропорционального распределения
-    const totalConversions = await clickhouseService.getTotalConversions(connection.id, dateFrom, dateTo);
-    const totalClicks = demographics.reduce((sum: number, d: any) => sum + (d.clicks || 0), 0);
-
-    const enrichedData = demographics.map((d: any) => ({
-      ...d,
-      conversions: totalClicks > 0 ? Math.round(((d.clicks || 0) / totalClicks) * totalConversions) : 0,
-    }));
-
-    res.json(enrichedData);
+    // Данные уже содержат реальные конверсии
+    res.json(demographics);
   } catch (error: any) {
     console.error('Failed to get demographics:', error);
     res.status(500).json({ error: error.message });
@@ -1404,24 +1416,37 @@ router.get('/geo-report/:projectId', async (req, res) => {
       return res.json([]);
     }
 
-    const geoReport = await yandexDirectService.getGeoReport(
+    // Получаем goalIds для запроса реальных конверсий
+    let goalIds: string[] = [];
+    try {
+      if (connection.conversionGoals) {
+        goalIds = JSON.parse(connection.conversionGoals);
+      }
+    } catch (e) {
+      console.log('[geo-report] No conversion goals configured');
+    }
+
+    const geoReport = await yandexDirectService.getGeoStats(
       connection.accessToken,
       connection.login,
       campaignIds,
       dateFrom,
-      dateTo
+      dateTo,
+      goalIds.length > 0 ? goalIds : undefined
     );
 
-    // Получаем общее количество конверсий для пропорционального распределения
-    const totalConversions = await clickhouseService.getTotalConversions(connection.id, dateFrom, dateTo);
-    const totalClicks = geoReport.reduce((sum: number, d: any) => sum + (d.clicks || 0), 0);
-
-    const enrichedData = geoReport.map((d: any) => ({
-      ...d,
-      conversions: totalClicks > 0 ? Math.round(((d.clicks || 0) / totalClicks) * totalConversions) : 0,
+    // Трансформируем данные в формат для UI
+    const result = geoReport.map((row: any) => ({
+      region: row.LocationOfPresenceName || 'Неизвестно',
+      impressions: parseInt(row.Impressions) || 0,
+      clicks: parseInt(row.Clicks) || 0,
+      cost: parseFloat(row.Cost) || 0,
+      conversions: parseInt(row.Conversions) || 0,
+      ctr: row.Impressions > 0 ? (parseInt(row.Clicks) / parseInt(row.Impressions)) * 100 : 0,
+      avgCpc: row.Clicks > 0 ? parseFloat(row.Cost) / parseInt(row.Clicks) : 0,
     }));
 
-    res.json(enrichedData);
+    res.json(result);
   } catch (error: any) {
     console.error('Failed to get geo report:', error);
     res.status(500).json({ error: error.message });
@@ -1481,16 +1506,9 @@ router.get('/placements/:projectId', async (req, res) => {
       dateTo
     );
 
-    // Получаем общее количество конверсий для пропорционального распределения
-    const totalConversions = await clickhouseService.getTotalConversions(connection.id, dateFrom, dateTo);
-    const totalClicks = placements.reduce((sum: number, d: any) => sum + (d.clicks || 0), 0);
-
-    const enrichedData = placements.map((d: any) => ({
-      ...d,
-      conversions: totalClicks > 0 ? Math.round(((d.clicks || 0) / totalClicks) * totalConversions) : 0,
-    }));
-
-    res.json(enrichedData);
+    // Примечание: Yandex API не поддерживает конверсии с разбивкой по площадкам
+    // Возвращаем данные без конверсий
+    res.json(placements);
   } catch (error: any) {
     console.error('Failed to get placements:', error);
     res.status(500).json({ error: error.message });
@@ -1560,16 +1578,9 @@ router.get('/income/:projectId', async (req, res) => {
       dateTo
     );
 
-    // Получаем общее количество конверсий для пропорционального распределения
-    const totalConversions = await clickhouseService.getTotalConversions(connection.id, dateFrom, dateTo);
-    const totalClicks = incomeData.reduce((sum: number, d: any) => sum + (d.clicks || 0), 0);
-
-    const enrichedData = incomeData.map((d: any) => ({
-      ...d,
-      conversions: totalClicks > 0 ? Math.round(((d.clicks || 0) / totalClicks) * totalConversions) : 0,
-    }));
-
-    res.json(enrichedData);
+    // Примечание: Yandex API не поддерживает конверсии с разбивкой по доходу
+    // Возвращаем данные без конверсий
+    res.json(incomeData);
   } catch (error: any) {
     console.error('Failed to get income data:', error);
     res.status(500).json({ error: error.message });
@@ -1629,16 +1640,9 @@ router.get('/targeting-categories/:projectId', async (req, res) => {
       dateTo
     );
 
-    // Получаем общее количество конверсий для пропорционального распределения
-    const totalConversions = await clickhouseService.getTotalConversions(connection.id, dateFrom, dateTo);
-    const totalClicks = categoriesData.reduce((sum: number, d: any) => sum + (d.clicks || 0), 0);
-
-    const enrichedData = categoriesData.map((d: any) => ({
-      ...d,
-      conversions: totalClicks > 0 ? Math.round(((d.clicks || 0) / totalClicks) * totalConversions) : 0,
-    }));
-
-    res.json(enrichedData);
+    // Примечание: Yandex API не поддерживает конверсии с разбивкой по категориям таргетинга
+    // Возвращаем данные без конверсий
+    res.json(categoriesData);
   } catch (error: any) {
     console.error('Failed to get targeting categories:', error);
     res.status(500).json({ error: error.message });
@@ -1698,16 +1702,9 @@ router.get('/criteria/:projectId', async (req, res) => {
       dateTo
     );
 
-    // Получаем общее количество конверсий для пропорционального распределения
-    const totalConversions = await clickhouseService.getTotalConversions(connection.id, dateFrom, dateTo);
-    const totalClicks = criteriaData.reduce((sum: number, d: any) => sum + (d.clicks || 0), 0);
-
-    const enrichedData = criteriaData.map((d: any) => ({
-      ...d,
-      conversions: totalClicks > 0 ? Math.round(((d.clicks || 0) / totalClicks) * totalConversions) : 0,
-    }));
-
-    res.json(enrichedData);
+    // Примечание: Yandex API не поддерживает конверсии с разбивкой по условиям показа
+    // Возвращаем данные без конверсий
+    res.json(criteriaData);
   } catch (error: any) {
     console.error('Failed to get criteria:', error);
     res.status(500).json({ error: error.message });

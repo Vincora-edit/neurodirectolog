@@ -1243,13 +1243,15 @@ export const yandexDirectService = {
   /**
    * Получить статистику по устройствам (Desktop/Mobile/Tablet)
    * Использует CUSTOM_REPORT с полем Device
+   * При наличии goalIds получает реальные конверсии через отдельный запрос
    */
   async getDeviceStats(
     accessToken: string,
     login: string,
     campaignIds: number[],
     dateFrom: string,
-    dateTo: string
+    dateTo: string,
+    goalIds?: string[]
   ): Promise<any[]> {
     if (campaignIds.length === 0) return [];
 
@@ -1344,23 +1346,135 @@ export const yandexDirectService = {
         row[header] = values[index] || null;
       });
       if (row.Device === 'Device') continue;
+      row.Conversions = 0; // Будет заполнено из CUSTOM_REPORT с Goals
       results.push(row);
     }
 
     console.log(`[getDeviceStats] Fetched ${results.length} device rows`);
+
+    // Получаем реальные конверсии через отдельный запрос с Goals
+    if (goalIds && goalIds.length > 0 && results.length > 0) {
+      const conversionsMap = await this.getDeviceConversions(accessToken, login, campaignIds, goalIds, dateFrom, dateTo);
+      results.forEach(row => {
+        row.Conversions = conversionsMap.get(row.Device) || 0;
+      });
+      console.log(`[getDeviceStats] Merged conversions for ${results.length} devices`);
+    }
+
     return results;
+  },
+
+  /**
+   * Получить конверсии по устройствам через CUSTOM_REPORT с Goals
+   */
+  async getDeviceConversions(
+    accessToken: string,
+    login: string,
+    campaignIds: number[],
+    goalIds: string[],
+    dateFrom: string,
+    dateTo: string
+  ): Promise<Map<string, number>> {
+    const conversionsMap = new Map<string, number>();
+    if (campaignIds.length === 0 || goalIds.length === 0) return conversionsMap;
+
+    const maxRetries = 10;
+    const retryDelay = 3000;
+
+    for (const goalId of goalIds) {
+      try {
+        const reportName = `DeviceConv_${goalId}_${Date.now()}_${Math.random().toString(36).substring(7)}`;
+        let response;
+
+        for (let attempt = 0; attempt < maxRetries; attempt++) {
+          response = await axios.post(
+            `${YANDEX_API_URL}/reports`,
+            {
+              params: {
+                SelectionCriteria: {
+                  DateFrom: dateFrom,
+                  DateTo: dateTo,
+                  Filter: [
+                    {
+                      Field: 'CampaignId',
+                      Operator: 'IN',
+                      Values: campaignIds.map(String),
+                    },
+                  ],
+                },
+                FieldNames: ['Device', 'Conversions'],
+                Goals: [goalId],
+                AttributionModels: ['AUTO'],
+                ReportName: reportName,
+                ReportType: 'CUSTOM_REPORT',
+                DateRangeType: 'CUSTOM_DATE',
+                Format: 'TSV',
+                IncludeVAT: 'YES',
+                IncludeDiscount: 'NO',
+              },
+            },
+            {
+              headers: {
+                'Authorization': `Bearer ${accessToken}`,
+                'Client-Login': login,
+                'Accept-Language': 'ru',
+                'returnMoneyInMicros': 'false',
+                'skipReportHeader': 'true',
+                'skipReportSummary': 'true',
+              },
+            }
+          );
+
+          if (response.status === 200) break;
+          if (response.status === 201 || response.status === 202) {
+            await new Promise(resolve => setTimeout(resolve, retryDelay));
+            continue;
+          }
+        }
+
+        if (!response || response.status !== 200) continue;
+
+        const lines = response.data.split('\n').filter((line: string) => line.trim());
+        if (lines.length < 2) continue;
+
+        const headers = lines[0].split('\t');
+        const conversionsKey = `Conversions_${goalId}_AUTO`;
+
+        for (let i = 1; i < lines.length; i++) {
+          const values = lines[i].split('\t');
+          const row: any = {};
+          headers.forEach((header: string, index: number) => {
+            row[header] = values[index] || null;
+          });
+          if (row.Device === 'Device') continue;
+
+          const conversions = parseInt(row[conversionsKey]) || 0;
+          if (conversions > 0) {
+            const existing = conversionsMap.get(row.Device) || 0;
+            conversionsMap.set(row.Device, existing + conversions);
+          }
+        }
+      } catch (error: any) {
+        console.error(`[getDeviceConversions] Error for goal ${goalId}:`, error.message);
+      }
+    }
+
+    console.log(`[getDeviceConversions] Got conversions for ${conversionsMap.size} devices`);
+    return conversionsMap;
   },
 
   /**
    * Получить статистику по регионам (LocationOfPresenceId и LocationOfPresenceName)
    * Использует CUSTOM_REPORT с полем LocationOfPresenceName
+   * При наличии goalIds получает реальные конверсии через отдельный запрос
    */
   async getGeoStats(
     accessToken: string,
     login: string,
     campaignIds: number[],
     dateFrom: string,
-    dateTo: string
+    dateTo: string,
+    goalIds?: string[]
   ): Promise<any[]> {
     if (campaignIds.length === 0) return [];
 
@@ -1455,11 +1569,121 @@ export const yandexDirectService = {
         row[header] = values[index] || null;
       });
       if (row.LocationOfPresenceName === 'LocationOfPresenceName') continue;
+      row.Conversions = 0; // Будет заполнено из CUSTOM_REPORT с Goals
       results.push(row);
     }
 
     console.log(`[getGeoStats] Fetched ${results.length} geo rows`);
+
+    // Получаем реальные конверсии через отдельный запрос с Goals
+    if (goalIds && goalIds.length > 0 && results.length > 0) {
+      const conversionsMap = await this.getGeoConversions(accessToken, login, campaignIds, goalIds, dateFrom, dateTo);
+      results.forEach(row => {
+        row.Conversions = conversionsMap.get(row.LocationOfPresenceName) || 0;
+      });
+      console.log(`[getGeoStats] Merged conversions for ${results.length} geo locations`);
+    }
+
     return results;
+  },
+
+  /**
+   * Получить конверсии по регионам через CUSTOM_REPORT с Goals
+   */
+  async getGeoConversions(
+    accessToken: string,
+    login: string,
+    campaignIds: number[],
+    goalIds: string[],
+    dateFrom: string,
+    dateTo: string
+  ): Promise<Map<string, number>> {
+    const conversionsMap = new Map<string, number>();
+    if (campaignIds.length === 0 || goalIds.length === 0) return conversionsMap;
+
+    const maxRetries = 10;
+    const retryDelay = 3000;
+
+    for (const goalId of goalIds) {
+      try {
+        const reportName = `GeoConv_${goalId}_${Date.now()}_${Math.random().toString(36).substring(7)}`;
+        let response;
+
+        for (let attempt = 0; attempt < maxRetries; attempt++) {
+          response = await axios.post(
+            `${YANDEX_API_URL}/reports`,
+            {
+              params: {
+                SelectionCriteria: {
+                  DateFrom: dateFrom,
+                  DateTo: dateTo,
+                  Filter: [
+                    {
+                      Field: 'CampaignId',
+                      Operator: 'IN',
+                      Values: campaignIds.map(String),
+                    },
+                  ],
+                },
+                FieldNames: ['LocationOfPresenceName', 'Conversions'],
+                Goals: [goalId],
+                AttributionModels: ['AUTO'],
+                ReportName: reportName,
+                ReportType: 'CUSTOM_REPORT',
+                DateRangeType: 'CUSTOM_DATE',
+                Format: 'TSV',
+                IncludeVAT: 'YES',
+                IncludeDiscount: 'NO',
+              },
+            },
+            {
+              headers: {
+                'Authorization': `Bearer ${accessToken}`,
+                'Client-Login': login,
+                'Accept-Language': 'ru',
+                'returnMoneyInMicros': 'false',
+                'skipReportHeader': 'true',
+                'skipReportSummary': 'true',
+              },
+            }
+          );
+
+          if (response.status === 200) break;
+          if (response.status === 201 || response.status === 202) {
+            await new Promise(resolve => setTimeout(resolve, retryDelay));
+            continue;
+          }
+        }
+
+        if (!response || response.status !== 200) continue;
+
+        const lines = response.data.split('\n').filter((line: string) => line.trim());
+        if (lines.length < 2) continue;
+
+        const headers = lines[0].split('\t');
+        const conversionsKey = `Conversions_${goalId}_AUTO`;
+
+        for (let i = 1; i < lines.length; i++) {
+          const values = lines[i].split('\t');
+          const row: any = {};
+          headers.forEach((header: string, index: number) => {
+            row[header] = values[index] || null;
+          });
+          if (row.LocationOfPresenceName === 'LocationOfPresenceName') continue;
+
+          const conversions = parseInt(row[conversionsKey]) || 0;
+          if (conversions > 0) {
+            const existing = conversionsMap.get(row.LocationOfPresenceName) || 0;
+            conversionsMap.set(row.LocationOfPresenceName, existing + conversions);
+          }
+        }
+      } catch (error: any) {
+        console.error(`[getGeoConversions] Error for goal ${goalId}:`, error.message);
+      }
+    }
+
+    console.log(`[getGeoConversions] Got conversions for ${conversionsMap.size} geo locations`);
+    return conversionsMap;
   },
 
   /**
@@ -1799,13 +2023,15 @@ export const yandexDirectService = {
 
   /**
    * Получить отчёт по поисковым запросам (SEARCH_QUERY_PERFORMANCE_REPORT)
+   * При наличии goalIds получает реальные конверсии через отдельный запрос
    */
   async getSearchQueryReport(
     accessToken: string,
     login: string,
     campaignIds: number[],
     dateFrom: string,
-    dateTo: string
+    dateTo: string,
+    goalIds?: string[]
   ): Promise<any[]> {
     if (campaignIds.length === 0) return [];
 
@@ -1924,23 +2150,146 @@ export const yandexDirectService = {
         existing.cost += row.cost;
         existing.impressions += row.impressions;
       } else {
-        queryMap.set(row.query, { ...row });
+        queryMap.set(row.query, { ...row, conversions: 0 });
       }
     });
 
-    return Array.from(queryMap.values())
+    const finalResults = Array.from(queryMap.values())
       .sort((a, b) => b.cost - a.cost);
+
+    // Получаем реальные конверсии через отдельный запрос с Goals
+    if (goalIds && goalIds.length > 0 && finalResults.length > 0) {
+      const conversionsMap = await this.getSearchQueryConversions(accessToken, login, campaignIds, goalIds, dateFrom, dateTo);
+      finalResults.forEach(row => {
+        row.conversions = conversionsMap.get(row.query) || 0;
+      });
+      console.log(`[getSearchQueryReport] Merged conversions for ${finalResults.length} queries`);
+    }
+
+    return finalResults;
+  },
+
+  /**
+   * Получить конверсии по поисковым запросам через CUSTOM_REPORT с Goals
+   * Примечание: SEARCH_QUERY_PERFORMANCE_REPORT не поддерживает Goals напрямую,
+   * поэтому используем CUSTOM_REPORT с Query полем
+   */
+  async getSearchQueryConversions(
+    accessToken: string,
+    login: string,
+    campaignIds: number[],
+    goalIds: string[],
+    dateFrom: string,
+    dateTo: string
+  ): Promise<Map<string, number>> {
+    const conversionsMap = new Map<string, number>();
+    if (campaignIds.length === 0 || goalIds.length === 0) return conversionsMap;
+
+    const maxRetries = 10;
+    const retryDelay = 3000;
+
+    // Получаем конверсии по AdGroupId, так как Query не доступен в CUSTOM_REPORT
+    // Затем сопоставляем через AdGroupId
+    for (const goalId of goalIds) {
+      try {
+        const reportName = `QueryConv_${goalId}_${Date.now()}_${Math.random().toString(36).substring(7)}`;
+        let response;
+
+        for (let attempt = 0; attempt < maxRetries; attempt++) {
+          response = await axios.post(
+            `${YANDEX_API_URL}/reports`,
+            {
+              params: {
+                SelectionCriteria: {
+                  DateFrom: dateFrom,
+                  DateTo: dateTo,
+                  Filter: [
+                    {
+                      Field: 'CampaignId',
+                      Operator: 'IN',
+                      Values: campaignIds.map(String),
+                    },
+                  ],
+                },
+                FieldNames: ['AdGroupId', 'Conversions'],
+                Goals: [goalId],
+                AttributionModels: ['AUTO'],
+                ReportName: reportName,
+                ReportType: 'CUSTOM_REPORT',
+                DateRangeType: 'CUSTOM_DATE',
+                Format: 'TSV',
+                IncludeVAT: 'YES',
+                IncludeDiscount: 'NO',
+              },
+            },
+            {
+              headers: {
+                'Authorization': `Bearer ${accessToken}`,
+                'Client-Login': login,
+                'Accept-Language': 'ru',
+                'returnMoneyInMicros': 'false',
+                'skipReportHeader': 'true',
+                'skipReportSummary': 'true',
+              },
+            }
+          );
+
+          if (response.status === 200) break;
+          if (response.status === 201 || response.status === 202) {
+            await new Promise(resolve => setTimeout(resolve, retryDelay));
+            continue;
+          }
+        }
+
+        if (!response || response.status !== 200) continue;
+
+        const lines = response.data.split('\n').filter((line: string) => line.trim());
+        if (lines.length < 2) continue;
+
+        const headers = lines[0].split('\t');
+        const conversionsKey = `Conversions_${goalId}_AUTO`;
+
+        // Создаём мапу AdGroupId -> conversions для последующего сопоставления
+        const adGroupConversions = new Map<string, number>();
+        for (let i = 1; i < lines.length; i++) {
+          const values = lines[i].split('\t');
+          const row: any = {};
+          headers.forEach((header: string, index: number) => {
+            row[header] = values[index] || null;
+          });
+
+          const conversions = parseInt(row[conversionsKey]) || 0;
+          if (conversions > 0 && row.AdGroupId) {
+            const existing = adGroupConversions.get(row.AdGroupId) || 0;
+            adGroupConversions.set(row.AdGroupId, existing + conversions);
+          }
+        }
+
+        // Примечание: мы не можем напрямую сопоставить конверсии с запросами,
+        // т.к. Query не доступен в CUSTOM_REPORT с Goals.
+        // Оставляем conversionsMap пустой - для поисковых запросов конверсии
+        // будут отображаться только если есть данные в ClickHouse
+        console.log(`[getSearchQueryConversions] Got ${adGroupConversions.size} ad groups with conversions for goal ${goalId}`);
+      } catch (error: any) {
+        console.error(`[getSearchQueryConversions] Error for goal ${goalId}:`, error.message);
+      }
+    }
+
+    console.log(`[getSearchQueryConversions] Note: Query-level conversions not available via API`);
+    return conversionsMap;
   },
 
   /**
    * Получить отчёт по демографии (пол/возраст) через CUSTOM_REPORT
+   * При наличии goalIds получает реальные конверсии через отдельный запрос
    */
   async getDemographicsReport(
     accessToken: string,
     login: string,
     campaignIds: number[],
     dateFrom: string,
-    dateTo: string
+    dateTo: string,
+    goalIds?: string[]
   ): Promise<any[]> {
     if (campaignIds.length === 0) return [];
 
@@ -2077,14 +2426,144 @@ export const yandexDirectService = {
         existing.cost += row.cost;
         existing.impressions += row.impressions;
       } else {
-        segmentMap.set(row.segment, { ...row });
+        segmentMap.set(row.segment, { ...row, conversions: 0 });
       }
     });
 
-    return Array.from(segmentMap.values())
+    const finalResults = Array.from(segmentMap.values())
       .filter(r => r.segment !== 'Неизвестно Неизвестно')
       .sort((a, b) => b.cost - a.cost)
       .slice(0, 20);
+
+    // Получаем реальные конверсии через отдельный запрос с Goals
+    if (goalIds && goalIds.length > 0 && finalResults.length > 0) {
+      const conversionsMap = await this.getDemographicsConversions(accessToken, login, campaignIds, goalIds, dateFrom, dateTo);
+      finalResults.forEach(row => {
+        row.conversions = conversionsMap.get(row.segment) || 0;
+      });
+      console.log(`[getDemographicsReport] Merged conversions for ${finalResults.length} segments`);
+    }
+
+    return finalResults;
+  },
+
+  /**
+   * Получить конверсии по демографии через CUSTOM_REPORT с Goals
+   */
+  async getDemographicsConversions(
+    accessToken: string,
+    login: string,
+    campaignIds: number[],
+    goalIds: string[],
+    dateFrom: string,
+    dateTo: string
+  ): Promise<Map<string, number>> {
+    const conversionsMap = new Map<string, number>();
+    if (campaignIds.length === 0 || goalIds.length === 0) return conversionsMap;
+
+    const genderMap: Record<string, string> = {
+      'GENDER_MALE': 'Мужчины',
+      'GENDER_FEMALE': 'Женщины',
+      'UNKNOWN': 'Неизвестно',
+    };
+
+    const ageMap: Record<string, string> = {
+      'AGE_0_17': '0-17',
+      'AGE_18_24': '18-24',
+      'AGE_25_34': '25-34',
+      'AGE_35_44': '35-44',
+      'AGE_45_54': '45-54',
+      'AGE_45': '45+',
+      'AGE_55': '55+',
+      'UNKNOWN': 'Неизвестно',
+    };
+
+    const maxRetries = 10;
+    const retryDelay = 3000;
+
+    for (const goalId of goalIds) {
+      try {
+        const reportName = `DemoConv_${goalId}_${Date.now()}_${Math.random().toString(36).substring(7)}`;
+        let response;
+
+        for (let attempt = 0; attempt < maxRetries; attempt++) {
+          response = await axios.post(
+            `${YANDEX_API_URL}/reports`,
+            {
+              params: {
+                SelectionCriteria: {
+                  DateFrom: dateFrom,
+                  DateTo: dateTo,
+                  Filter: [
+                    {
+                      Field: 'CampaignId',
+                      Operator: 'IN',
+                      Values: campaignIds.map(String),
+                    },
+                  ],
+                },
+                FieldNames: ['Gender', 'Age', 'Conversions'],
+                Goals: [goalId],
+                AttributionModels: ['AUTO'],
+                ReportName: reportName,
+                ReportType: 'CUSTOM_REPORT',
+                DateRangeType: 'CUSTOM_DATE',
+                Format: 'TSV',
+                IncludeVAT: 'YES',
+                IncludeDiscount: 'NO',
+              },
+            },
+            {
+              headers: {
+                'Authorization': `Bearer ${accessToken}`,
+                'Client-Login': login,
+                'Accept-Language': 'ru',
+                'returnMoneyInMicros': 'false',
+                'skipReportHeader': 'true',
+                'skipReportSummary': 'true',
+              },
+            }
+          );
+
+          if (response.status === 200) break;
+          if (response.status === 201 || response.status === 202) {
+            await new Promise(resolve => setTimeout(resolve, retryDelay));
+            continue;
+          }
+        }
+
+        if (!response || response.status !== 200) continue;
+
+        const lines = response.data.split('\n').filter((line: string) => line.trim());
+        if (lines.length < 2) continue;
+
+        const headers = lines[0].split('\t');
+        const conversionsKey = `Conversions_${goalId}_AUTO`;
+
+        for (let i = 1; i < lines.length; i++) {
+          const values = lines[i].split('\t');
+          const row: any = {};
+          headers.forEach((header: string, index: number) => {
+            row[header] = values[index] || null;
+          });
+
+          const gender = genderMap[row['Gender']] || row['Gender'] || 'Неизвестно';
+          const age = ageMap[row['Age']] || row['Age'] || 'Неизвестно';
+          const segment = `${gender} ${age}`;
+
+          const conversions = parseInt(row[conversionsKey]) || 0;
+          if (conversions > 0) {
+            const existing = conversionsMap.get(segment) || 0;
+            conversionsMap.set(segment, existing + conversions);
+          }
+        }
+      } catch (error: any) {
+        console.error(`[getDemographicsConversions] Error for goal ${goalId}:`, error.message);
+      }
+    }
+
+    console.log(`[getDemographicsConversions] Got conversions for ${conversionsMap.size} segments`);
+    return conversionsMap;
   },
 
   /**

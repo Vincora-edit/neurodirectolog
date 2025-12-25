@@ -2033,47 +2033,9 @@ export const clickhouseService = {
     });
   },
 
-  // Получить общее количество конверсий за период
-  async getTotalConversions(connectionId: string, startDate: string, endDate: string): Promise<number> {
-    const result = await client.query({
-      query: `
-        SELECT SUM(conversions) as total_conversions
-        FROM campaign_conversions
-        WHERE connection_id = {connectionId:String}
-          AND date >= {startDate:Date}
-          AND date <= {endDate:Date}
-      `,
-      query_params: { connectionId, startDate, endDate },
-      format: 'JSONEachRow',
-    });
-    const rows = await result.json<any>();
-    return parseInt(rows[0]?.total_conversions) || 0;
-  },
-
   async getSearchQueries(connectionId: string, startDate?: string, endDate?: string): Promise<any[]> {
-    // Получаем общее количество конверсий за период
-    const convQuery = startDate && endDate ? `
-      SELECT SUM(conversions) as total_conversions
-      FROM campaign_conversions
-      WHERE connection_id = {connectionId:String}
-        AND date >= {startDate:Date}
-        AND date <= {endDate:Date}
-    ` : `
-      SELECT SUM(conversions) as total_conversions
-      FROM campaign_conversions
-      WHERE connection_id = {connectionId:String}
-    `;
-
-    const convResult = await client.query({
-      query: convQuery,
-      query_params: startDate && endDate
-        ? { connectionId, startDate, endDate }
-        : { connectionId },
-      format: 'JSONEachRow',
-    });
-    const convRows = await convResult.json<any>();
-    const totalConversions = parseInt(convRows[0]?.total_conversions) || 0;
-
+    // Примечание: Yandex API не поддерживает конверсии с разбивкой по поисковым запросам
+    // Возвращаем данные без конверсий
     const result = await client.query({
       query: `
         SELECT
@@ -2091,38 +2053,22 @@ export const clickhouseService = {
     });
 
     const rows = await result.json<any>();
-    const totalClicks = rows.reduce((sum: number, row: any) => sum + (parseInt(row.clicks) || 0), 0);
 
     return rows.map((row: any) => {
-      const clicks = parseInt(row.clicks) || 0;
-      const conversions = totalClicks > 0 ? Math.round((clicks / totalClicks) * totalConversions) : 0;
       return {
         query: row.query,
         impressions: parseInt(row.impressions) || 0,
-        clicks,
+        clicks: parseInt(row.clicks) || 0,
         cost: parseFloat(row.cost) || 0,
-        conversions,
+        conversions: 0, // Реальные конверсии недоступны через API для поисковых запросов
       };
     });
   },
 
-  // Demographics - читаем из campaign_performance с пропорциональным распределением конверсий
+  // Demographics - читаем из campaign_performance
+  // Примечание: Данные конверсий по демографии не кешируются в ClickHouse,
+  // они запрашиваются напрямую из Yandex API при каждом запросе
   async getDemographics(connectionId: string, startDate: string, endDate: string): Promise<any[]> {
-    // Получаем общее количество конверсий за период
-    const convResult = await client.query({
-      query: `
-        SELECT SUM(conversions) as total_conversions
-        FROM campaign_conversions
-        WHERE connection_id = {connectionId:String}
-          AND date >= {startDate:Date}
-          AND date <= {endDate:Date}
-      `,
-      query_params: { connectionId, startDate, endDate },
-      format: 'JSONEachRow',
-    });
-    const convRows = await convResult.json<any>();
-    const totalConversions = parseInt(convRows[0]?.total_conversions) || 0;
-
     const result = await client.query({
       query: `
         SELECT
@@ -2146,44 +2092,25 @@ export const clickhouseService = {
 
     const rows = await result.json<any>();
 
-    // Считаем общее количество кликов для пропорционального распределения
-    const totalClicks = rows.reduce((sum: number, row: any) => sum + (parseInt(row.clicks) || 0), 0);
-
     return rows.map((row: any) => {
       const genderLabel = row.gender === 'MALE' ? 'Мужчины' : row.gender === 'FEMALE' ? 'Женщины' : row.gender;
       const ageLabel = row.age?.replace('AGE_', '').replace('_', '-') || 'Не определён';
-      const clicks = parseInt(row.clicks) || 0;
-      // Пропорционально распределяем конверсии по кликам
-      const conversions = totalClicks > 0 ? Math.round((clicks / totalClicks) * totalConversions) : 0;
       return {
         segment: `${genderLabel}, ${ageLabel}`,
         gender: row.gender,
         age: row.age,
         impressions: parseInt(row.impressions) || 0,
-        clicks,
+        clicks: parseInt(row.clicks) || 0,
         cost: parseFloat(row.cost) || 0,
-        conversions,
+        conversions: 0, // Конверсии запрашиваются напрямую из API
       };
     });
   },
 
-  // Geo - читаем из campaign_performance с пропорциональным распределением конверсий
+  // Geo - читаем из campaign_performance
+  // Примечание: Данные конверсий по географии не кешируются в ClickHouse,
+  // они запрашиваются напрямую из Yandex API при каждом запросе
   async getGeoStats(connectionId: string, startDate: string, endDate: string): Promise<any[]> {
-    // Получаем общее количество конверсий за период
-    const convResult = await client.query({
-      query: `
-        SELECT SUM(conversions) as total_conversions
-        FROM campaign_conversions
-        WHERE connection_id = {connectionId:String}
-          AND date >= {startDate:Date}
-          AND date <= {endDate:Date}
-      `,
-      query_params: { connectionId, startDate, endDate },
-      format: 'JSONEachRow',
-    });
-    const convRows = await convResult.json<any>();
-    const totalConversions = parseInt(convRows[0]?.total_conversions) || 0;
-
     const result = await client.query({
       query: `
         SELECT
@@ -2206,38 +2133,22 @@ export const clickhouseService = {
     });
 
     const rows = await result.json<any>();
-    const totalClicks = rows.reduce((sum: number, row: any) => sum + (parseInt(row.clicks) || 0), 0);
 
     return rows.map((row: any) => {
-      const clicks = parseInt(row.clicks) || 0;
-      const conversions = totalClicks > 0 ? Math.round((clicks / totalClicks) * totalConversions) : 0;
       return {
         region: row.region || 'Не определён',
         impressions: parseInt(row.impressions) || 0,
-        clicks,
+        clicks: parseInt(row.clicks) || 0,
         cost: parseFloat(row.cost) || 0,
-        conversions,
+        conversions: 0, // Конверсии запрашиваются напрямую из API
       };
     });
   },
 
-  // Devices - читаем из campaign_performance с пропорциональным распределением конверсий
+  // Devices - читаем из campaign_performance
+  // Примечание: Данные конверсий по устройствам не кешируются в ClickHouse,
+  // они запрашиваются напрямую из Yandex API при каждом запросе
   async getCachedDeviceStats(connectionId: string, startDate: string, endDate: string): Promise<any[]> {
-    // Получаем общее количество конверсий за период
-    const convResult = await client.query({
-      query: `
-        SELECT SUM(conversions) as total_conversions
-        FROM campaign_conversions
-        WHERE connection_id = {connectionId:String}
-          AND date >= {startDate:Date}
-          AND date <= {endDate:Date}
-      `,
-      query_params: { connectionId, startDate, endDate },
-      format: 'JSONEachRow',
-    });
-    const convRows = await convResult.json<any>();
-    const totalConversions = parseInt(convRows[0]?.total_conversions) || 0;
-
     const result = await client.query({
       query: `
         SELECT
@@ -2259,7 +2170,6 @@ export const clickhouseService = {
     });
 
     const rows = await result.json<any>();
-    const totalClicks = rows.reduce((sum: number, row: any) => sum + (parseInt(row.clicks) || 0), 0);
 
     const deviceNames: Record<string, string> = {
       DESKTOP: 'Компьютеры',
@@ -2267,36 +2177,20 @@ export const clickhouseService = {
       TABLET: 'Планшеты',
     };
     return rows.map((row: any) => {
-      const clicks = parseInt(row.clicks) || 0;
-      const conversions = totalClicks > 0 ? Math.round((clicks / totalClicks) * totalConversions) : 0;
       return {
         device: row.device,
         deviceName: deviceNames[row.device] || row.device,
         impressions: parseInt(row.impressions) || 0,
-        clicks,
+        clicks: parseInt(row.clicks) || 0,
         cost: parseFloat(row.cost) || 0,
-        conversions,
+        conversions: 0, // Конверсии запрашиваются напрямую из API
       };
     });
   },
 
-  // Income Grade - читаем из campaign_performance с пропорциональным распределением конверсий
+  // Income Grade - читаем из campaign_performance
+  // Примечание: Yandex API не поддерживает конверсии с разбивкой по уровню дохода
   async getIncomeStats(connectionId: string, startDate: string, endDate: string): Promise<any[]> {
-    // Получаем общее количество конверсий за период
-    const convResult = await client.query({
-      query: `
-        SELECT SUM(conversions) as total_conversions
-        FROM campaign_conversions
-        WHERE connection_id = {connectionId:String}
-          AND date >= {startDate:Date}
-          AND date <= {endDate:Date}
-      `,
-      query_params: { connectionId, startDate, endDate },
-      format: 'JSONEachRow',
-    });
-    const convRows = await convResult.json<any>();
-    const totalConversions = parseInt(convRows[0]?.total_conversions) || 0;
-
     const result = await client.query({
       query: `
         SELECT
@@ -2318,7 +2212,6 @@ export const clickhouseService = {
     });
 
     const rows = await result.json<any>();
-    const totalClicks = rows.reduce((sum: number, row: any) => sum + (parseInt(row.clicks) || 0), 0);
 
     const incomeNames: Record<string, string> = {
       LOW: 'Низкий',
@@ -2327,16 +2220,14 @@ export const clickhouseService = {
       PREMIUM: 'Премиум',
     };
     return rows.map((row: any) => {
-      const clicks = parseInt(row.clicks) || 0;
-      const conversions = totalClicks > 0 ? Math.round((clicks / totalClicks) * totalConversions) : 0;
       return {
         incomeGrade: row.income_grade,
         incomeGradeRaw: row.income_grade,
         incomeGradeName: incomeNames[row.income_grade] || row.income_grade,
         impressions: parseInt(row.impressions) || 0,
-        clicks,
+        clicks: parseInt(row.clicks) || 0,
         cost: parseFloat(row.cost) || 0,
-        conversions,
+        conversions: 0, // Yandex API не поддерживает конверсии по уровню дохода
       };
     });
   },
