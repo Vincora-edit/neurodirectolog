@@ -151,10 +151,20 @@ export function YandexDashboard() {
   const [isHeaderCollapsed, setIsHeaderCollapsed] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
 
-  // Scroll listener - сворачиваем шапку после 150px
+  // Scroll listener с гистерезисом - разные пороги для сворачивания/разворачивания
+  // чтобы избежать цикла (сворачивание меняет высоту страницы, что триггерит обратно)
   useEffect(() => {
     const handleScroll = () => {
-      setIsHeaderCompact(window.scrollY > 150);
+      const scrollY = window.scrollY;
+      setIsHeaderCompact((prev) => {
+        if (prev) {
+          // Шапка свёрнута - разворачиваем только если поднялись выше 150px
+          return scrollY > 150;
+        } else {
+          // Шапка развёрнута - сворачиваем только после 250px
+          return scrollY > 250;
+        }
+      });
     };
     window.addEventListener('scroll', handleScroll);
     return () => window.removeEventListener('scroll', handleScroll);
