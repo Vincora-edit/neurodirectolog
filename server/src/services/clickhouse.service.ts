@@ -2033,6 +2033,23 @@ export const clickhouseService = {
     });
   },
 
+  // Получить общее количество конверсий за период
+  async getTotalConversions(connectionId: string, startDate: string, endDate: string): Promise<number> {
+    const result = await client.query({
+      query: `
+        SELECT SUM(conversions) as total_conversions
+        FROM campaign_conversions
+        WHERE connection_id = {connectionId:String}
+          AND date >= {startDate:Date}
+          AND date <= {endDate:Date}
+      `,
+      query_params: { connectionId, startDate, endDate },
+      format: 'JSONEachRow',
+    });
+    const rows = await result.json<any>();
+    return parseInt(rows[0]?.total_conversions) || 0;
+  },
+
   async getSearchQueries(connectionId: string, startDate?: string, endDate?: string): Promise<any[]> {
     // Получаем общее количество конверсий за период
     const convQuery = startDate && endDate ? `

@@ -1175,7 +1175,16 @@ router.get('/device-stats/:projectId', async (req, res) => {
 
     result.sort((a, b) => b.clicks - a.clicks);
 
-    res.json(result);
+    // Получаем общее количество конверсий для пропорционального распределения
+    const totalConversions = await clickhouseService.getTotalConversions(connection.id, dateFrom, dateTo);
+    const totalClicks = result.reduce((sum: number, d: any) => sum + (d.clicks || 0), 0);
+
+    const enrichedResult = result.map((d: any) => ({
+      ...d,
+      conversions: totalClicks > 0 ? Math.round(((d.clicks || 0) / totalClicks) * totalConversions) : 0,
+    }));
+
+    res.json(enrichedResult);
   } catch (error: any) {
     console.error('Failed to get device stats:', error);
     res.status(500).json({ error: error.message });
@@ -1245,7 +1254,16 @@ router.get('/search-queries/:projectId', async (req, res) => {
       dateTo
     );
 
-    res.json(searchQueries);
+    // Получаем общее количество конверсий для пропорционального распределения
+    const totalConversions = await clickhouseService.getTotalConversions(connection.id, dateFrom, dateTo);
+    const totalClicks = searchQueries.reduce((sum: number, d: any) => sum + (d.clicks || 0), 0);
+
+    const enrichedData = searchQueries.map((d: any) => ({
+      ...d,
+      conversions: totalClicks > 0 ? Math.round(((d.clicks || 0) / totalClicks) * totalConversions) : 0,
+    }));
+
+    res.json(enrichedData);
   } catch (error: any) {
     console.error('Failed to get search queries:', error);
     res.status(500).json({ error: error.message });
@@ -1315,7 +1333,16 @@ router.get('/demographics/:projectId', async (req, res) => {
       dateTo
     );
 
-    res.json(demographics);
+    // Получаем общее количество конверсий для пропорционального распределения
+    const totalConversions = await clickhouseService.getTotalConversions(connection.id, dateFrom, dateTo);
+    const totalClicks = demographics.reduce((sum: number, d: any) => sum + (d.clicks || 0), 0);
+
+    const enrichedData = demographics.map((d: any) => ({
+      ...d,
+      conversions: totalClicks > 0 ? Math.round(((d.clicks || 0) / totalClicks) * totalConversions) : 0,
+    }));
+
+    res.json(enrichedData);
   } catch (error: any) {
     console.error('Failed to get demographics:', error);
     res.status(500).json({ error: error.message });
@@ -1385,7 +1412,16 @@ router.get('/geo-report/:projectId', async (req, res) => {
       dateTo
     );
 
-    res.json(geoReport);
+    // Получаем общее количество конверсий для пропорционального распределения
+    const totalConversions = await clickhouseService.getTotalConversions(connection.id, dateFrom, dateTo);
+    const totalClicks = geoReport.reduce((sum: number, d: any) => sum + (d.clicks || 0), 0);
+
+    const enrichedData = geoReport.map((d: any) => ({
+      ...d,
+      conversions: totalClicks > 0 ? Math.round(((d.clicks || 0) / totalClicks) * totalConversions) : 0,
+    }));
+
+    res.json(enrichedData);
   } catch (error: any) {
     console.error('Failed to get geo report:', error);
     res.status(500).json({ error: error.message });
@@ -1445,7 +1481,16 @@ router.get('/placements/:projectId', async (req, res) => {
       dateTo
     );
 
-    res.json(placements);
+    // Получаем общее количество конверсий для пропорционального распределения
+    const totalConversions = await clickhouseService.getTotalConversions(connection.id, dateFrom, dateTo);
+    const totalClicks = placements.reduce((sum: number, d: any) => sum + (d.clicks || 0), 0);
+
+    const enrichedData = placements.map((d: any) => ({
+      ...d,
+      conversions: totalClicks > 0 ? Math.round(((d.clicks || 0) / totalClicks) * totalConversions) : 0,
+    }));
+
+    res.json(enrichedData);
   } catch (error: any) {
     console.error('Failed to get placements:', error);
     res.status(500).json({ error: error.message });
@@ -1515,7 +1560,16 @@ router.get('/income/:projectId', async (req, res) => {
       dateTo
     );
 
-    res.json(incomeData);
+    // Получаем общее количество конверсий для пропорционального распределения
+    const totalConversions = await clickhouseService.getTotalConversions(connection.id, dateFrom, dateTo);
+    const totalClicks = incomeData.reduce((sum: number, d: any) => sum + (d.clicks || 0), 0);
+
+    const enrichedData = incomeData.map((d: any) => ({
+      ...d,
+      conversions: totalClicks > 0 ? Math.round(((d.clicks || 0) / totalClicks) * totalConversions) : 0,
+    }));
+
+    res.json(enrichedData);
   } catch (error: any) {
     console.error('Failed to get income data:', error);
     res.status(500).json({ error: error.message });
@@ -1575,7 +1629,16 @@ router.get('/targeting-categories/:projectId', async (req, res) => {
       dateTo
     );
 
-    res.json(categoriesData);
+    // Получаем общее количество конверсий для пропорционального распределения
+    const totalConversions = await clickhouseService.getTotalConversions(connection.id, dateFrom, dateTo);
+    const totalClicks = categoriesData.reduce((sum: number, d: any) => sum + (d.clicks || 0), 0);
+
+    const enrichedData = categoriesData.map((d: any) => ({
+      ...d,
+      conversions: totalClicks > 0 ? Math.round(((d.clicks || 0) / totalClicks) * totalConversions) : 0,
+    }));
+
+    res.json(enrichedData);
   } catch (error: any) {
     console.error('Failed to get targeting categories:', error);
     res.status(500).json({ error: error.message });
@@ -1635,7 +1698,16 @@ router.get('/criteria/:projectId', async (req, res) => {
       dateTo
     );
 
-    res.json(criteriaData);
+    // Получаем общее количество конверсий для пропорционального распределения
+    const totalConversions = await clickhouseService.getTotalConversions(connection.id, dateFrom, dateTo);
+    const totalClicks = criteriaData.reduce((sum: number, d: any) => sum + (d.clicks || 0), 0);
+
+    const enrichedData = criteriaData.map((d: any) => ({
+      ...d,
+      conversions: totalClicks > 0 ? Math.round(((d.clicks || 0) / totalClicks) * totalConversions) : 0,
+    }));
+
+    res.json(enrichedData);
   } catch (error: any) {
     console.error('Failed to get criteria:', error);
     res.status(500).json({ error: error.message });
