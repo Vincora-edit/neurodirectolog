@@ -404,7 +404,7 @@ export function YandexDashboard() {
       );
       return response.json();
     },
-    enabled: !!activeProjectId && !!activeConnectionId && technicalReportTab === 'ads',
+    enabled: !!activeProjectId && !!activeConnectionId && (technicalReportTab === 'titles' || technicalReportTab === 'text'),
     staleTime: 5 * 60 * 1000,
   });
 
@@ -648,7 +648,7 @@ export function YandexDashboard() {
                 clicks: item.clicks || 0,
                 cost: item.cost || 0,
                 conversions: 0,
-              })).sort((a: any, b: any) => b.cost - a.cost).slice(0, 10)
+              })).sort((a: any, b: any) => b.cost - a.cost)
             : [],
         };
       default:
@@ -670,7 +670,7 @@ export function YandexDashboard() {
       (reportId === 'categories' && targetingCategoriesLoading) ||
       (reportId === 'criteria' && criteriaLoading) ||
       (reportId === 'placements' && placementsLoading) ||
-      (reportId === 'ads' && adTextsLoading);
+      ((reportId === 'titles' || reportId === 'text') && adTextsLoading);
 
     if (isLoading) {
       return (
