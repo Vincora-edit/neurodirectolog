@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import React, { useState } from 'react';
 import {
   ChevronDown,
   ChevronUp,
@@ -230,7 +230,7 @@ export function CampaignsTable({
                   : 0;
 
               return (
-                <tbody key={campaignId}>
+                <React.Fragment key={campaignId}>
                   {/* Campaign row */}
                   <tr
                     className="hover:bg-blue-50 transition-colors cursor-pointer border-b border-gray-200"
@@ -364,7 +364,7 @@ export function CampaignsTable({
                           : 0;
 
                       return (
-                        <tbody key={adGroupKey}>
+                        <React.Fragment key={adGroupKey}>
                           <tr
                             className="hover:bg-green-50 transition-colors cursor-pointer bg-gray-50 border-b border-gray-100"
                             onClick={(e) => {
@@ -532,10 +532,10 @@ export function CampaignsTable({
                                 </tr>
                               );
                             })}
-                        </tbody>
+                        </React.Fragment>
                       );
                     })}
-                </tbody>
+                </React.Fragment>
               );
             })}
 

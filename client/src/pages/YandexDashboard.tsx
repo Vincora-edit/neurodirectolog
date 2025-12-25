@@ -388,8 +388,10 @@ export function YandexDashboard() {
     enabled: !!activeProjectId && !!activeConnectionId,
   });
 
-  // Обработанные данные
-  const rawCampaigns = hierarchicalData?.campaigns || [];
+  // Обработанные данные - API возвращает массив напрямую
+  const rawCampaigns = Array.isArray(hierarchicalData)
+    ? hierarchicalData
+    : (hierarchicalData?.campaigns || []);
 
   const campaigns = useMemo(() => {
     let filtered = rawCampaigns;
