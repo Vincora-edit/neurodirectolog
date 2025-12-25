@@ -158,11 +158,11 @@ export function YandexDashboard() {
       const scrollY = window.scrollY;
       setIsHeaderCompact((prev) => {
         if (prev) {
-          // Шапка свёрнута - разворачиваем только если поднялись выше 100px
-          return scrollY > 100;
+          // Шапка свёрнута - разворачиваем только если поднялись выше 50px
+          return scrollY > 50;
         } else {
-          // Шапка развёрнута - сворачиваем только после 200px
-          return scrollY > 200;
+          // Шапка развёрнута - сворачиваем только после 150px
+          return scrollY > 150;
         }
       });
     };

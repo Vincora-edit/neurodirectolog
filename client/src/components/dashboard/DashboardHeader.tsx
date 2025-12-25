@@ -590,9 +590,9 @@ export function DashboardHeader({
         </div>
       </div>
 
-      {/* Кнопка разворачивания */}
+      {/* Кнопка разворачивания - справа, как и кнопка сворачивания */}
       {isCollapsed && (
-        <div className="sticky top-[41px] z-20 mb-4 -mx-8 px-8 -mt-8 pt-2">
+        <div className="sticky top-[41px] z-20 mb-4 -mx-8 px-8 -mt-8 pt-2 flex justify-end">
           <button
             onClick={() => onCollapsedChange(false)}
             className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-200 rounded-lg shadow-sm hover:bg-gray-50 transition-colors text-sm text-gray-600"
