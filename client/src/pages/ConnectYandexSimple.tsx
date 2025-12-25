@@ -94,12 +94,12 @@ export default function ConnectYandexSimple() {
               Перейдите по ссылке для получения токена:
               <div className="mt-2 p-3 bg-white rounded-lg font-mono text-xs break-all">
                 <a
-                  href="https://oauth.yandex.ru/authorize?response_type=token&client_id=db0084b785964e89908f2b32e246f1de"
+                  href="https://oauth.yandex.ru/authorize?response_type=token&client_id=361b531e8f114f2884f12e8897fefa9a"
                   target="_blank"
                   rel="noopener noreferrer"
                   className="text-blue-600 hover:underline flex items-center gap-2"
                 >
-                  https://oauth.yandex.ru/authorize?response_type=token&client_id=...
+                  Получить токен доступа
                   <ExternalLink size={14} />
                 </a>
               </div>
