@@ -2045,7 +2045,6 @@ export const clickhouseService = {
         WHERE connection_id = {connectionId:String}
         GROUP BY query
         ORDER BY cost DESC
-        LIMIT 50
       `,
       query_params: { connectionId },
       format: 'JSONEachRow',
@@ -2224,7 +2223,6 @@ export const clickhouseService = {
           AND ap.date <= {endDate:Date}
         GROUP BY ap.ad_id, ac.title, ac.title2
         ORDER BY cost DESC
-        LIMIT 50
       `,
       query_params: { connectionId, startDate, endDate },
       format: 'JSONEachRow',

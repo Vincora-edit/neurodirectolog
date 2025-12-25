@@ -1928,8 +1928,7 @@ export const yandexDirectService = {
     });
 
     return Array.from(queryMap.values())
-      .sort((a, b) => b.cost - a.cost)
-      .slice(0, 50); // Топ 50 запросов
+      .sort((a, b) => b.cost - a.cost);
   },
 
   /**
