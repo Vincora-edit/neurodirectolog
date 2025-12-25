@@ -2035,6 +2035,7 @@ export const yandexDirectService = {
   ): Promise<any[]> {
     if (campaignIds.length === 0) return [];
 
+    // Базовые поля
     const fields = [
       'Query',
       'CampaignId',
@@ -2044,6 +2045,7 @@ export const yandexDirectService = {
       'Impressions',
       'Ctr',
       'AvgCpc',
+      'Conversions', // Добавляем Conversions - поддерживается в SEARCH_QUERY_PERFORMANCE_REPORT
     ];
 
     let response;
@@ -2051,31 +2053,41 @@ export const yandexDirectService = {
     const retryDelay = 3000;
     const reportName = `SearchQuery_${dateFrom}_${dateTo}_${Date.now()}`;
 
+    // Формируем параметры запроса
+    const reportParams: any = {
+      SelectionCriteria: {
+        DateFrom: dateFrom,
+        DateTo: dateTo,
+        Filter: [
+          {
+            Field: 'CampaignId',
+            Operator: 'IN',
+            Values: campaignIds.map(String),
+          },
+        ],
+      },
+      FieldNames: fields,
+      ReportName: reportName,
+      ReportType: 'SEARCH_QUERY_PERFORMANCE_REPORT',
+      DateRangeType: 'CUSTOM_DATE',
+      Format: 'TSV',
+      IncludeVAT: 'YES',
+      IncludeDiscount: 'NO',
+    };
+
+    // Добавляем Goals и AttributionModels если есть цели
+    if (goalIds && goalIds.length > 0) {
+      reportParams.Goals = goalIds.map(id => parseInt(id));
+      reportParams.AttributionModels = ['AUTO'];
+      console.log(`[getSearchQueryReport] Adding Goals: ${goalIds.join(', ')}`);
+    }
+
     for (let attempt = 0; attempt < maxRetries; attempt++) {
       try {
         response = await axios.post(
           `${YANDEX_API_URL}/reports`,
           {
-            params: {
-              SelectionCriteria: {
-                DateFrom: dateFrom,
-                DateTo: dateTo,
-                Filter: [
-                  {
-                    Field: 'CampaignId',
-                    Operator: 'IN',
-                    Values: campaignIds.map(String),
-                  },
-                ],
-              },
-              FieldNames: fields,
-              ReportName: reportName,
-              ReportType: 'SEARCH_QUERY_PERFORMANCE_REPORT',
-              DateRangeType: 'CUSTOM_DATE',
-              Format: 'TSV',
-              IncludeVAT: 'YES',
-              IncludeDiscount: 'NO',
-            },
+            params: reportParams,
           },
           {
             headers: {
@@ -2121,7 +2133,12 @@ export const yandexDirectService = {
     if (lines.length < 2) return [];
 
     const headers = lines[0].split('\t');
+    console.log(`[getSearchQueryReport] Headers: ${headers.join(', ')}`);
     const results: any[] = [];
+
+    // Находим колонки конверсий (могут быть Conversions или Conversions_<goalId>_AUTO)
+    const conversionColumns = headers.filter((h: string) => h.startsWith('Conversions'));
+    console.log(`[getSearchQueryReport] Conversion columns: ${conversionColumns.join(', ')}`);
 
     for (let i = 1; i < lines.length; i++) {
       const values = lines[i].split('\t');
@@ -2129,6 +2146,13 @@ export const yandexDirectService = {
       headers.forEach((header: string, idx: number) => {
         row[header] = values[idx];
       });
+
+      // Суммируем все колонки конверсий
+      let totalConversions = 0;
+      conversionColumns.forEach((col: string) => {
+        totalConversions += parseInt(row[col] || '0') || 0;
+      });
+
       results.push({
         query: row['Query'] || '',
         campaignId: row['CampaignId'],
@@ -2138,10 +2162,11 @@ export const yandexDirectService = {
         impressions: parseInt(row['Impressions'] || '0'),
         ctr: parseFloat(row['Ctr'] || '0'),
         avgCpc: parseFloat(row['AvgCpc'] || '0'),
+        conversions: totalConversions,
       });
     }
 
-    // Группируем по запросу и суммируем
+    // Группируем по запросу и суммируем (включая конверсии)
     const queryMap = new Map<string, any>();
     results.forEach(row => {
       const existing = queryMap.get(row.query);
@@ -2149,22 +2174,18 @@ export const yandexDirectService = {
         existing.clicks += row.clicks;
         existing.cost += row.cost;
         existing.impressions += row.impressions;
+        existing.conversions += row.conversions; // Суммируем конверсии
       } else {
-        queryMap.set(row.query, { ...row, conversions: 0 });
+        queryMap.set(row.query, { ...row });
       }
     });
 
     const finalResults = Array.from(queryMap.values())
       .sort((a, b) => b.cost - a.cost);
 
-    // Получаем реальные конверсии через отдельный запрос с Goals
-    if (goalIds && goalIds.length > 0 && finalResults.length > 0) {
-      const conversionsMap = await this.getSearchQueryConversions(accessToken, login, campaignIds, goalIds, dateFrom, dateTo);
-      finalResults.forEach(row => {
-        row.conversions = conversionsMap.get(row.query) || 0;
-      });
-      console.log(`[getSearchQueryReport] Merged conversions for ${finalResults.length} queries`);
-    }
+    // Логируем статистику конверсий
+    const totalConversions = finalResults.reduce((sum, r) => sum + r.conversions, 0);
+    console.log(`[getSearchQueryReport] Total conversions: ${totalConversions} for ${finalResults.length} queries`);
 
     return finalResults;
   },
@@ -2705,32 +2726,42 @@ export const yandexDirectService = {
     login: string,
     campaignIds: number[],
     dateFrom: string,
-    dateTo: string
+    dateTo: string,
+    goalIds?: string[]
   ): Promise<any[]> {
     const reportName = `placements_report_${Date.now()}`;
 
-    const requestBody = {
-      params: {
-        SelectionCriteria: {
-          Filter: [
-            {
-              Field: 'CampaignId',
-              Operator: 'IN',
-              Values: campaignIds.map(String),
-            },
-          ],
-          DateFrom: dateFrom,
-          DateTo: dateTo,
-        },
-        FieldNames: ['Placement', 'Clicks', 'Cost', 'Impressions', 'Ctr', 'AvgCpc'],
-        ReportName: reportName,
-        ReportType: 'CUSTOM_REPORT',
-        DateRangeType: 'CUSTOM_DATE',
-        Format: 'TSV',
-        IncludeVAT: 'YES',
-        IncludeDiscount: 'NO',
+    // Базовые поля
+    const fields = ['Placement', 'Clicks', 'Cost', 'Impressions', 'Ctr', 'AvgCpc', 'Conversions'];
+
+    // Формируем параметры запроса
+    const reportParams: any = {
+      SelectionCriteria: {
+        Filter: [
+          {
+            Field: 'CampaignId',
+            Operator: 'IN',
+            Values: campaignIds.map(String),
+          },
+        ],
+        DateFrom: dateFrom,
+        DateTo: dateTo,
       },
+      FieldNames: fields,
+      ReportName: reportName,
+      ReportType: 'CUSTOM_REPORT',
+      DateRangeType: 'CUSTOM_DATE',
+      Format: 'TSV',
+      IncludeVAT: 'YES',
+      IncludeDiscount: 'NO',
     };
+
+    // Добавляем Goals и AttributionModels если есть цели
+    if (goalIds && goalIds.length > 0) {
+      reportParams.Goals = goalIds.map(id => parseInt(id));
+      reportParams.AttributionModels = ['AUTO'];
+      console.log(`[getPlacementsReport] Adding Goals: ${goalIds.join(', ')}`);
+    }
 
     // Пробуем до 10 раз с паузами
     let response: any = null;
@@ -2738,7 +2769,7 @@ export const yandexDirectService = {
       try {
         response = await axios.post(
           'https://api.direct.yandex.com/json/v5/reports',
-          requestBody,
+          { params: reportParams },
           {
             headers: {
               Authorization: `Bearer ${accessToken}`,
@@ -2785,11 +2816,21 @@ export const yandexDirectService = {
     const headers = lines[0].split('\t');
     const results: any[] = [];
 
+    // Находим колонки конверсий (могут быть Conversions или Conversions_<goalId>_AUTO)
+    const conversionColumns = headers.filter((h: string) => h.startsWith('Conversions'));
+    console.log(`[getPlacementsReport] Conversion columns: ${conversionColumns.join(', ')}`);
+
     for (let i = 1; i < lines.length; i++) {
       const values = lines[i].split('\t');
       const row: any = {};
       headers.forEach((header: string, idx: number) => {
         row[header] = values[idx];
+      });
+
+      // Суммируем все конверсии
+      let totalConversions = 0;
+      conversionColumns.forEach((col: string) => {
+        totalConversions += parseInt(row[col] || '0') || 0;
       });
 
       results.push({
@@ -2799,6 +2840,7 @@ export const yandexDirectService = {
         impressions: parseInt(row['Impressions'] || '0'),
         ctr: parseFloat(row['Ctr'] || '0'),
         avgCpc: parseFloat(row['AvgCpc'] || '0'),
+        conversions: totalConversions,
       });
     }
 
@@ -2810,6 +2852,7 @@ export const yandexDirectService = {
         existing.clicks += row.clicks;
         existing.cost += row.cost;
         existing.impressions += row.impressions;
+        existing.conversions += row.conversions;
       } else {
         placementMap.set(row.placement, { ...row });
       }
@@ -2846,13 +2889,11 @@ export const yandexDirectService = {
     };
 
     // Пересчитываем CTR и AvgCpc после агрегации, добавляем тип
-    // Примечание: Yandex API не поддерживает конверсии с разбивкой по площадкам
     const aggregated = Array.from(placementMap.values()).map(p => ({
       ...p,
       ctr: p.impressions > 0 ? (p.clicks / p.impressions) * 100 : 0,
       avgCpc: p.clicks > 0 ? p.cost / p.clicks : 0,
       placementType: getPlacementType(p.placement),
-      conversions: 0, // Yandex API не поддерживает конверсии по площадкам
     }));
 
     return aggregated
@@ -2870,13 +2911,46 @@ export const yandexDirectService = {
     login: string,
     campaignIds: number[],
     dateFrom: string,
-    dateTo: string
+    dateTo: string,
+    goalIds?: string[]
   ): Promise<any[]> {
     if (campaignIds.length === 0) return [];
 
     const reportName = `income_report_${Date.now()}`;
     const maxRetries = 10;
     const retryDelay = 3000;
+
+    // Базовые поля
+    const fields = ['IncomeGrade', 'Clicks', 'Cost', 'Impressions', 'Ctr', 'AvgCpc', 'Conversions'];
+
+    // Формируем параметры запроса
+    const reportParams: any = {
+      SelectionCriteria: {
+        DateFrom: dateFrom,
+        DateTo: dateTo,
+        Filter: [
+          {
+            Field: 'CampaignId',
+            Operator: 'IN',
+            Values: campaignIds.map(String),
+          },
+        ],
+      },
+      FieldNames: fields,
+      ReportName: reportName,
+      ReportType: 'CUSTOM_REPORT',
+      DateRangeType: 'CUSTOM_DATE',
+      Format: 'TSV',
+      IncludeVAT: 'YES',
+      IncludeDiscount: 'NO',
+    };
+
+    // Добавляем Goals и AttributionModels если есть цели
+    if (goalIds && goalIds.length > 0) {
+      reportParams.Goals = goalIds.map(id => parseInt(id));
+      reportParams.AttributionModels = ['AUTO'];
+      console.log(`[getIncomeReport] Adding Goals: ${goalIds.join(', ')}`);
+    }
 
     let response: any = null;
 
@@ -2885,26 +2959,7 @@ export const yandexDirectService = {
         response = await axios.post(
           `${YANDEX_API_URL}/reports`,
           {
-            params: {
-              SelectionCriteria: {
-                DateFrom: dateFrom,
-                DateTo: dateTo,
-                Filter: [
-                  {
-                    Field: 'CampaignId',
-                    Operator: 'IN',
-                    Values: campaignIds.map(String),
-                  },
-                ],
-              },
-              FieldNames: ['IncomeGrade', 'Clicks', 'Cost', 'Impressions', 'Ctr', 'AvgCpc'],
-              ReportName: reportName,
-              ReportType: 'CUSTOM_REPORT',
-              DateRangeType: 'CUSTOM_DATE',
-              Format: 'TSV',
-              IncludeVAT: 'YES',
-              IncludeDiscount: 'NO',
-            },
+            params: reportParams,
           },
           {
             headers: {
@@ -2952,6 +3007,10 @@ export const yandexDirectService = {
     const headers = lines[0].split('\t');
     const results: any[] = [];
 
+    // Находим колонки конверсий (могут быть Conversions или Conversions_<goalId>_AUTO)
+    const conversionColumns = headers.filter((h: string) => h.startsWith('Conversions'));
+    console.log(`[getIncomeReport] Conversion columns: ${conversionColumns.join(', ')}`);
+
     // Маппинг значений на русский
     const incomeMap: Record<string, string> = {
       'VERY_HIGH': 'Очень высокий',
@@ -2968,6 +3027,12 @@ export const yandexDirectService = {
         row[header] = values[idx];
       });
 
+      // Суммируем все конверсии
+      let totalConversions = 0;
+      conversionColumns.forEach((col: string) => {
+        totalConversions += parseInt(row[col] || '0') || 0;
+      });
+
       const incomeGrade = row['IncomeGrade'] || 'UNKNOWN';
       results.push({
         incomeGrade: incomeMap[incomeGrade] || incomeGrade,
@@ -2977,6 +3042,7 @@ export const yandexDirectService = {
         impressions: parseInt(row['Impressions'] || '0'),
         ctr: parseFloat(row['Ctr'] || '0'),
         avgCpc: parseFloat(row['AvgCpc'] || '0'),
+        conversions: totalConversions,
       });
     }
 
@@ -2988,18 +3054,17 @@ export const yandexDirectService = {
         existing.clicks += row.clicks;
         existing.cost += row.cost;
         existing.impressions += row.impressions;
+        existing.conversions += row.conversions;
       } else {
         incomeGradeMap.set(row.incomeGrade, { ...row });
       }
     });
 
     // Пересчитываем CTR и AvgCpc после агрегации
-    // Примечание: Yandex API не поддерживает конверсии с разбивкой по уровню дохода
     const aggregated = Array.from(incomeGradeMap.values()).map(p => ({
       ...p,
       ctr: p.impressions > 0 ? (p.clicks / p.impressions) * 100 : 0,
       avgCpc: p.clicks > 0 ? p.cost / p.clicks : 0,
-      conversions: 0, // Yandex API не поддерживает конверсии по уровню дохода
     }));
 
     return aggregated
@@ -3016,13 +3081,46 @@ export const yandexDirectService = {
     login: string,
     campaignIds: number[],
     dateFrom: string,
-    dateTo: string
+    dateTo: string,
+    goalIds?: string[]
   ): Promise<any[]> {
     if (campaignIds.length === 0) return [];
 
     const reportName = `targeting_category_report_${Date.now()}`;
     const maxRetries = 10;
     const retryDelay = 3000;
+
+    // Базовые поля
+    const fields = ['TargetingCategory', 'Clicks', 'Cost', 'Impressions', 'Ctr', 'AvgCpc', 'Conversions'];
+
+    // Формируем параметры запроса
+    const reportParams: any = {
+      SelectionCriteria: {
+        DateFrom: dateFrom,
+        DateTo: dateTo,
+        Filter: [
+          {
+            Field: 'CampaignId',
+            Operator: 'IN',
+            Values: campaignIds.map(String),
+          },
+        ],
+      },
+      FieldNames: fields,
+      ReportName: reportName,
+      ReportType: 'CUSTOM_REPORT',
+      DateRangeType: 'CUSTOM_DATE',
+      Format: 'TSV',
+      IncludeVAT: 'YES',
+      IncludeDiscount: 'NO',
+    };
+
+    // Добавляем Goals и AttributionModels если есть цели
+    if (goalIds && goalIds.length > 0) {
+      reportParams.Goals = goalIds.map(id => parseInt(id));
+      reportParams.AttributionModels = ['AUTO'];
+      console.log(`[getTargetingCategoryReport] Adding Goals: ${goalIds.join(', ')}`);
+    }
 
     let response: any = null;
 
@@ -3031,26 +3129,7 @@ export const yandexDirectService = {
         response = await axios.post(
           `${YANDEX_API_URL}/reports`,
           {
-            params: {
-              SelectionCriteria: {
-                DateFrom: dateFrom,
-                DateTo: dateTo,
-                Filter: [
-                  {
-                    Field: 'CampaignId',
-                    Operator: 'IN',
-                    Values: campaignIds.map(String),
-                  },
-                ],
-              },
-              FieldNames: ['TargetingCategory', 'Clicks', 'Cost', 'Impressions', 'Ctr', 'AvgCpc'],
-              ReportName: reportName,
-              ReportType: 'CUSTOM_REPORT',
-              DateRangeType: 'CUSTOM_DATE',
-              Format: 'TSV',
-              IncludeVAT: 'YES',
-              IncludeDiscount: 'NO',
-            },
+            params: reportParams,
           },
           {
             headers: {
@@ -3108,11 +3187,21 @@ export const yandexDirectService = {
       'UNKNOWN': 'Неизвестно',
     };
 
+    // Находим колонки конверсий (могут быть Conversions или Conversions_<goalId>_AUTO)
+    const conversionColumns = headers.filter((h: string) => h.startsWith('Conversions'));
+    console.log(`[getTargetingCategoryReport] Conversion columns: ${conversionColumns.join(', ')}`);
+
     for (let i = 1; i < lines.length; i++) {
       const values = lines[i].split('\t');
       const row: any = {};
       headers.forEach((header: string, idx: number) => {
         row[header] = values[idx];
+      });
+
+      // Суммируем все конверсии
+      let totalConversions = 0;
+      conversionColumns.forEach((col: string) => {
+        totalConversions += parseInt(row[col] || '0') || 0;
       });
 
       const category = row['TargetingCategory'] || 'UNKNOWN';
@@ -3124,6 +3213,7 @@ export const yandexDirectService = {
         impressions: parseInt(row['Impressions'] || '0'),
         ctr: parseFloat(row['Ctr'] || '0'),
         avgCpc: parseFloat(row['AvgCpc'] || '0'),
+        conversions: totalConversions,
       });
     }
 
@@ -3135,18 +3225,17 @@ export const yandexDirectService = {
         existing.clicks += row.clicks;
         existing.cost += row.cost;
         existing.impressions += row.impressions;
+        existing.conversions += row.conversions;
       } else {
         categoryMapAgg.set(row.category, { ...row });
       }
     });
 
     // Пересчитываем CTR и AvgCpc после агрегации
-    // Примечание: Yandex API не поддерживает конверсии с разбивкой по категориям таргетинга
     const aggregated = Array.from(categoryMapAgg.values()).map(p => ({
       ...p,
       ctr: p.impressions > 0 ? (p.clicks / p.impressions) * 100 : 0,
       avgCpc: p.clicks > 0 ? p.cost / p.clicks : 0,
-      conversions: 0, // Yandex API не поддерживает конверсии по категориям таргетинга
     }));
 
     return aggregated
@@ -3162,13 +3251,46 @@ export const yandexDirectService = {
     login: string,
     campaignIds: number[],
     dateFrom: string,
-    dateTo: string
+    dateTo: string,
+    goalIds?: string[]
   ): Promise<any[]> {
     if (campaignIds.length === 0) return [];
 
     const reportName = `criteria_report_${Date.now()}`;
     const maxRetries = 10;
     const retryDelay = 3000;
+
+    // Базовые поля
+    const fields = ['Criterion', 'CriterionType', 'Clicks', 'Cost', 'Impressions', 'Ctr', 'AvgCpc', 'Conversions'];
+
+    // Формируем параметры запроса
+    const reportParams: any = {
+      SelectionCriteria: {
+        DateFrom: dateFrom,
+        DateTo: dateTo,
+        Filter: [
+          {
+            Field: 'CampaignId',
+            Operator: 'IN',
+            Values: campaignIds.map(String),
+          },
+        ],
+      },
+      FieldNames: fields,
+      ReportName: reportName,
+      ReportType: 'CUSTOM_REPORT',
+      DateRangeType: 'CUSTOM_DATE',
+      Format: 'TSV',
+      IncludeVAT: 'YES',
+      IncludeDiscount: 'NO',
+    };
+
+    // Добавляем Goals и AttributionModels если есть цели
+    if (goalIds && goalIds.length > 0) {
+      reportParams.Goals = goalIds.map(id => parseInt(id));
+      reportParams.AttributionModels = ['AUTO'];
+      console.log(`[getCriteriaReport] Adding Goals: ${goalIds.join(', ')}`);
+    }
 
     let response: any = null;
 
@@ -3177,26 +3299,7 @@ export const yandexDirectService = {
         response = await axios.post(
           `${YANDEX_API_URL}/reports`,
           {
-            params: {
-              SelectionCriteria: {
-                DateFrom: dateFrom,
-                DateTo: dateTo,
-                Filter: [
-                  {
-                    Field: 'CampaignId',
-                    Operator: 'IN',
-                    Values: campaignIds.map(String),
-                  },
-                ],
-              },
-              FieldNames: ['Criterion', 'CriterionType', 'Clicks', 'Cost', 'Impressions', 'Ctr', 'AvgCpc'],
-              ReportName: reportName,
-              ReportType: 'CUSTOM_REPORT',
-              DateRangeType: 'CUSTOM_DATE',
-              Format: 'TSV',
-              IncludeVAT: 'YES',
-              IncludeDiscount: 'NO',
-            },
+            params: reportParams,
           },
           {
             headers: {
@@ -3242,6 +3345,12 @@ export const yandexDirectService = {
     if (lines.length < 2) return [];
 
     const headers = lines[0].split('\t');
+    console.log(`[getCriteriaReport] Headers: ${headers.join(', ')}`);
+
+    // Находим колонки конверсий (могут быть Conversions или Conversions_<goalId>_AUTO)
+    const conversionColumns = headers.filter((h: string) => h.startsWith('Conversions'));
+    console.log(`[getCriteriaReport] Conversion columns: ${conversionColumns.join(', ')}`);
+
     const results: any[] = [];
 
     for (let i = 1; i < lines.length; i++) {
@@ -3249,6 +3358,12 @@ export const yandexDirectService = {
       const row: any = {};
       headers.forEach((header: string, idx: number) => {
         row[header] = values[idx];
+      });
+
+      // Суммируем все колонки конверсий
+      let totalConversions = 0;
+      conversionColumns.forEach((col: string) => {
+        totalConversions += parseInt(row[col] || '0') || 0;
       });
 
       results.push({
@@ -3259,6 +3374,7 @@ export const yandexDirectService = {
         impressions: parseInt(row['Impressions'] || '0'),
         ctr: parseFloat(row['Ctr'] || '0'),
         avgCpc: parseFloat(row['AvgCpc'] || '0'),
+        conversions: totalConversions,
       });
     }
 
@@ -3271,19 +3387,22 @@ export const yandexDirectService = {
         existing.clicks += row.clicks;
         existing.cost += row.cost;
         existing.impressions += row.impressions;
+        existing.conversions += row.conversions;
       } else {
         criterionMap.set(row.criterion, { ...row });
       }
     });
 
     // Пересчитываем CTR и AvgCpc после агрегации
-    // Примечание: Yandex API не поддерживает конверсии с разбивкой по условиям показа
     const aggregated = Array.from(criterionMap.values()).map(p => ({
       ...p,
       ctr: p.impressions > 0 ? (p.clicks / p.impressions) * 100 : 0,
       avgCpc: p.clicks > 0 ? p.cost / p.clicks : 0,
-      conversions: 0, // Yandex API не поддерживает конверсии по условиям показа
     }));
+
+    // Логируем статистику конверсий
+    const totalConversions = aggregated.reduce((sum, r) => sum + r.conversions, 0);
+    console.log(`[getCriteriaReport] Total conversions: ${totalConversions} for ${aggregated.length} criteria`);
 
     return aggregated
       .sort((a, b) => b.cost - a.cost)

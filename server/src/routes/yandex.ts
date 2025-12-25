@@ -1497,17 +1497,26 @@ router.get('/placements/:projectId', async (req, res) => {
     const dateFrom = startDate.toISOString().split('T')[0];
     const dateTo = endDate.toISOString().split('T')[0];
 
+    // Получаем goalIds для запроса реальных конверсий
+    let goalIds: string[] = [];
+    try {
+      if (connection.conversionGoals) {
+        goalIds = JSON.parse(connection.conversionGoals);
+      }
+    } catch (e) {
+      console.log('[placements] No conversion goals configured');
+    }
+
     // Получаем статистику по площадкам
     const placements = await yandexDirectService.getPlacementsReport(
       connection.accessToken,
       connection.login,
       campaignIds,
       dateFrom,
-      dateTo
+      dateTo,
+      goalIds.length > 0 ? goalIds : undefined
     );
 
-    // Примечание: Yandex API не поддерживает конверсии с разбивкой по площадкам
-    // Возвращаем данные без конверсий
     res.json(placements);
   } catch (error: any) {
     console.error('Failed to get placements:', error);
@@ -1570,16 +1579,25 @@ router.get('/income/:projectId', async (req, res) => {
       return res.json([]);
     }
 
+    // Получаем goalIds для запроса реальных конверсий
+    let goalIds: string[] = [];
+    try {
+      if (connection.conversionGoals) {
+        goalIds = JSON.parse(connection.conversionGoals);
+      }
+    } catch (e) {
+      console.log('[income] No conversion goals configured');
+    }
+
     const incomeData = await yandexDirectService.getIncomeReport(
       connection.accessToken,
       connection.login,
       campaignIds,
       dateFrom,
-      dateTo
+      dateTo,
+      goalIds.length > 0 ? goalIds : undefined
     );
 
-    // Примечание: Yandex API не поддерживает конверсии с разбивкой по доходу
-    // Возвращаем данные без конверсий
     res.json(incomeData);
   } catch (error: any) {
     console.error('Failed to get income data:', error);
@@ -1631,17 +1649,26 @@ router.get('/targeting-categories/:projectId', async (req, res) => {
     const dateFrom = startDate.toISOString().split('T')[0];
     const dateTo = endDate.toISOString().split('T')[0];
 
+    // Получаем goalIds для запроса реальных конверсий
+    let goalIds: string[] = [];
+    try {
+      if (connection.conversionGoals) {
+        goalIds = JSON.parse(connection.conversionGoals);
+      }
+    } catch (e) {
+      console.log('[targeting-categories] No conversion goals configured');
+    }
+
     // Получаем статистику по категориям таргетинга
     const categoriesData = await yandexDirectService.getTargetingCategoryReport(
       connection.accessToken,
       connection.login,
       campaignIds,
       dateFrom,
-      dateTo
+      dateTo,
+      goalIds.length > 0 ? goalIds : undefined
     );
 
-    // Примечание: Yandex API не поддерживает конверсии с разбивкой по категориям таргетинга
-    // Возвращаем данные без конверсий
     res.json(categoriesData);
   } catch (error: any) {
     console.error('Failed to get targeting categories:', error);
@@ -1693,17 +1720,26 @@ router.get('/criteria/:projectId', async (req, res) => {
     const dateFrom = startDate.toISOString().split('T')[0];
     const dateTo = endDate.toISOString().split('T')[0];
 
-    // Получаем статистику по условиям показа
+    // Получаем goalIds для запроса реальных конверсий
+    let goalIds: string[] = [];
+    try {
+      if (connection.conversionGoals) {
+        goalIds = JSON.parse(connection.conversionGoals);
+      }
+    } catch (e) {
+      console.log('[criteria] No conversion goals configured');
+    }
+
+    // Получаем статистику по условиям показа с конверсиями
     const criteriaData = await yandexDirectService.getCriteriaReport(
       connection.accessToken,
       connection.login,
       campaignIds,
       dateFrom,
-      dateTo
+      dateTo,
+      goalIds.length > 0 ? goalIds : undefined
     );
 
-    // Примечание: Yandex API не поддерживает конверсии с разбивкой по условиям показа
-    // Возвращаем данные без конверсий
     res.json(criteriaData);
   } catch (error: any) {
     console.error('Failed to get criteria:', error);
