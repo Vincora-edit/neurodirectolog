@@ -2234,7 +2234,20 @@ export const clickhouseService = {
 
   // Ad Texts - объединяем ad_contents (заголовки и тексты) с ad_performance (статистика)
   // Группируем по ТЕКСТУ (title + text), а не по ad_id, чтобы консолидировать дубликаты
-  async getAdTexts(connectionId: string, startDate: string, endDate: string): Promise<any[]> {
+  async getAdTexts(connectionId: string, startDate: string, endDate: string, campaignId?: string): Promise<any[]> {
+    // Строим запрос с опциональным фильтром по кампании
+    let whereClause = `ap.connection_id = {connectionId:String}
+          AND ap.date >= {startDate:Date}
+          AND ap.date <= {endDate:Date}`;
+
+    const queryParams: Record<string, string> = { connectionId, startDate, endDate };
+
+    if (campaignId) {
+      whereClause += `
+          AND ap.campaign_id = {campaignId:String}`;
+      queryParams.campaignId = campaignId;
+    }
+
     const result = await client.query({
       query: `
         SELECT
@@ -2249,14 +2262,12 @@ export const clickhouseService = {
           COUNT(DISTINCT ap.ad_id) as ad_count
         FROM ad_performance ap
         LEFT JOIN ad_contents ac ON ap.ad_id = ac.ad_id AND ap.connection_id = ac.connection_id
-        WHERE ap.connection_id = {connectionId:String}
-          AND ap.date >= {startDate:Date}
-          AND ap.date <= {endDate:Date}
+        WHERE ${whereClause}
         GROUP BY ac.title, ac.title2, ac.text
         ORDER BY cost DESC
         LIMIT 100
       `,
-      query_params: { connectionId, startDate, endDate },
+      query_params: queryParams,
       format: 'JSONEachRow',
     });
 

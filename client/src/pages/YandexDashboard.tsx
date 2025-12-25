@@ -306,12 +306,15 @@ export function YandexDashboard() {
 
   // Отчёты - загружаем только когда выбран соответствующий таб
   // Это предотвращает ошибку "Превышено ограничение на размер очереди" от Яндекс API
+  // Добавляем глобальный фильтр по кампании ко всем отчётам
   const { data: searchQueriesData, isLoading: searchQueriesLoading } = useQuery({
-    queryKey: ['yandex-search-queries', activeProjectId, activeConnectionId, dateRange],
+    queryKey: ['yandex-search-queries', activeProjectId, activeConnectionId, dateRange, globalFilterCampaignId],
     queryFn: async () => {
-      const response = await fetch(
-        `${API_BASE_URL}/api/yandex/search-queries/${activeProjectId}?days=${dateRange}&connectionId=${activeConnectionId}`
-      );
+      let url = `${API_BASE_URL}/api/yandex/search-queries/${activeProjectId}?days=${dateRange}&connectionId=${activeConnectionId}`;
+      if (globalFilterCampaignId) {
+        url += `&campaignId=${globalFilterCampaignId}`;
+      }
+      const response = await fetch(url);
       return response.json();
     },
     enabled: !!activeProjectId && !!activeConnectionId && audienceReportTab === 'search',
@@ -319,11 +322,11 @@ export function YandexDashboard() {
   });
 
   const { data: deviceStatsData, isLoading: deviceStatsLoading } = useQuery({
-    queryKey: ['yandex-device-stats', activeProjectId, activeConnectionId, dateRange],
+    queryKey: ['yandex-device-stats', activeProjectId, activeConnectionId, dateRange, globalFilterCampaignId],
     queryFn: async () => {
-      const response = await fetch(
-        `${API_BASE_URL}/api/yandex/device-stats/${activeProjectId}?days=${dateRange}&connectionId=${activeConnectionId}`
-      );
+      let url = `${API_BASE_URL}/api/yandex/device-stats/${activeProjectId}?days=${dateRange}&connectionId=${activeConnectionId}`;
+      if (globalFilterCampaignId) url += `&campaignId=${globalFilterCampaignId}`;
+      const response = await fetch(url);
       return response.json();
     },
     enabled: !!activeProjectId && !!activeConnectionId && audienceReportTab === 'devices',
@@ -331,11 +334,11 @@ export function YandexDashboard() {
   });
 
   const { data: geoStatsData, isLoading: geoStatsLoading } = useQuery({
-    queryKey: ['yandex-geo-stats', activeProjectId, activeConnectionId, dateRange],
+    queryKey: ['yandex-geo-stats', activeProjectId, activeConnectionId, dateRange, globalFilterCampaignId],
     queryFn: async () => {
-      const response = await fetch(
-        `${API_BASE_URL}/api/yandex/geo-report/${activeProjectId}?days=${dateRange}&connectionId=${activeConnectionId}`
-      );
+      let url = `${API_BASE_URL}/api/yandex/geo-report/${activeProjectId}?days=${dateRange}&connectionId=${activeConnectionId}`;
+      if (globalFilterCampaignId) url += `&campaignId=${globalFilterCampaignId}`;
+      const response = await fetch(url);
       return response.json();
     },
     enabled: !!activeProjectId && !!activeConnectionId && audienceReportTab === 'region',
@@ -343,11 +346,11 @@ export function YandexDashboard() {
   });
 
   const { data: demographicsData, isLoading: demographicsLoading } = useQuery({
-    queryKey: ['yandex-demographics', activeProjectId, activeConnectionId, dateRange],
+    queryKey: ['yandex-demographics', activeProjectId, activeConnectionId, dateRange, globalFilterCampaignId],
     queryFn: async () => {
-      const response = await fetch(
-        `${API_BASE_URL}/api/yandex/demographics/${activeProjectId}?days=${dateRange}&connectionId=${activeConnectionId}`
-      );
+      let url = `${API_BASE_URL}/api/yandex/demographics/${activeProjectId}?days=${dateRange}&connectionId=${activeConnectionId}`;
+      if (globalFilterCampaignId) url += `&campaignId=${globalFilterCampaignId}`;
+      const response = await fetch(url);
       return response.json();
     },
     enabled: !!activeProjectId && !!activeConnectionId && audienceReportTab === 'demographics',
@@ -355,11 +358,11 @@ export function YandexDashboard() {
   });
 
   const { data: incomeData, isLoading: incomeLoading } = useQuery({
-    queryKey: ['yandex-income', activeProjectId, activeConnectionId, dateRange],
+    queryKey: ['yandex-income', activeProjectId, activeConnectionId, dateRange, globalFilterCampaignId],
     queryFn: async () => {
-      const response = await fetch(
-        `${API_BASE_URL}/api/yandex/income/${activeProjectId}?days=${dateRange}&connectionId=${activeConnectionId}`
-      );
+      let url = `${API_BASE_URL}/api/yandex/income/${activeProjectId}?days=${dateRange}&connectionId=${activeConnectionId}`;
+      if (globalFilterCampaignId) url += `&campaignId=${globalFilterCampaignId}`;
+      const response = await fetch(url);
       return response.json();
     },
     enabled: !!activeProjectId && !!activeConnectionId && audienceReportTab === 'income',
@@ -367,11 +370,11 @@ export function YandexDashboard() {
   });
 
   const { data: targetingCategoriesData, isLoading: targetingCategoriesLoading } = useQuery({
-    queryKey: ['yandex-targeting-categories', activeProjectId, activeConnectionId, dateRange],
+    queryKey: ['yandex-targeting-categories', activeProjectId, activeConnectionId, dateRange, globalFilterCampaignId],
     queryFn: async () => {
-      const response = await fetch(
-        `${API_BASE_URL}/api/yandex/targeting-categories/${activeProjectId}?days=${dateRange}&connectionId=${activeConnectionId}`
-      );
+      let url = `${API_BASE_URL}/api/yandex/targeting-categories/${activeProjectId}?days=${dateRange}&connectionId=${activeConnectionId}`;
+      if (globalFilterCampaignId) url += `&campaignId=${globalFilterCampaignId}`;
+      const response = await fetch(url);
       return response.json();
     },
     enabled: !!activeProjectId && !!activeConnectionId && technicalReportTab === 'categories',
@@ -379,11 +382,11 @@ export function YandexDashboard() {
   });
 
   const { data: criteriaData, isLoading: criteriaLoading } = useQuery({
-    queryKey: ['yandex-criteria', activeProjectId, activeConnectionId, dateRange],
+    queryKey: ['yandex-criteria', activeProjectId, activeConnectionId, dateRange, globalFilterCampaignId],
     queryFn: async () => {
-      const response = await fetch(
-        `${API_BASE_URL}/api/yandex/criteria/${activeProjectId}?days=${dateRange}&connectionId=${activeConnectionId}`
-      );
+      let url = `${API_BASE_URL}/api/yandex/criteria/${activeProjectId}?days=${dateRange}&connectionId=${activeConnectionId}`;
+      if (globalFilterCampaignId) url += `&campaignId=${globalFilterCampaignId}`;
+      const response = await fetch(url);
       return response.json();
     },
     enabled: !!activeProjectId && !!activeConnectionId && technicalReportTab === 'criteria',
@@ -391,11 +394,11 @@ export function YandexDashboard() {
   });
 
   const { data: placementsData, isLoading: placementsLoading } = useQuery({
-    queryKey: ['yandex-placements', activeProjectId, activeConnectionId, dateRange],
+    queryKey: ['yandex-placements', activeProjectId, activeConnectionId, dateRange, globalFilterCampaignId],
     queryFn: async () => {
-      const response = await fetch(
-        `${API_BASE_URL}/api/yandex/placements/${activeProjectId}?days=${dateRange}&connectionId=${activeConnectionId}`
-      );
+      let url = `${API_BASE_URL}/api/yandex/placements/${activeProjectId}?days=${dateRange}&connectionId=${activeConnectionId}`;
+      if (globalFilterCampaignId) url += `&campaignId=${globalFilterCampaignId}`;
+      const response = await fetch(url);
       return response.json();
     },
     enabled: !!activeProjectId && !!activeConnectionId && technicalReportTab === 'placements',
@@ -403,11 +406,11 @@ export function YandexDashboard() {
   });
 
   const { data: adTextsData, isLoading: adTextsLoading } = useQuery({
-    queryKey: ['yandex-ad-texts', activeProjectId, activeConnectionId, dateRange],
+    queryKey: ['yandex-ad-texts', activeProjectId, activeConnectionId, dateRange, globalFilterCampaignId],
     queryFn: async () => {
-      const response = await fetch(
-        `${API_BASE_URL}/api/yandex/ad-texts/${activeProjectId}?days=${dateRange}&connectionId=${activeConnectionId}`
-      );
+      let url = `${API_BASE_URL}/api/yandex/ad-texts/${activeProjectId}?days=${dateRange}&connectionId=${activeConnectionId}`;
+      if (globalFilterCampaignId) url += `&campaignId=${globalFilterCampaignId}`;
+      const response = await fetch(url);
       return response.json();
     },
     enabled: !!activeProjectId && !!activeConnectionId && (technicalReportTab === 'titles' || technicalReportTab === 'text'),
@@ -645,17 +648,34 @@ export function YandexDashboard() {
         };
       case 'titles':
       case 'text':
+        // Консолидируем по заголовку или тексту (группируем дубликаты)
+        if (!Array.isArray(adTextsData)) {
+          return { columnName: reportId === 'titles' ? 'Заголовок' : 'Текст объявления', data: [] };
+        }
+        const consolidatedMap = new Map<string, { name: string; impressions: number; clicks: number; cost: number; conversions: number }>();
+        adTextsData.forEach((item: any) => {
+          const key = reportId === 'titles'
+            ? (item.title || `Объявление ${item.adId}`)
+            : (item.text || item.fullText || `Объявление ${item.adId}`);
+          const existing = consolidatedMap.get(key);
+          if (existing) {
+            existing.impressions += item.impressions || 0;
+            existing.clicks += item.clicks || 0;
+            existing.cost += item.cost || 0;
+            existing.conversions += item.conversions || 0;
+          } else {
+            consolidatedMap.set(key, {
+              name: key,
+              impressions: item.impressions || 0,
+              clicks: item.clicks || 0,
+              cost: item.cost || 0,
+              conversions: item.conversions || 0,
+            });
+          }
+        });
         return {
           columnName: reportId === 'titles' ? 'Заголовок' : 'Текст объявления',
-          data: Array.isArray(adTextsData)
-            ? adTextsData.map((item: any) => ({
-                name: reportId === 'titles' ? (item.title || `Объявление ${item.adId}`) : (item.text || item.fullText || `Объявление ${item.adId}`),
-                impressions: item.impressions || 0,
-                clicks: item.clicks || 0,
-                cost: item.cost || 0,
-                conversions: item.conversions || 0,
-              })).sort((a: any, b: any) => b.cost - a.cost)
-            : [],
+          data: Array.from(consolidatedMap.values()).sort((a, b) => b.cost - a.cost),
         };
       default:
         return { columnName: 'Название', data: [] };

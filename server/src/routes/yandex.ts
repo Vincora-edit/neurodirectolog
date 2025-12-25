@@ -1076,7 +1076,7 @@ router.get('/geo-stats/:projectId', async (req, res) => {
 router.get('/device-stats/:projectId', async (req, res) => {
   try {
     const { projectId } = req.params;
-    const { days, startDate: startDateParam, endDate: endDateParam, connectionId } = req.query;
+    const { days, startDate: startDateParam, endDate: endDateParam, connectionId, campaignId } = req.query;
 
     let connection;
     if (connectionId) {
@@ -1104,20 +1104,15 @@ router.get('/device-stats/:projectId', async (req, res) => {
     const dateFrom = startDate.toISOString().split('T')[0];
     const dateTo = endDate.toISOString().split('T')[0];
 
-    // Сначала пробуем из ClickHouse
-    try {
-      const cachedData = await clickhouseService.getCachedDeviceStats(connection.id, dateFrom, dateTo);
-      if (cachedData && cachedData.length > 0) {
-        console.log(`[device-stats] Returning ${cachedData.length} cached records from ClickHouse`);
-        return res.json(cachedData);
-      }
-    } catch (cacheError) {
-      console.log(`[device-stats] ClickHouse cache miss, falling back to API`);
+    // Определяем campaignIds - либо фильтруем по одной кампании, либо берём все
+    let campaignIds: number[];
+    if (campaignId) {
+      campaignIds = [parseInt(campaignId as string)];
+      console.log(`[device-stats] Filtering by campaign: ${campaignId}`);
+    } else {
+      const campaigns = await clickhouseService.getCampaignsByConnectionId(connection.id);
+      campaignIds = campaigns.map(c => parseInt(c.externalId));
     }
-
-    // Fallback на Яндекс API
-    const campaigns = await clickhouseService.getCampaignsByConnectionId(connection.id);
-    const campaignIds = campaigns.map(c => parseInt(c.externalId));
 
     if (campaignIds.length === 0) {
       return res.json([]);
@@ -1205,7 +1200,7 @@ router.get('/device-stats/:projectId', async (req, res) => {
 router.get('/search-queries/:projectId', async (req, res) => {
   try {
     const { projectId } = req.params;
-    const { days, startDate: startDateParam, endDate: endDateParam, connectionId } = req.query;
+    const { days, startDate: startDateParam, endDate: endDateParam, connectionId, campaignId } = req.query;
 
     let connection;
     if (connectionId) {
@@ -1218,18 +1213,7 @@ router.get('/search-queries/:projectId', async (req, res) => {
       return res.status(404).json({ error: 'Connection not found' });
     }
 
-    // Сначала пробуем получить из ClickHouse (быстро, без лимитов API)
-    try {
-      const cachedData = await clickhouseService.getSearchQueries(connection.id);
-      if (cachedData && cachedData.length > 0) {
-        console.log(`[search-queries] Returning ${cachedData.length} cached records from ClickHouse`);
-        return res.json(cachedData);
-      }
-    } catch (cacheError) {
-      console.log(`[search-queries] ClickHouse cache miss, falling back to API`);
-    }
-
-    // Fallback на Яндекс API
+    // Определяем даты
     let startDate: Date;
     let endDate: Date;
 
@@ -1242,15 +1226,22 @@ router.get('/search-queries/:projectId', async (req, res) => {
       startDate.setDate(startDate.getDate() - parseInt((days as string) || '30'));
     }
 
-    const campaigns = await clickhouseService.getCampaignsByConnectionId(connection.id);
-    const campaignIds = campaigns.map(c => parseInt(c.externalId));
+    const dateFrom = startDate.toISOString().split('T')[0];
+    const dateTo = endDate.toISOString().split('T')[0];
+
+    // Определяем campaignIds - либо фильтруем по одной кампании, либо берём все
+    let campaignIds: number[];
+    if (campaignId) {
+      campaignIds = [parseInt(campaignId as string)];
+      console.log(`[search-queries] Filtering by campaign: ${campaignId}`);
+    } else {
+      const campaigns = await clickhouseService.getCampaignsByConnectionId(connection.id);
+      campaignIds = campaigns.map(c => parseInt(c.externalId));
+    }
 
     if (campaignIds.length === 0) {
       return res.json([]);
     }
-
-    const dateFrom = startDate.toISOString().split('T')[0];
-    const dateTo = endDate.toISOString().split('T')[0];
 
     // Получаем goalIds для запроса реальных конверсий
     let goalIds: string[] = [];
@@ -1262,6 +1253,7 @@ router.get('/search-queries/:projectId', async (req, res) => {
       console.log('[search-queries] No conversion goals configured');
     }
 
+    // Всегда используем API для получения конверсий (ClickHouse cache не хранит конверсии)
     const searchQueries = await yandexDirectService.getSearchQueryReport(
       connection.accessToken,
       connection.login,
@@ -1287,7 +1279,7 @@ router.get('/search-queries/:projectId', async (req, res) => {
 router.get('/demographics/:projectId', async (req, res) => {
   try {
     const { projectId } = req.params;
-    const { days, startDate: startDateParam, endDate: endDateParam, connectionId } = req.query;
+    const { days, startDate: startDateParam, endDate: endDateParam, connectionId, campaignId } = req.query;
 
     let connection;
     if (connectionId) {
@@ -1315,20 +1307,15 @@ router.get('/demographics/:projectId', async (req, res) => {
     const dateFrom = startDate.toISOString().split('T')[0];
     const dateTo = endDate.toISOString().split('T')[0];
 
-    // Сначала пробуем из ClickHouse
-    try {
-      const cachedData = await clickhouseService.getDemographics(connection.id, dateFrom, dateTo);
-      if (cachedData && cachedData.length > 0) {
-        console.log(`[demographics] Returning ${cachedData.length} cached records from ClickHouse`);
-        return res.json(cachedData);
-      }
-    } catch (cacheError) {
-      console.log(`[demographics] ClickHouse cache miss, falling back to API`);
+    // Определяем campaignIds - либо фильтруем по одной кампании, либо берём все
+    let campaignIds: number[];
+    if (campaignId) {
+      campaignIds = [parseInt(campaignId as string)];
+      console.log(`[demographics] Filtering by campaign: ${campaignId}`);
+    } else {
+      const campaigns = await clickhouseService.getCampaignsByConnectionId(connection.id);
+      campaignIds = campaigns.map(c => parseInt(c.externalId));
     }
-
-    // Fallback на Яндекс API
-    const campaigns = await clickhouseService.getCampaignsByConnectionId(connection.id);
-    const campaignIds = campaigns.map(c => parseInt(c.externalId));
 
     if (campaignIds.length === 0) {
       return res.json([]);
@@ -1369,7 +1356,7 @@ router.get('/demographics/:projectId', async (req, res) => {
 router.get('/geo-report/:projectId', async (req, res) => {
   try {
     const { projectId } = req.params;
-    const { days, startDate: startDateParam, endDate: endDateParam, connectionId } = req.query;
+    const { days, startDate: startDateParam, endDate: endDateParam, connectionId, campaignId } = req.query;
 
     let connection;
     if (connectionId) {
@@ -1397,20 +1384,15 @@ router.get('/geo-report/:projectId', async (req, res) => {
     const dateFrom = startDate.toISOString().split('T')[0];
     const dateTo = endDate.toISOString().split('T')[0];
 
-    // Сначала пробуем из ClickHouse
-    try {
-      const cachedData = await clickhouseService.getGeoStats(connection.id, dateFrom, dateTo);
-      if (cachedData && cachedData.length > 0) {
-        console.log(`[geo-report] Returning ${cachedData.length} cached records from ClickHouse`);
-        return res.json(cachedData);
-      }
-    } catch (cacheError) {
-      console.log(`[geo-report] ClickHouse cache miss, falling back to API`);
+    // Определяем campaignIds - либо фильтруем по одной кампании, либо берём все
+    let campaignIds: number[];
+    if (campaignId) {
+      campaignIds = [parseInt(campaignId as string)];
+      console.log(`[geo-report] Filtering by campaign: ${campaignId}`);
+    } else {
+      const campaigns = await clickhouseService.getCampaignsByConnectionId(connection.id);
+      campaignIds = campaigns.map(c => parseInt(c.externalId));
     }
-
-    // Fallback на Яндекс API
-    const campaigns = await clickhouseService.getCampaignsByConnectionId(connection.id);
-    const campaignIds = campaigns.map(c => parseInt(c.externalId));
 
     if (campaignIds.length === 0) {
       return res.json([]);
@@ -1460,7 +1442,7 @@ router.get('/geo-report/:projectId', async (req, res) => {
 router.get('/placements/:projectId', async (req, res) => {
   try {
     const { projectId } = req.params;
-    const { days, startDate: startDateParam, endDate: endDateParam, connectionId } = req.query;
+    const { days, startDate: startDateParam, endDate: endDateParam, connectionId, campaignId } = req.query;
 
     let connection;
     if (connectionId) {
@@ -1485,17 +1467,23 @@ router.get('/placements/:projectId', async (req, res) => {
       startDate.setDate(startDate.getDate() - parseInt((days as string) || '30'));
     }
 
-    // Получаем список кампаний для этого подключения
-    const campaigns = await clickhouseService.getCampaignsByConnectionId(connection.id);
-    const campaignIds = campaigns.map(c => parseInt(c.externalId));
+    // Форматируем даты для API
+    const dateFrom = startDate.toISOString().split('T')[0];
+    const dateTo = endDate.toISOString().split('T')[0];
+
+    // Определяем campaignIds - либо фильтруем по одной кампании, либо берём все
+    let campaignIds: number[];
+    if (campaignId) {
+      campaignIds = [parseInt(campaignId as string)];
+      console.log(`[placements] Filtering by campaign: ${campaignId}`);
+    } else {
+      const campaigns = await clickhouseService.getCampaignsByConnectionId(connection.id);
+      campaignIds = campaigns.map(c => parseInt(c.externalId));
+    }
 
     if (campaignIds.length === 0) {
       return res.json([]);
     }
-
-    // Форматируем даты для API
-    const dateFrom = startDate.toISOString().split('T')[0];
-    const dateTo = endDate.toISOString().split('T')[0];
 
     // Получаем goalIds для запроса реальных конверсий
     let goalIds: string[] = [];
@@ -1532,7 +1520,7 @@ router.get('/placements/:projectId', async (req, res) => {
 router.get('/income/:projectId', async (req, res) => {
   try {
     const { projectId } = req.params;
-    const { days, startDate: startDateParam, endDate: endDateParam, connectionId } = req.query;
+    const { days, startDate: startDateParam, endDate: endDateParam, connectionId, campaignId } = req.query;
 
     let connection;
     if (connectionId) {
@@ -1560,20 +1548,15 @@ router.get('/income/:projectId', async (req, res) => {
     const dateFrom = startDate.toISOString().split('T')[0];
     const dateTo = endDate.toISOString().split('T')[0];
 
-    // Сначала пробуем из ClickHouse
-    try {
-      const cachedData = await clickhouseService.getIncomeStats(connection.id, dateFrom, dateTo);
-      if (cachedData && cachedData.length > 0) {
-        console.log(`[income] Returning ${cachedData.length} cached records from ClickHouse`);
-        return res.json(cachedData);
-      }
-    } catch (cacheError) {
-      console.log(`[income] ClickHouse cache miss, falling back to API`);
+    // Определяем campaignIds - либо фильтруем по одной кампании, либо берём все
+    let campaignIds: number[];
+    if (campaignId) {
+      campaignIds = [parseInt(campaignId as string)];
+      console.log(`[income] Filtering by campaign: ${campaignId}`);
+    } else {
+      const campaigns = await clickhouseService.getCampaignsByConnectionId(connection.id);
+      campaignIds = campaigns.map(c => parseInt(c.externalId));
     }
-
-    // Fallback на Яндекс API
-    const campaigns = await clickhouseService.getCampaignsByConnectionId(connection.id);
-    const campaignIds = campaigns.map(c => parseInt(c.externalId));
 
     if (campaignIds.length === 0) {
       return res.json([]);
@@ -1612,7 +1595,7 @@ router.get('/income/:projectId', async (req, res) => {
 router.get('/targeting-categories/:projectId', async (req, res) => {
   try {
     const { projectId } = req.params;
-    const { days, startDate: startDateParam, endDate: endDateParam, connectionId } = req.query;
+    const { days, startDate: startDateParam, endDate: endDateParam, connectionId, campaignId } = req.query;
 
     let connection;
     if (connectionId) {
@@ -1637,17 +1620,23 @@ router.get('/targeting-categories/:projectId', async (req, res) => {
       startDate.setDate(startDate.getDate() - parseInt((days as string) || '30'));
     }
 
-    // Получаем список кампаний для этого подключения
-    const campaigns = await clickhouseService.getCampaignsByConnectionId(connection.id);
-    const campaignIds = campaigns.map(c => parseInt(c.externalId));
+    // Форматируем даты для API
+    const dateFrom = startDate.toISOString().split('T')[0];
+    const dateTo = endDate.toISOString().split('T')[0];
+
+    // Определяем campaignIds - либо фильтруем по одной кампании, либо берём все
+    let campaignIds: number[];
+    if (campaignId) {
+      campaignIds = [parseInt(campaignId as string)];
+      console.log(`[targeting-categories] Filtering by campaign: ${campaignId}`);
+    } else {
+      const campaigns = await clickhouseService.getCampaignsByConnectionId(connection.id);
+      campaignIds = campaigns.map(c => parseInt(c.externalId));
+    }
 
     if (campaignIds.length === 0) {
       return res.json([]);
     }
-
-    // Форматируем даты для API
-    const dateFrom = startDate.toISOString().split('T')[0];
-    const dateTo = endDate.toISOString().split('T')[0];
 
     // Получаем goalIds для запроса реальных конверсий
     let goalIds: string[] = [];
@@ -1683,7 +1672,7 @@ router.get('/targeting-categories/:projectId', async (req, res) => {
 router.get('/criteria/:projectId', async (req, res) => {
   try {
     const { projectId } = req.params;
-    const { days, startDate: startDateParam, endDate: endDateParam, connectionId } = req.query;
+    const { days, startDate: startDateParam, endDate: endDateParam, connectionId, campaignId } = req.query;
 
     let connection;
     if (connectionId) {
@@ -1708,17 +1697,23 @@ router.get('/criteria/:projectId', async (req, res) => {
       startDate.setDate(startDate.getDate() - parseInt((days as string) || '30'));
     }
 
-    // Получаем список кампаний для этого подключения
-    const campaigns = await clickhouseService.getCampaignsByConnectionId(connection.id);
-    const campaignIds = campaigns.map(c => parseInt(c.externalId));
+    // Форматируем даты для API
+    const dateFrom = startDate.toISOString().split('T')[0];
+    const dateTo = endDate.toISOString().split('T')[0];
+
+    // Определяем campaignIds - либо фильтруем по одной кампании, либо берём все
+    let campaignIds: number[];
+    if (campaignId) {
+      campaignIds = [parseInt(campaignId as string)];
+      console.log(`[criteria] Filtering by campaign: ${campaignId}`);
+    } else {
+      const campaigns = await clickhouseService.getCampaignsByConnectionId(connection.id);
+      campaignIds = campaigns.map(c => parseInt(c.externalId));
+    }
 
     if (campaignIds.length === 0) {
       return res.json([]);
     }
-
-    // Форматируем даты для API
-    const dateFrom = startDate.toISOString().split('T')[0];
-    const dateTo = endDate.toISOString().split('T')[0];
 
     // Получаем goalIds для запроса реальных конверсий
     let goalIds: string[] = [];
@@ -1755,7 +1750,7 @@ router.get('/criteria/:projectId', async (req, res) => {
 router.get('/ad-texts/:projectId', async (req, res) => {
   try {
     const { projectId } = req.params;
-    const { days, startDate: startDateParam, endDate: endDateParam, connectionId } = req.query;
+    const { days, startDate: startDateParam, endDate: endDateParam, connectionId, campaignId } = req.query;
 
     let connection;
     if (connectionId) {
@@ -1783,11 +1778,11 @@ router.get('/ad-texts/:projectId', async (req, res) => {
     const dateFrom = startDate.toISOString().split('T')[0];
     const dateTo = endDate.toISOString().split('T')[0];
 
-    // Сначала пробуем из ClickHouse
+    // Читаем из ClickHouse с учётом фильтра по кампании
     try {
-      const cachedData = await clickhouseService.getAdTexts(connection.id, dateFrom, dateTo);
+      const cachedData = await clickhouseService.getAdTexts(connection.id, dateFrom, dateTo, campaignId as string | undefined);
       if (cachedData && cachedData.length > 0) {
-        console.log(`[ad-texts] Returning ${cachedData.length} cached records from ClickHouse`);
+        console.log(`[ad-texts] Returning ${cachedData.length} cached records from ClickHouse${campaignId ? ` (filtered by campaign ${campaignId})` : ''}`);
         return res.json(cachedData);
       }
     } catch (cacheError) {
@@ -1795,8 +1790,14 @@ router.get('/ad-texts/:projectId', async (req, res) => {
     }
 
     // Fallback на Яндекс API
-    const campaigns = await clickhouseService.getCampaignsByConnectionId(connection.id);
-    const campaignIds = campaigns.map(c => parseInt(c.externalId));
+    let campaignIds: number[];
+    if (campaignId) {
+      campaignIds = [parseInt(campaignId as string)];
+      console.log(`[ad-texts] Filtering by campaign: ${campaignId}`);
+    } else {
+      const campaigns = await clickhouseService.getCampaignsByConnectionId(connection.id);
+      campaignIds = campaigns.map(c => parseInt(c.externalId));
+    }
 
     if (campaignIds.length === 0) {
       return res.json([]);
