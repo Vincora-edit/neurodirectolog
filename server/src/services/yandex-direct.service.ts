@@ -1463,7 +1463,10 @@ export const yandexDirectService = {
 
   /**
    * Получить баланс аккаунта
-   * Сначала пробуем API v4 Live (общий счёт), если не работает - суммируем балансы кампаний
+   * Пробуем несколько методов по порядку:
+   * 1. API v5 Clients.get (для прямых рекламодателей)
+   * 2. API v4 Live AccountManagement (для агентских аккаунтов)
+   * 3. Суммируем балансы кампаний (fallback)
    */
   async getAccountBalance(
     accessToken: string,
@@ -1472,11 +1475,62 @@ export const yandexDirectService = {
     amount: number;
     currency: string;
     amountAvailableForTransfer: number;
-    source: 'shared_account' | 'campaigns_sum';
+    source: 'clients_api' | 'shared_account' | 'campaigns_sum';
   } | null> {
-    // 1. Сначала пробуем получить баланс общего счёта через API v4 Live
+    console.log(`[getAccountBalance] Starting for login: ${login}`);
+
     const YANDEX_API_V4_LIVE_URL = 'https://api.direct.yandex.ru/live/v4/json/';
 
+    // 1. Пробуем API v4 Live GetClientInfo - работает для получения баланса общего счёта
+    let sharedAccountEnabled = false;
+    let clientCurrency = 'RUB';
+
+    try {
+      const clientInfoResponse = await axios.post(
+        YANDEX_API_V4_LIVE_URL,
+        {
+          method: 'GetClientInfo',
+          token: accessToken,
+          param: [login],
+        },
+        {
+          headers: {
+            'Content-Type': 'application/json',
+            'Accept-Language': 'ru',
+          },
+        }
+      );
+
+      console.log('[getAccountBalance] GetClientInfo response:', JSON.stringify(clientInfoResponse.data, null, 2));
+
+      const clientData = clientInfoResponse.data.data;
+      if (clientData && clientData.length > 0) {
+        const client = clientData[0];
+        clientCurrency = client.Currency || 'RUB';
+        sharedAccountEnabled = client.SharedAccountEnabled === 'Yes';
+
+        // SharedAccountEnabled - включён ли общий счёт
+        // AccountAmount - баланс общего счёта (если включён)
+        if (sharedAccountEnabled && client.AccountAmount !== undefined && client.AccountAmount !== null) {
+          console.log('[getAccountBalance] Got shared account balance via GetClientInfo:', client.AccountAmount);
+          return {
+            amount: client.AccountAmount,
+            currency: clientCurrency,
+            amountAvailableForTransfer: 0,
+            source: 'shared_account',
+          };
+        }
+
+        // Если SharedAccount включён но AccountAmount нет - запомним и продолжим
+        if (sharedAccountEnabled) {
+          console.log('[getAccountBalance] SharedAccount enabled but AccountAmount not available, trying other methods...');
+        }
+      }
+    } catch (error: any) {
+      console.log('[getAccountBalance] GetClientInfo not available:', error.response?.data || error.message);
+    }
+
+    // 2. Пробуем AccountManagement (для агентов)
     try {
       const response = await axios.post(
         YANDEX_API_V4_LIVE_URL,
@@ -1498,6 +1552,8 @@ export const yandexDirectService = {
         }
       );
 
+      console.log('[getAccountBalance] AccountManagement response:', JSON.stringify(response.data, null, 2));
+
       const accounts = response.data.data?.Accounts;
       if (accounts && accounts.length > 0) {
         const account = accounts[0];
@@ -1510,10 +1566,56 @@ export const yandexDirectService = {
         };
       }
     } catch (error: any) {
-      console.log('[getAccountBalance] Shared account not available, trying campaigns...');
+      console.log('[getAccountBalance] AccountManagement not available:', error.response?.data || error.message);
     }
 
-    // 2. Если общий счёт не доступен - получаем балансы кампаний через API v5
+    // 3. Пробуем API v5 Clients.get
+    try {
+      const clientsResponse = await axios.post(
+        `${YANDEX_API_URL}/clients`,
+        {
+          method: 'get',
+          params: {
+            FieldNames: ['ClientId', 'Login', 'Currency', 'Bonuses', 'OverdraftSumAvailable'],
+          },
+        },
+        {
+          headers: {
+            'Authorization': `Bearer ${accessToken}`,
+            'Client-Login': login,
+            'Accept-Language': 'ru',
+          },
+        }
+      );
+
+      console.log('[getAccountBalance] Clients API response:', JSON.stringify(clientsResponse.data, null, 2));
+
+      const clients = clientsResponse.data.result?.Clients;
+      if (clients && clients.length > 0) {
+        const client = clients[0];
+        const currency = client.Currency || 'RUB';
+
+        const overdraft = (client.OverdraftSumAvailable || 0) / 1000000;
+        const bonuses = (client.Bonuses?.AwaitingBonus || 0) / 1000000;
+
+        console.log('[getAccountBalance] Clients API - overdraft:', overdraft, 'bonuses:', bonuses, 'currency:', currency);
+
+        if (overdraft > 0 || bonuses > 0) {
+          return {
+            amount: overdraft + bonuses,
+            currency,
+            amountAvailableForTransfer: overdraft,
+            source: 'clients_api',
+          };
+        }
+      }
+    } catch (error: any) {
+      console.log('[getAccountBalance] Clients API not available:', error.response?.data || error.message);
+    }
+
+    console.log('[getAccountBalance] Trying campaigns fallback...');
+
+    // 3. Fallback - получаем балансы через кампании API v5
     try {
       const response = await axios.post(
         `${YANDEX_API_URL}/campaigns`,
@@ -1521,7 +1623,7 @@ export const yandexDirectService = {
           method: 'get',
           params: {
             SelectionCriteria: {
-              States: ['ON', 'OFF', 'SUSPENDED'], // Активные и приостановленные кампании
+              States: ['ON', 'OFF', 'SUSPENDED'],
             },
             FieldNames: ['Id', 'Name', 'State', 'Funds', 'Currency'],
           },
@@ -1547,11 +1649,11 @@ export const yandexDirectService = {
         return null;
       }
 
-      // Проверяем тип счёта - общий или индивидуальный
       let totalBalance = 0;
       let totalAvailable = 0;
       let currency = 'RUB';
       let hasSharedAccount = false;
+      let sharedAccountSpend = 0;
 
       for (const campaign of campaigns) {
         if (campaign.Currency) {
@@ -1562,22 +1664,65 @@ export const yandexDirectService = {
         const sharedFunds = campaign.Funds?.SharedAccountFunds;
         if (sharedFunds) {
           hasSharedAccount = true;
-          // При общем счёте Spend показывает потраченное, но баланс получаем через API v4 Live
+          // Spend - потрачено с общего счёта (в микро-единицах при returnMoneyInMicros=true)
+          sharedAccountSpend += sharedFunds.Spend || 0;
           continue;
         }
 
-        // CampaignFunds - когда нет общего счёта
+        // CampaignFunds - когда нет общего счёта (индивидуальные бюджеты кампаний)
         const campaignFunds = campaign.Funds?.CampaignFunds;
         if (campaignFunds) {
-          // Balance в микро-единицах (делим на 1,000,000)
-          totalBalance += (campaignFunds.Balance || 0) / 1000000;
-          totalAvailable += (campaignFunds.SumAvailableForTransfer || 0) / 1000000;
+          // При returnMoneyInMicros=false значения уже в рублях
+          totalBalance += campaignFunds.Balance || 0;
+          totalAvailable += campaignFunds.SumAvailableForTransfer || 0;
         }
       }
 
-      // Если у аккаунта общий счёт, но API v4 Live не вернул данные - возвращаем null
-      if (hasSharedAccount && totalBalance === 0) {
-        console.log('[getAccountBalance] Shared account enabled but balance not available via API');
+      // Если общий счёт - пробуем получить баланс через API v4 GetClientInfo повторно с Finance
+      if (hasSharedAccount) {
+        console.log(`[getAccountBalance] Shared account detected, total spend: ${sharedAccountSpend} ${currency}`);
+
+        // Пробуем получить баланс через API v4 Finance
+        try {
+          const financeResponse = await axios.post(
+            YANDEX_API_V4_LIVE_URL,
+            {
+              method: 'GetBalance',
+              token: accessToken,
+              param: {
+                AccountIDS: [],
+                Logins: [login],
+              },
+            },
+            {
+              headers: {
+                'Content-Type': 'application/json',
+                'Accept-Language': 'ru',
+              },
+            }
+          );
+
+          console.log('[getAccountBalance] GetBalance response:', JSON.stringify(financeResponse.data, null, 2));
+
+          const balanceData = financeResponse.data.data;
+          if (balanceData && balanceData.length > 0) {
+            const balance = balanceData[0];
+            if (balance.Amount !== undefined && balance.Amount !== null) {
+              console.log('[getAccountBalance] Got balance via GetBalance:', balance.Amount);
+              return {
+                amount: balance.Amount,
+                currency: balance.Currency || currency,
+                amountAvailableForTransfer: 0,
+                source: 'shared_account',
+              };
+            }
+          }
+        } catch (financeError: any) {
+          console.log('[getAccountBalance] GetBalance not available:', financeError.response?.data || financeError.message);
+        }
+
+        // Если всё ещё нет баланса - возвращаем null чтобы показать ошибку
+        console.log('[getAccountBalance] Could not get shared account balance');
         return null;
       }
 
