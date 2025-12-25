@@ -117,6 +117,7 @@ router.delete('/:projectId', authenticate, async (req, res, next) => {
   try {
     const { projectId } = req.params;
     const userId = (req as AuthRequest).userId;
+    const isAdmin = (req as AuthRequest).isAdmin;
 
     const project = projectStore.getById(projectId);
 
@@ -124,7 +125,8 @@ router.delete('/:projectId', authenticate, async (req, res, next) => {
       throw createError('Project not found', 404);
     }
 
-    if (project.userId !== userId && project.userId !== 'system') {
+    // Админ может удалять любые проекты, пользователи - только свои
+    if (!isAdmin && project.userId !== userId && project.userId !== 'system') {
       throw createError('Access denied', 403);
     }
 
