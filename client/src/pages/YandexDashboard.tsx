@@ -789,7 +789,6 @@ export function YandexDashboard() {
         isSyncing={isSyncing}
         onSync={handleSync}
         lastSyncAt={activeConnection?.lastSyncAt}
-        isScrolled={isScrolled}
         isCollapsed={isHeaderCollapsed}
         onCollapsedChange={setIsHeaderCollapsed}
       />
