@@ -36,80 +36,60 @@ export function MetricsCards({ totalStats, budgetForecast }: MetricsCardsProps) 
   return (
     <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4 mb-6">
       {/* Бюджет */}
-      <div className={`bg-gradient-to-br ${budgetColors.bg} rounded-xl shadow-lg p-4 text-white`}>
-        <div className="flex items-center gap-3">
-          <div className="bg-white/20 p-2 rounded-lg shrink-0">
-            <Wallet size={20} />
-          </div>
-          <div className="min-w-0">
-            <p className={`text-xs ${budgetColors.text} mb-0.5`}>Бюджет</p>
-            <p className="text-xl font-bold truncate">
-              {budgetForecast?.balance?.amount
-                ? budgetForecast.balance.amount.toLocaleString('ru-RU')
-                : '—'}{' '}
-              ₽
-            </p>
-          </div>
+      <div className={`bg-gradient-to-br ${budgetColors.bg} rounded-xl shadow-lg p-4 text-white flex flex-col items-center justify-center text-center`}>
+        <div className="bg-white/20 p-2 rounded-lg mb-2">
+          <Wallet size={20} />
         </div>
-        <div className={`${budgetColors.text} text-xs mt-2`}>
+        <p className={`text-xs ${budgetColors.text} mb-0.5`}>Бюджет</p>
+        <p className="text-xl font-bold">
+          {budgetForecast?.balance?.amount
+            ? budgetForecast.balance.amount.toLocaleString('ru-RU')
+            : '—'}{' '}
+          ₽
+        </p>
+        <p className={`${budgetColors.text} text-xs mt-1`}>
           {daysRemaining !== null && daysRemaining !== undefined
             ? `Хватит на ${daysRemaining} дней`
-            : ''}
-        </div>
+            : '\u00A0'}
+        </p>
       </div>
 
       {/* Расход */}
-      <div className="bg-gradient-to-br from-orange-500 to-orange-600 rounded-xl shadow-lg p-4 text-white">
-        <div className="flex items-center gap-3">
-          <div className="bg-white/20 p-2 rounded-lg shrink-0">
-            <DollarSign size={20} />
-          </div>
-          <div className="min-w-0">
-            <p className="text-xs text-orange-100 mb-0.5">Расход</p>
-            <p className="text-xl font-bold truncate">{totalStats.cost.toLocaleString('ru-RU')} ₽</p>
-          </div>
+      <div className="bg-gradient-to-br from-orange-500 to-orange-600 rounded-xl shadow-lg p-4 text-white flex flex-col items-center justify-center text-center">
+        <div className="bg-white/20 p-2 rounded-lg mb-2">
+          <DollarSign size={20} />
         </div>
+        <p className="text-xs text-orange-100 mb-0.5">Расход</p>
+        <p className="text-xl font-bold">{totalStats.cost.toLocaleString('ru-RU')} ₽</p>
       </div>
 
       {/* CR */}
-      <div className="bg-gradient-to-br from-blue-500 to-indigo-600 rounded-xl shadow-lg p-4 text-white">
-        <div className="flex items-center gap-3">
-          <div className="bg-white/20 p-2 rounded-lg shrink-0">
-            <TrendingUp size={20} />
-          </div>
-          <div className="min-w-0">
-            <p className="text-xs text-blue-100 mb-0.5">CR</p>
-            <p className="text-xl font-bold">{cr.toFixed(2)}%</p>
-          </div>
+      <div className="bg-gradient-to-br from-blue-500 to-indigo-600 rounded-xl shadow-lg p-4 text-white flex flex-col items-center justify-center text-center">
+        <div className="bg-white/20 p-2 rounded-lg mb-2">
+          <TrendingUp size={20} />
         </div>
+        <p className="text-xs text-blue-100 mb-0.5">CR</p>
+        <p className="text-xl font-bold">{cr.toFixed(2)}%</p>
       </div>
 
       {/* CPL */}
-      <div className="bg-gradient-to-br from-gray-500 to-gray-600 rounded-xl shadow-lg p-4 text-white">
-        <div className="flex items-center gap-3">
-          <div className="bg-white/20 p-2 rounded-lg shrink-0">
-            <TrendingDown size={20} />
-          </div>
-          <div className="min-w-0">
-            <p className="text-xs text-gray-100 mb-0.5">CPL</p>
-            <p className="text-xl font-bold truncate">
-              {cpl > 0 ? Math.round(cpl).toLocaleString('ru-RU') : '—'} ₽
-            </p>
-          </div>
+      <div className="bg-gradient-to-br from-gray-500 to-gray-600 rounded-xl shadow-lg p-4 text-white flex flex-col items-center justify-center text-center">
+        <div className="bg-white/20 p-2 rounded-lg mb-2">
+          <TrendingDown size={20} />
         </div>
+        <p className="text-xs text-gray-100 mb-0.5">CPL</p>
+        <p className="text-xl font-bold">
+          {cpl > 0 ? Math.round(cpl).toLocaleString('ru-RU') : '—'} ₽
+        </p>
       </div>
 
       {/* Конверсии */}
-      <div className="bg-gradient-to-br from-purple-500 to-violet-600 rounded-xl shadow-lg p-4 text-white">
-        <div className="flex items-center gap-3">
-          <div className="bg-white/20 p-2 rounded-lg shrink-0">
-            <Target size={20} />
-          </div>
-          <div className="min-w-0">
-            <p className="text-xs text-purple-100 mb-0.5">Конверсии</p>
-            <p className="text-xl font-bold">{totalStats.conversions.toLocaleString('ru-RU')}</p>
-          </div>
+      <div className="bg-gradient-to-br from-purple-500 to-violet-600 rounded-xl shadow-lg p-4 text-white flex flex-col items-center justify-center text-center">
+        <div className="bg-white/20 p-2 rounded-lg mb-2">
+          <Target size={20} />
         </div>
+        <p className="text-xs text-purple-100 mb-0.5">Конверсии</p>
+        <p className="text-xl font-bold">{totalStats.conversions.toLocaleString('ru-RU')}</p>
       </div>
     </div>
   );
