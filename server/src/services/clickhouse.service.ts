@@ -2205,7 +2205,7 @@ export const clickhouseService = {
     }));
   },
 
-  // Ad Texts - объединяем ad_contents (заголовки) с ad_performance (статистика)
+  // Ad Texts - объединяем ad_contents (заголовки и тексты) с ad_performance (статистика)
   async getAdTexts(connectionId: string, startDate: string, endDate: string): Promise<any[]> {
     const result = await client.query({
       query: `
@@ -2213,6 +2213,7 @@ export const clickhouseService = {
           ap.ad_id,
           ac.title,
           ac.title2,
+          ac.text,
           SUM(ap.impressions) as impressions,
           SUM(ap.clicks) as clicks,
           SUM(ap.cost) as cost,
@@ -2222,7 +2223,7 @@ export const clickhouseService = {
         WHERE ap.connection_id = {connectionId:String}
           AND ap.date >= {startDate:Date}
           AND ap.date <= {endDate:Date}
-        GROUP BY ap.ad_id, ac.title, ac.title2
+        GROUP BY ap.ad_id, ac.title, ac.title2, ac.text
         ORDER BY cost DESC
       `,
       query_params: { connectionId, startDate, endDate },
@@ -2234,6 +2235,7 @@ export const clickhouseService = {
       adId: row.ad_id,
       title: row.title || 'Без заголовка',
       title2: row.title2 || '',
+      text: row.text || '',
       impressions: parseInt(row.impressions) || 0,
       clicks: parseInt(row.clicks) || 0,
       cost: parseFloat(row.cost) || 0,
