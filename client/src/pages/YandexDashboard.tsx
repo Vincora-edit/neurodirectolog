@@ -147,8 +147,18 @@ export function YandexDashboard() {
   const [globalFilterAdId, setGlobalFilterAdId] = useState<string | null>(null);
 
   // UI состояние
+  const [isHeaderCompact, setIsHeaderCompact] = useState(false);
   const [isHeaderCollapsed, setIsHeaderCollapsed] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
+
+  // Scroll listener - сворачиваем шапку после 150px
+  useEffect(() => {
+    const handleScroll = () => {
+      setIsHeaderCompact(window.scrollY > 150);
+    };
+    window.addEventListener('scroll', handleScroll);
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, []);
 
   // Секции аккордеонов
   const [isDynamicsOpen, setIsDynamicsOpen] = useState(true);
@@ -789,6 +799,7 @@ export function YandexDashboard() {
         isSyncing={isSyncing}
         onSync={handleSync}
         lastSyncAt={activeConnection?.lastSyncAt}
+        isCompact={isHeaderCompact}
         isCollapsed={isHeaderCollapsed}
         onCollapsedChange={setIsHeaderCollapsed}
       />

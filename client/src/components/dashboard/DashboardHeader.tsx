@@ -96,6 +96,7 @@ interface DashboardHeaderProps {
   lastSyncAt?: string;
 
   // Header state
+  isCompact: boolean;
   isCollapsed: boolean;
   onCollapsedChange: (collapsed: boolean) => void;
 }
@@ -128,6 +129,7 @@ export function DashboardHeader({
   isSyncing,
   onSync,
   lastSyncAt,
+  isCompact,
   isCollapsed,
   onCollapsedChange,
 }: DashboardHeaderProps) {
@@ -180,11 +182,19 @@ export function DashboardHeader({
   return (
     <>
       <div
-        className={`mb-6 ${isCollapsed ? 'hidden' : ''}`}
+        className={`sticky top-[41px] z-20 mb-6 -mx-8 px-8 -mt-8 pt-4 pb-2 bg-gray-50 ${
+          isCollapsed ? 'hidden' : ''
+        }`}
       >
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4">
-          {/* Первая строка: Заголовок и кнопка обновления */}
-          <div className="flex items-start justify-between mb-4">
+        <div className={`bg-white rounded-xl shadow-sm border border-gray-200 transition-all duration-300 ease-in-out ${
+          isCompact ? 'p-3' : 'p-4'
+        }`}>
+          {/* Первая строка: Заголовок и кнопка обновления - плавно скрывается */}
+          <div
+            className={`flex items-start justify-between overflow-hidden transition-all duration-300 ease-in-out ${
+              isCompact ? 'max-h-0 opacity-0 mb-0' : 'max-h-[100px] opacity-100 mb-4'
+            }`}
+          >
             <div>
               <h1 className="text-3xl font-bold text-gray-900 mb-2">
                 {projectName || 'Аналитика Яндекс.Директ'}
@@ -201,7 +211,7 @@ export function DashboardHeader({
             <button
               onClick={onSync}
               disabled={isSyncing}
-              className="flex items-center gap-2 bg-primary-600 text-white px-4 py-2.5 rounded-lg hover:bg-primary-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              className="flex items-center gap-2 bg-primary-600 text-white px-4 py-2.5 rounded-lg hover:bg-primary-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed shrink-0"
             >
               {isSyncing ? (
                 <Loader2 className="animate-spin" size={18} />
@@ -214,6 +224,26 @@ export function DashboardHeader({
 
           {/* Вторая строка: Селекторы */}
           <div className="flex items-start gap-4 flex-wrap">
+            {/* Кнопка обновления - появляется в компактном режиме */}
+            <div
+              className={`flex flex-col gap-1.5 overflow-hidden transition-all duration-300 ease-in-out ${
+                isCompact ? 'max-w-[60px] opacity-100' : 'max-w-0 opacity-0'
+              }`}
+            >
+              <label className="text-xs font-medium text-transparent whitespace-nowrap">Sync</label>
+              <button
+                onClick={onSync}
+                disabled={isSyncing}
+                className="flex items-center justify-center bg-primary-600 text-white p-2 rounded-lg hover:bg-primary-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {isSyncing ? (
+                  <Loader2 className="animate-spin" size={18} />
+                ) : (
+                  <RefreshCw size={18} />
+                )}
+              </button>
+            </div>
+
             {/* Селектор аккаунтов */}
             {connections.length > 0 && (
               <div className="flex flex-col gap-1.5 relative">
