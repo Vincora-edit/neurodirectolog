@@ -2846,11 +2846,13 @@ export const yandexDirectService = {
     };
 
     // Пересчитываем CTR и AvgCpc после агрегации, добавляем тип
+    // Примечание: Yandex API не поддерживает конверсии с разбивкой по площадкам
     const aggregated = Array.from(placementMap.values()).map(p => ({
       ...p,
       ctr: p.impressions > 0 ? (p.clicks / p.impressions) * 100 : 0,
       avgCpc: p.clicks > 0 ? p.cost / p.clicks : 0,
       placementType: getPlacementType(p.placement),
+      conversions: 0, // Yandex API не поддерживает конверсии по площадкам
     }));
 
     return aggregated
@@ -2992,10 +2994,12 @@ export const yandexDirectService = {
     });
 
     // Пересчитываем CTR и AvgCpc после агрегации
+    // Примечание: Yandex API не поддерживает конверсии с разбивкой по уровню дохода
     const aggregated = Array.from(incomeGradeMap.values()).map(p => ({
       ...p,
       ctr: p.impressions > 0 ? (p.clicks / p.impressions) * 100 : 0,
       avgCpc: p.clicks > 0 ? p.cost / p.clicks : 0,
+      conversions: 0, // Yandex API не поддерживает конверсии по уровню дохода
     }));
 
     return aggregated
@@ -3137,10 +3141,12 @@ export const yandexDirectService = {
     });
 
     // Пересчитываем CTR и AvgCpc после агрегации
+    // Примечание: Yandex API не поддерживает конверсии с разбивкой по категориям таргетинга
     const aggregated = Array.from(categoryMapAgg.values()).map(p => ({
       ...p,
       ctr: p.impressions > 0 ? (p.clicks / p.impressions) * 100 : 0,
       avgCpc: p.clicks > 0 ? p.cost / p.clicks : 0,
+      conversions: 0, // Yandex API не поддерживает конверсии по категориям таргетинга
     }));
 
     return aggregated
@@ -3271,10 +3277,12 @@ export const yandexDirectService = {
     });
 
     // Пересчитываем CTR и AvgCpc после агрегации
+    // Примечание: Yandex API не поддерживает конверсии с разбивкой по условиям показа
     const aggregated = Array.from(criterionMap.values()).map(p => ({
       ...p,
       ctr: p.impressions > 0 ? (p.clicks / p.impressions) * 100 : 0,
       avgCpc: p.clicks > 0 ? p.cost / p.clicks : 0,
+      conversions: 0, // Yandex API не поддерживает конверсии по условиям показа
     }));
 
     return aggregated
@@ -3448,6 +3456,7 @@ export const yandexDirectService = {
       });
 
       // Объединяем статистику с текстами
+      // Примечание: Yandex API не поддерживает конверсии с разбивкой по объявлениям в этом отчёте
       return aggregatedAds.map(adStat => {
         const texts = adTextsMap.get(adStat.adId) || { title: '', text: '' };
         return {
@@ -3460,6 +3469,7 @@ export const yandexDirectService = {
           impressions: adStat.impressions,
           ctr: adStat.ctr,
           avgCpc: adStat.avgCpc,
+          conversions: 0, // Конверсии по объявлениям получаем из ClickHouse (ad_performance)
         };
       });
     } catch (error: any) {
@@ -3475,6 +3485,7 @@ export const yandexDirectService = {
         impressions: adStat.impressions,
         ctr: adStat.ctr,
         avgCpc: adStat.avgCpc,
+        conversions: 0,
       }));
     }
   },
