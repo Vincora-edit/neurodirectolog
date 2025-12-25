@@ -186,13 +186,10 @@ export function DashboardHeader({
           isCollapsed ? 'hidden' : ''
         }`}
       >
-        <div className={`bg-white rounded-xl shadow-sm border border-gray-200 transition-all duration-200 ${isScrolled ? 'p-3' : 'p-4'}`}>
+        <div className={`bg-white rounded-xl shadow-sm border border-gray-200 ${isScrolled ? 'p-3' : 'p-4'}`}>
           {/* Первая строка: Заголовок и кнопка обновления - скрывается при скролле */}
-          <div
-            className={`flex items-start justify-between overflow-hidden transition-all duration-200 ${
-              isScrolled ? 'max-h-0 opacity-0 mb-0' : 'max-h-24 opacity-100 mb-4'
-            }`}
-          >
+          {!isScrolled && (
+          <div className="flex items-start justify-between mb-4">
             <div>
               <h1 className="text-3xl font-bold text-gray-900 mb-2">
                 {projectName || 'Аналитика Яндекс.Директ'}
@@ -219,6 +216,7 @@ export function DashboardHeader({
               {isSyncing ? 'Синхронизация...' : 'Обновить данные'}
             </button>
           </div>
+          )}
 
           {/* Вторая строка: Селекторы */}
           <div className="flex items-start gap-4 flex-wrap">
