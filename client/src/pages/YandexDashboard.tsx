@@ -647,7 +647,7 @@ export function YandexDashboard() {
                 impressions: item.impressions || 0,
                 clicks: item.clicks || 0,
                 cost: item.cost || 0,
-                conversions: 0,
+                conversions: item.conversions || 0,
               })).sort((a: any, b: any) => b.cost - a.cost)
             : [],
         };

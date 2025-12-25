@@ -2215,7 +2215,8 @@ export const clickhouseService = {
           ac.title2,
           SUM(ap.impressions) as impressions,
           SUM(ap.clicks) as clicks,
-          SUM(ap.cost) as cost
+          SUM(ap.cost) as cost,
+          SUM(ap.conversions) as conversions
         FROM ad_performance ap
         LEFT JOIN ad_contents ac ON ap.ad_id = ac.ad_id AND ap.connection_id = ac.connection_id
         WHERE ap.connection_id = {connectionId:String}
@@ -2236,6 +2237,7 @@ export const clickhouseService = {
       impressions: parseInt(row.impressions) || 0,
       clicks: parseInt(row.clicks) || 0,
       cost: parseFloat(row.cost) || 0,
+      conversions: parseInt(row.conversions) || 0,
       ctr: row.impressions > 0 ? (row.clicks / row.impressions) * 100 : 0,
       avgCpc: row.clicks > 0 ? row.cost / row.clicks : 0,
     }));
