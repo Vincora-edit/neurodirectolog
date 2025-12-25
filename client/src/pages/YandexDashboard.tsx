@@ -147,18 +147,8 @@ export function YandexDashboard() {
   const [globalFilterAdId, setGlobalFilterAdId] = useState<string | null>(null);
 
   // UI состояние
-  const [isScrolled, setIsScrolled] = useState(false);
   const [isHeaderCollapsed, setIsHeaderCollapsed] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
-
-  // Scroll listener для компактной шапки
-  useEffect(() => {
-    const handleScroll = () => {
-      setIsScrolled(window.scrollY > 100);
-    };
-    window.addEventListener('scroll', handleScroll);
-    return () => window.removeEventListener('scroll', handleScroll);
-  }, []);
 
   // Секции аккордеонов
   const [isDynamicsOpen, setIsDynamicsOpen] = useState(true);
