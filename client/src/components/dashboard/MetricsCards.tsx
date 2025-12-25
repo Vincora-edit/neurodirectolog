@@ -37,7 +37,7 @@ export function MetricsCards({ totalStats, budgetForecast }: MetricsCardsProps) 
     <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4 mb-6">
       {/* Бюджет */}
       <div className={`bg-gradient-to-br ${budgetColors.bg} rounded-xl shadow-lg p-4 text-white`}>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 h-full">
           <div className="bg-white/20 p-2 rounded-lg shrink-0">
             <Wallet size={20} />
           </div>
@@ -49,44 +49,46 @@ export function MetricsCards({ totalStats, budgetForecast }: MetricsCardsProps) 
                 : '—'}{' '}
               ₽
             </p>
+            <p className={`${budgetColors.text} text-xs mt-0.5`}>
+              {daysRemaining !== null && daysRemaining !== undefined
+                ? `Хватит на ${daysRemaining} дней`
+                : '\u00A0'}
+            </p>
           </div>
-        </div>
-        <div className={`${budgetColors.text} text-xs mt-2`}>
-          {daysRemaining !== null && daysRemaining !== undefined
-            ? `Хватит на ${daysRemaining} дней`
-            : ''}
         </div>
       </div>
 
       {/* Расход */}
       <div className="bg-gradient-to-br from-orange-500 to-orange-600 rounded-xl shadow-lg p-4 text-white">
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 h-full">
           <div className="bg-white/20 p-2 rounded-lg shrink-0">
             <DollarSign size={20} />
           </div>
           <div className="min-w-0">
             <p className="text-xs text-orange-100 mb-0.5">Расход</p>
             <p className="text-xl font-bold truncate">{totalStats.cost.toLocaleString('ru-RU')} ₽</p>
+            <p className="text-xs text-transparent mt-0.5">&nbsp;</p>
           </div>
         </div>
       </div>
 
       {/* CR */}
       <div className="bg-gradient-to-br from-blue-500 to-indigo-600 rounded-xl shadow-lg p-4 text-white">
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 h-full">
           <div className="bg-white/20 p-2 rounded-lg shrink-0">
             <TrendingUp size={20} />
           </div>
           <div className="min-w-0">
             <p className="text-xs text-blue-100 mb-0.5">CR</p>
             <p className="text-xl font-bold">{cr.toFixed(2)}%</p>
+            <p className="text-xs text-transparent mt-0.5">&nbsp;</p>
           </div>
         </div>
       </div>
 
       {/* CPL */}
       <div className="bg-gradient-to-br from-gray-500 to-gray-600 rounded-xl shadow-lg p-4 text-white">
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 h-full">
           <div className="bg-white/20 p-2 rounded-lg shrink-0">
             <TrendingDown size={20} />
           </div>
@@ -95,19 +97,21 @@ export function MetricsCards({ totalStats, budgetForecast }: MetricsCardsProps) 
             <p className="text-xl font-bold truncate">
               {cpl > 0 ? Math.round(cpl).toLocaleString('ru-RU') : '—'} ₽
             </p>
+            <p className="text-xs text-transparent mt-0.5">&nbsp;</p>
           </div>
         </div>
       </div>
 
       {/* Конверсии */}
       <div className="bg-gradient-to-br from-purple-500 to-violet-600 rounded-xl shadow-lg p-4 text-white">
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 h-full">
           <div className="bg-white/20 p-2 rounded-lg shrink-0">
             <Target size={20} />
           </div>
           <div className="min-w-0">
             <p className="text-xs text-purple-100 mb-0.5">Конверсии</p>
             <p className="text-xl font-bold">{totalStats.conversions.toLocaleString('ru-RU')}</p>
+            <p className="text-xs text-transparent mt-0.5">&nbsp;</p>
           </div>
         </div>
       </div>
