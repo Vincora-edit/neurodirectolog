@@ -2233,25 +2233,28 @@ export const clickhouseService = {
   },
 
   // Ad Texts - объединяем ad_contents (заголовки и тексты) с ad_performance (статистика)
+  // Группируем по ТЕКСТУ (title + text), а не по ad_id, чтобы консолидировать дубликаты
   async getAdTexts(connectionId: string, startDate: string, endDate: string): Promise<any[]> {
     const result = await client.query({
       query: `
         SELECT
-          ap.ad_id,
+          any(ap.ad_id) as ad_id,
           ac.title,
           ac.title2,
           ac.text,
           SUM(ap.impressions) as impressions,
           SUM(ap.clicks) as clicks,
           SUM(ap.cost) as cost,
-          SUM(ap.conversions) as conversions
+          SUM(ap.conversions) as conversions,
+          COUNT(DISTINCT ap.ad_id) as ad_count
         FROM ad_performance ap
         LEFT JOIN ad_contents ac ON ap.ad_id = ac.ad_id AND ap.connection_id = ac.connection_id
         WHERE ap.connection_id = {connectionId:String}
           AND ap.date >= {startDate:Date}
           AND ap.date <= {endDate:Date}
-        GROUP BY ap.ad_id, ac.title, ac.title2, ac.text
+        GROUP BY ac.title, ac.title2, ac.text
         ORDER BY cost DESC
+        LIMIT 100
       `,
       query_params: { connectionId, startDate, endDate },
       format: 'JSONEachRow',
@@ -2269,6 +2272,7 @@ export const clickhouseService = {
       conversions: parseInt(row.conversions) || 0,
       ctr: row.impressions > 0 ? (row.clicks / row.impressions) * 100 : 0,
       avgCpc: row.clicks > 0 ? row.cost / row.clicks : 0,
+      adCount: parseInt(row.ad_count) || 1, // Количество объявлений с таким текстом
     }));
   },
 };

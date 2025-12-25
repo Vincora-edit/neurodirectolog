@@ -3397,96 +3397,103 @@ export const yandexDirectService = {
       });
     }
 
-    // Группируем по adId
-    const adMap = new Map<string, any>();
+    // Сначала получаем ВСЕ уникальные adId
+    const uniqueAdIds = [...new Set(adStats.map(a => a.adId))];
+    if (uniqueAdIds.length === 0) return [];
+
+    // Получаем тексты для всех объявлений через Ads API
+    let adTextsMap = new Map<string, { title: string; text: string }>();
+
+    try {
+      // Запрашиваем батчами по 1000 (лимит Yandex API)
+      const batchSize = 1000;
+      for (let i = 0; i < uniqueAdIds.length; i += batchSize) {
+        const batch = uniqueAdIds.slice(i, i + batchSize).map(id => parseInt(id));
+
+        const adsResponse = await axios.post(
+          `${YANDEX_API_URL}/ads`,
+          {
+            method: 'get',
+            params: {
+              SelectionCriteria: {
+                Ids: batch,
+              },
+              FieldNames: ['Id'],
+              TextAdFieldNames: ['Title', 'Title2', 'Text'],
+            },
+          },
+          {
+            headers: {
+              'Authorization': `Bearer ${accessToken}`,
+              'Client-Login': login,
+              'Accept-Language': 'ru',
+            },
+          }
+        );
+
+        const ads = adsResponse.data?.result?.Ads || [];
+        ads.forEach((ad: any) => {
+          const textAd = ad.TextAd;
+          if (textAd) {
+            adTextsMap.set(String(ad.Id), {
+              title: textAd.Title || '',
+              text: textAd.Text || '',
+            });
+          }
+        });
+      }
+      console.log(`[getAdTextReport] Fetched texts for ${adTextsMap.size} ads`);
+    } catch (error: any) {
+      console.error('[getAdTextReport] Error getting ad texts:', error.response?.data || error.message);
+    }
+
+    // Теперь группируем по ТЕКСТУ (title + text), а не по adId
+    const textMap = new Map<string, any>();
     adStats.forEach(row => {
-      const existing = adMap.get(row.adId);
+      const texts = adTextsMap.get(row.adId) || { title: '', text: '' };
+      // Ключ для группировки - комбинация title + text
+      const key = `${texts.title}|||${texts.text}`;
+
+      const existing = textMap.get(key);
       if (existing) {
         existing.clicks += row.clicks;
         existing.cost += row.cost;
         existing.impressions += row.impressions;
+        // Сохраняем список adId для отладки
+        if (!existing.adIds.includes(row.adId)) {
+          existing.adIds.push(row.adId);
+        }
       } else {
-        adMap.set(row.adId, { ...row });
+        textMap.set(key, {
+          title: texts.title,
+          text: texts.text,
+          clicks: row.clicks,
+          cost: row.cost,
+          impressions: row.impressions,
+          adIds: [row.adId],
+        });
       }
     });
 
-    const aggregatedAds = Array.from(adMap.values()).map(p => ({
-      ...p,
+    // Формируем финальный результат с пересчётом метрик
+    const aggregatedByText = Array.from(textMap.values()).map(p => ({
+      adId: p.adIds[0], // Первый adId для совместимости
+      title: p.title,
+      text: p.text,
+      fullText: p.title ? `${p.title} ${p.text}`.trim() : `Объявление ${p.adIds[0]}`,
+      clicks: p.clicks,
+      cost: p.cost,
+      impressions: p.impressions,
       ctr: p.impressions > 0 ? (p.clicks / p.impressions) * 100 : 0,
       avgCpc: p.clicks > 0 ? p.cost / p.clicks : 0,
-    })).sort((a, b) => b.cost - a.cost).slice(0, 30);
+      conversions: 0, // Yandex API не поддерживает конверсии по объявлениям
+      adCount: p.adIds.length, // Количество объявлений с этим текстом
+    }));
 
-    // Теперь получаем тексты объявлений через Ads API
-    const adIds = aggregatedAds.map(a => parseInt(a.adId));
-    if (adIds.length === 0) return [];
+    console.log(`[getAdTextReport] Consolidated ${uniqueAdIds.length} ads into ${aggregatedByText.length} unique texts`);
 
-    try {
-      const adsResponse = await axios.post(
-        `${YANDEX_API_URL}/ads`,
-        {
-          method: 'get',
-          params: {
-            SelectionCriteria: {
-              Ids: adIds,
-            },
-            FieldNames: ['Id'],
-            TextAdFieldNames: ['Title', 'Title2', 'Text'],
-          },
-        },
-        {
-          headers: {
-            'Authorization': `Bearer ${accessToken}`,
-            'Client-Login': login,
-            'Accept-Language': 'ru',
-          },
-        }
-      );
-
-      const ads = adsResponse.data?.result?.Ads || [];
-      const adTextsMap = new Map<string, { title: string; text: string }>();
-
-      ads.forEach((ad: any) => {
-        const textAd = ad.TextAd;
-        if (textAd) {
-          adTextsMap.set(String(ad.Id), {
-            title: textAd.Title || '',
-            text: textAd.Text || '',
-          });
-        }
-      });
-
-      // Объединяем статистику с текстами
-      // Примечание: Yandex API не поддерживает конверсии с разбивкой по объявлениям в этом отчёте
-      return aggregatedAds.map(adStat => {
-        const texts = adTextsMap.get(adStat.adId) || { title: '', text: '' };
-        return {
-          adId: adStat.adId,
-          title: texts.title,
-          text: texts.text,
-          fullText: texts.title ? `${texts.title} ${texts.text}`.trim() : `Объявление ${adStat.adId}`,
-          clicks: adStat.clicks,
-          cost: adStat.cost,
-          impressions: adStat.impressions,
-          ctr: adStat.ctr,
-          avgCpc: adStat.avgCpc,
-          conversions: 0, // Конверсии по объявлениям получаем из ClickHouse (ad_performance)
-        };
-      });
-    } catch (error: any) {
-      console.error('[getAdTextReport] Error getting ad texts:', error.response?.data || error.message);
-      // Возвращаем статистику без текстов
-      return aggregatedAds.map(adStat => ({
-        adId: adStat.adId,
-        title: '',
-        text: '',
-        fullText: `Объявление ${adStat.adId}`,
-        clicks: adStat.clicks,
-        cost: adStat.cost,
-        impressions: adStat.impressions,
-        ctr: adStat.ctr,
-        avgCpc: adStat.avgCpc,
-        conversions: 0,
-      }));
-    }
+    return aggregatedByText
+      .sort((a, b) => b.cost - a.cost)
+      .slice(0, 50);
   },
 };
