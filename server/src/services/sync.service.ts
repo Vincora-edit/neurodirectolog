@@ -421,6 +421,53 @@ export const syncService = {
         console.error(`[Sync] Failed to fetch ad data, continuing:`, adError);
       }
 
+      // 9.8. Синхронизируем поисковые запросы
+      console.log(`[Sync] Fetching search queries report...`);
+      try {
+        const searchQueriesData = await yandexDirectService.getSearchQueryReport(
+          accessToken,
+          connection.login,
+          campaignIds,
+          dateFrom,
+          dateTo
+        );
+        console.log(`[Sync] Fetched ${searchQueriesData.length} search query records`);
+
+        if (searchQueriesData.length > 0) {
+          const crypto = require('crypto');
+          const searchQueryRecords = searchQueriesData.map((row: any) => {
+            const idString = `${connection.id}_${row.campaignId}_${row.query}_${dateFrom}_${dateTo}`;
+            const id = crypto.createHash('md5').update(idString).digest('hex');
+            return {
+              id,
+              connectionId: connection.id,
+              accountName: connection.login,
+              campaignId: String(row.campaignId || ''),
+              campaignName: '', // Можно добавить маппинг
+              adGroupId: row.adGroupId ? String(row.adGroupId) : null,
+              adGroupName: null,
+              adId: null,
+              date: dateFrom, // Агрегированные данные за период
+              query: row.query || '',
+              matchedKeyword: null,
+              matchType: null,
+              impressions: row.impressions || 0,
+              clicks: row.clicks || 0,
+              cost: row.cost || 0,
+              criterion: null,
+              criterionType: null,
+              targetingCategory: null,
+              placement: null,
+              incomeGrade: null,
+            };
+          });
+          await clickhouseService.insertSearchQueries(searchQueryRecords);
+          console.log(`[Sync] Inserted ${searchQueryRecords.length} search query records`);
+        }
+      } catch (searchError) {
+        console.error(`[Sync] Failed to fetch search queries, continuing:`, searchError);
+      }
+
       // 10. Создаем мапу конверсий по campaign_id + date для старой таблицы
       const conversionsMap = new Map<string, { conversions: number; revenue: number }>();
       conversionsData.forEach(row => {

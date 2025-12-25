@@ -1979,4 +1979,230 @@ export const clickhouseService = {
       };
     });
   },
+
+  // Search Queries
+  async insertSearchQueries(records: any[]): Promise<void> {
+    if (records.length === 0) return;
+
+    const connectionId = records[0].connectionId;
+
+    console.log(`[ClickHouse] Deleting existing search queries for ${connectionId}`);
+
+    // Удаляем старые данные
+    try {
+      await client.command({
+        query: `ALTER TABLE search_queries DELETE WHERE connection_id = {connectionId:String}`,
+        query_params: { connectionId },
+      });
+      console.log(`[ClickHouse] Deleted old search queries`);
+    } catch (error) {
+      console.error(`[ClickHouse] Failed to delete old search queries:`, error);
+    }
+
+    console.log(`[ClickHouse] Inserting ${records.length} search query records`);
+
+    const values = records.map(r => ({
+      id: r.id || uuidv4(),
+      connection_id: r.connectionId,
+      account_name: r.accountName || '',
+      campaign_id: r.campaignId || '',
+      campaign_name: r.campaignName || '',
+      ad_group_id: r.adGroupId || null,
+      ad_group_name: r.adGroupName || null,
+      ad_id: r.adId || null,
+      date: r.date,
+      query: r.query || '',
+      matched_keyword: r.matchedKeyword || null,
+      match_type: r.matchType || null,
+      impressions: r.impressions || 0,
+      clicks: r.clicks || 0,
+      cost: r.cost || 0,
+      criterion: r.criterion || null,
+      criterion_type: r.criterionType || null,
+      targeting_category: r.targetingCategory || null,
+      placement: r.placement || null,
+      income_grade: r.incomeGrade || null,
+      created_at: formatDate(new Date()),
+      updated_at: formatDate(new Date()),
+    }));
+
+    await client.insert({
+      table: 'search_queries',
+      values,
+      format: 'JSONEachRow',
+    });
+  },
+
+  async getSearchQueries(connectionId: string): Promise<any[]> {
+    const result = await client.query({
+      query: `
+        SELECT
+          query,
+          SUM(impressions) as impressions,
+          SUM(clicks) as clicks,
+          SUM(cost) as cost
+        FROM search_queries
+        WHERE connection_id = {connectionId:String}
+        GROUP BY query
+        ORDER BY cost DESC
+        LIMIT 50
+      `,
+      query_params: { connectionId },
+      format: 'JSONEachRow',
+    });
+
+    const rows = await result.json<any>();
+    return rows.map((row: any) => ({
+      query: row.query,
+      impressions: parseInt(row.impressions) || 0,
+      clicks: parseInt(row.clicks) || 0,
+      cost: parseFloat(row.cost) || 0,
+    }));
+  },
+
+  // Demographics - читаем из campaign_performance
+  async getDemographics(connectionId: string, startDate: string, endDate: string): Promise<any[]> {
+    const result = await client.query({
+      query: `
+        SELECT
+          gender,
+          age,
+          SUM(impressions) as impressions,
+          SUM(clicks) as clicks,
+          SUM(cost) as cost
+        FROM campaign_performance
+        WHERE connection_id = {connectionId:String}
+          AND date >= {startDate:Date}
+          AND date <= {endDate:Date}
+          AND gender IS NOT NULL
+          AND gender != ''
+        GROUP BY gender, age
+        ORDER BY cost DESC
+      `,
+      query_params: { connectionId, startDate, endDate },
+      format: 'JSONEachRow',
+    });
+
+    const rows = await result.json<any>();
+    return rows.map((row: any) => {
+      const genderLabel = row.gender === 'MALE' ? 'Мужчины' : row.gender === 'FEMALE' ? 'Женщины' : row.gender;
+      const ageLabel = row.age?.replace('AGE_', '').replace('_', '-') || 'Не определён';
+      return {
+        segment: `${genderLabel}, ${ageLabel}`,
+        gender: row.gender,
+        age: row.age,
+        impressions: parseInt(row.impressions) || 0,
+        clicks: parseInt(row.clicks) || 0,
+        cost: parseFloat(row.cost) || 0,
+      };
+    });
+  },
+
+  // Geo - читаем из campaign_performance
+  async getGeoStats(connectionId: string, startDate: string, endDate: string): Promise<any[]> {
+    const result = await client.query({
+      query: `
+        SELECT
+          targeting_location_name as region,
+          SUM(impressions) as impressions,
+          SUM(clicks) as clicks,
+          SUM(cost) as cost
+        FROM campaign_performance
+        WHERE connection_id = {connectionId:String}
+          AND date >= {startDate:Date}
+          AND date <= {endDate:Date}
+          AND targeting_location_name IS NOT NULL
+          AND targeting_location_name != ''
+        GROUP BY targeting_location_name
+        ORDER BY cost DESC
+        LIMIT 20
+      `,
+      query_params: { connectionId, startDate, endDate },
+      format: 'JSONEachRow',
+    });
+
+    const rows = await result.json<any>();
+    return rows.map((row: any) => ({
+      region: row.region || 'Не определён',
+      impressions: parseInt(row.impressions) || 0,
+      clicks: parseInt(row.clicks) || 0,
+      cost: parseFloat(row.cost) || 0,
+    }));
+  },
+
+  // Devices - читаем из campaign_performance
+  async getCachedDeviceStats(connectionId: string, startDate: string, endDate: string): Promise<any[]> {
+    const result = await client.query({
+      query: `
+        SELECT
+          device,
+          SUM(impressions) as impressions,
+          SUM(clicks) as clicks,
+          SUM(cost) as cost
+        FROM campaign_performance
+        WHERE connection_id = {connectionId:String}
+          AND date >= {startDate:Date}
+          AND date <= {endDate:Date}
+          AND device IS NOT NULL
+          AND device != ''
+        GROUP BY device
+        ORDER BY cost DESC
+      `,
+      query_params: { connectionId, startDate, endDate },
+      format: 'JSONEachRow',
+    });
+
+    const rows = await result.json<any>();
+    const deviceNames: Record<string, string> = {
+      DESKTOP: 'Компьютеры',
+      MOBILE: 'Смартфоны',
+      TABLET: 'Планшеты',
+    };
+    return rows.map((row: any) => ({
+      device: row.device,
+      deviceName: deviceNames[row.device] || row.device,
+      impressions: parseInt(row.impressions) || 0,
+      clicks: parseInt(row.clicks) || 0,
+      cost: parseFloat(row.cost) || 0,
+    }));
+  },
+
+  // Income Grade - читаем из campaign_performance
+  async getIncomeStats(connectionId: string, startDate: string, endDate: string): Promise<any[]> {
+    const result = await client.query({
+      query: `
+        SELECT
+          income_grade,
+          SUM(impressions) as impressions,
+          SUM(clicks) as clicks,
+          SUM(cost) as cost
+        FROM campaign_performance
+        WHERE connection_id = {connectionId:String}
+          AND date >= {startDate:Date}
+          AND date <= {endDate:Date}
+          AND income_grade IS NOT NULL
+          AND income_grade != ''
+        GROUP BY income_grade
+        ORDER BY cost DESC
+      `,
+      query_params: { connectionId, startDate, endDate },
+      format: 'JSONEachRow',
+    });
+
+    const rows = await result.json<any>();
+    const incomeNames: Record<string, string> = {
+      LOW: 'Низкий',
+      MEDIUM: 'Средний',
+      HIGH: 'Высокий',
+      PREMIUM: 'Премиум',
+    };
+    return rows.map((row: any) => ({
+      incomeGrade: row.income_grade,
+      incomeGradeRaw: row.income_grade,
+      incomeGradeName: incomeNames[row.income_grade] || row.income_grade,
+      impressions: parseInt(row.impressions) || 0,
+      clicks: parseInt(row.clicks) || 0,
+      cost: parseFloat(row.cost) || 0,
+    }));
+  },
 };

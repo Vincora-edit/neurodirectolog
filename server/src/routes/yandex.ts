@@ -1071,6 +1071,7 @@ router.get('/geo-stats/:projectId', async (req, res) => {
 /**
  * GET /api/yandex/device-stats/:projectId
  * Получить статистику по устройствам (Desktop/Mobile/Tablet)
+ * Читаем из ClickHouse, fallback на Яндекс API
  */
 router.get('/device-stats/:projectId', async (req, res) => {
   try {
@@ -1100,7 +1101,21 @@ router.get('/device-stats/:projectId', async (req, res) => {
       startDate.setDate(startDate.getDate() - parseInt((days as string) || '30'));
     }
 
-    // Получаем список кампаний для этого подключения
+    const dateFrom = startDate.toISOString().split('T')[0];
+    const dateTo = endDate.toISOString().split('T')[0];
+
+    // Сначала пробуем из ClickHouse
+    try {
+      const cachedData = await clickhouseService.getCachedDeviceStats(connection.id, dateFrom, dateTo);
+      if (cachedData && cachedData.length > 0) {
+        console.log(`[device-stats] Returning ${cachedData.length} cached records from ClickHouse`);
+        return res.json(cachedData);
+      }
+    } catch (cacheError) {
+      console.log(`[device-stats] ClickHouse cache miss, falling back to API`);
+    }
+
+    // Fallback на Яндекс API
     const campaigns = await clickhouseService.getCampaignsByConnectionId(connection.id);
     const campaignIds = campaigns.map(c => parseInt(c.externalId));
 
@@ -1108,11 +1123,6 @@ router.get('/device-stats/:projectId', async (req, res) => {
       return res.json([]);
     }
 
-    // Форматируем даты для API
-    const dateFrom = startDate.toISOString().split('T')[0];
-    const dateTo = endDate.toISOString().split('T')[0];
-
-    // Получаем статистику по устройствам напрямую из Yandex API
     const deviceStats = await yandexDirectService.getDeviceStats(
       connection.accessToken,
       connection.login,
@@ -1143,7 +1153,6 @@ router.get('/device-stats/:projectId', async (req, res) => {
       existing.impressions += parseInt(row.Impressions) || 0;
       existing.clicks += parseInt(row.Clicks) || 0;
       existing.cost += parseFloat(row.Cost) || 0;
-      // BounceRate в процентах, конвертируем в количество отказов
       const bounceRate = parseFloat(row.BounceRate) || 0;
       const clicks = parseInt(row.Clicks) || 0;
       existing.bounces += Math.round(clicks * bounceRate / 100);
@@ -1151,7 +1160,6 @@ router.get('/device-stats/:projectId', async (req, res) => {
       deviceMap.set(device, existing);
     });
 
-    // Преобразуем в массив с вычисленными метриками
     const result = Array.from(deviceMap.values()).map(d => ({
       device: d.device,
       deviceName: d.device === 'DESKTOP' ? 'Десктоп' :
@@ -1165,7 +1173,6 @@ router.get('/device-stats/:projectId', async (req, res) => {
       bounceRate: d.clicks > 0 ? Math.round((d.bounces / d.clicks) * 10000) / 100 : 0,
     }));
 
-    // Сортируем по кликам (убывание)
     result.sort((a, b) => b.clicks - a.clicks);
 
     res.json(result);
@@ -1178,6 +1185,7 @@ router.get('/device-stats/:projectId', async (req, res) => {
 /**
  * GET /api/yandex/search-queries/:projectId
  * Получить статистику по поисковым запросам
+ * Сначала пробуем из ClickHouse (синхронизированные данные), fallback на Яндекс API
  */
 router.get('/search-queries/:projectId', async (req, res) => {
   try {
@@ -1195,6 +1203,18 @@ router.get('/search-queries/:projectId', async (req, res) => {
       return res.status(404).json({ error: 'Connection not found' });
     }
 
+    // Сначала пробуем получить из ClickHouse (быстро, без лимитов API)
+    try {
+      const cachedData = await clickhouseService.getSearchQueries(connection.id);
+      if (cachedData && cachedData.length > 0) {
+        console.log(`[search-queries] Returning ${cachedData.length} cached records from ClickHouse`);
+        return res.json(cachedData);
+      }
+    } catch (cacheError) {
+      console.log(`[search-queries] ClickHouse cache miss, falling back to API`);
+    }
+
+    // Fallback на Яндекс API
     let startDate: Date;
     let endDate: Date;
 
@@ -1207,7 +1227,6 @@ router.get('/search-queries/:projectId', async (req, res) => {
       startDate.setDate(startDate.getDate() - parseInt((days as string) || '30'));
     }
 
-    // Получаем список кампаний для этого подключения
     const campaigns = await clickhouseService.getCampaignsByConnectionId(connection.id);
     const campaignIds = campaigns.map(c => parseInt(c.externalId));
 
@@ -1215,11 +1234,9 @@ router.get('/search-queries/:projectId', async (req, res) => {
       return res.json([]);
     }
 
-    // Форматируем даты для API
     const dateFrom = startDate.toISOString().split('T')[0];
     const dateTo = endDate.toISOString().split('T')[0];
 
-    // Получаем статистику по поисковым запросам
     const searchQueries = await yandexDirectService.getSearchQueryReport(
       connection.accessToken,
       connection.login,
@@ -1238,6 +1255,7 @@ router.get('/search-queries/:projectId', async (req, res) => {
 /**
  * GET /api/yandex/demographics/:projectId
  * Получить статистику по полу и возрасту
+ * Читаем из ClickHouse (campaign_performance), fallback на Яндекс API
  */
 router.get('/demographics/:projectId', async (req, res) => {
   try {
@@ -1267,7 +1285,21 @@ router.get('/demographics/:projectId', async (req, res) => {
       startDate.setDate(startDate.getDate() - parseInt((days as string) || '30'));
     }
 
-    // Получаем список кампаний для этого подключения
+    const dateFrom = startDate.toISOString().split('T')[0];
+    const dateTo = endDate.toISOString().split('T')[0];
+
+    // Сначала пробуем из ClickHouse
+    try {
+      const cachedData = await clickhouseService.getDemographics(connection.id, dateFrom, dateTo);
+      if (cachedData && cachedData.length > 0) {
+        console.log(`[demographics] Returning ${cachedData.length} cached records from ClickHouse`);
+        return res.json(cachedData);
+      }
+    } catch (cacheError) {
+      console.log(`[demographics] ClickHouse cache miss, falling back to API`);
+    }
+
+    // Fallback на Яндекс API
     const campaigns = await clickhouseService.getCampaignsByConnectionId(connection.id);
     const campaignIds = campaigns.map(c => parseInt(c.externalId));
 
@@ -1275,11 +1307,6 @@ router.get('/demographics/:projectId', async (req, res) => {
       return res.json([]);
     }
 
-    // Форматируем даты для API
-    const dateFrom = startDate.toISOString().split('T')[0];
-    const dateTo = endDate.toISOString().split('T')[0];
-
-    // Получаем статистику по демографии
     const demographics = await yandexDirectService.getDemographicsReport(
       connection.accessToken,
       connection.login,
@@ -1297,7 +1324,8 @@ router.get('/demographics/:projectId', async (req, res) => {
 
 /**
  * GET /api/yandex/geo-report/:projectId
- * Получить статистику по регионам (альтернативный отчёт через Reports API)
+ * Получить статистику по регионам
+ * Читаем из ClickHouse (campaign_performance), fallback на Яндекс API
  */
 router.get('/geo-report/:projectId', async (req, res) => {
   try {
@@ -1327,7 +1355,21 @@ router.get('/geo-report/:projectId', async (req, res) => {
       startDate.setDate(startDate.getDate() - parseInt((days as string) || '30'));
     }
 
-    // Получаем список кампаний для этого подключения
+    const dateFrom = startDate.toISOString().split('T')[0];
+    const dateTo = endDate.toISOString().split('T')[0];
+
+    // Сначала пробуем из ClickHouse
+    try {
+      const cachedData = await clickhouseService.getGeoStats(connection.id, dateFrom, dateTo);
+      if (cachedData && cachedData.length > 0) {
+        console.log(`[geo-report] Returning ${cachedData.length} cached records from ClickHouse`);
+        return res.json(cachedData);
+      }
+    } catch (cacheError) {
+      console.log(`[geo-report] ClickHouse cache miss, falling back to API`);
+    }
+
+    // Fallback на Яндекс API
     const campaigns = await clickhouseService.getCampaignsByConnectionId(connection.id);
     const campaignIds = campaigns.map(c => parseInt(c.externalId));
 
@@ -1335,11 +1377,6 @@ router.get('/geo-report/:projectId', async (req, res) => {
       return res.json([]);
     }
 
-    // Форматируем даты для API
-    const dateFrom = startDate.toISOString().split('T')[0];
-    const dateTo = endDate.toISOString().split('T')[0];
-
-    // Получаем статистику по регионам
     const geoReport = await yandexDirectService.getGeoReport(
       connection.accessToken,
       connection.login,
@@ -1418,6 +1455,7 @@ router.get('/placements/:projectId', async (req, res) => {
 /**
  * GET /api/yandex/income/:projectId
  * Получить статистику по платёжеспособности (IncomeGrade)
+ * Читаем из ClickHouse, fallback на Яндекс API
  */
 router.get('/income/:projectId', async (req, res) => {
   try {
@@ -1447,7 +1485,21 @@ router.get('/income/:projectId', async (req, res) => {
       startDate.setDate(startDate.getDate() - parseInt((days as string) || '30'));
     }
 
-    // Получаем список кампаний для этого подключения
+    const dateFrom = startDate.toISOString().split('T')[0];
+    const dateTo = endDate.toISOString().split('T')[0];
+
+    // Сначала пробуем из ClickHouse
+    try {
+      const cachedData = await clickhouseService.getIncomeStats(connection.id, dateFrom, dateTo);
+      if (cachedData && cachedData.length > 0) {
+        console.log(`[income] Returning ${cachedData.length} cached records from ClickHouse`);
+        return res.json(cachedData);
+      }
+    } catch (cacheError) {
+      console.log(`[income] ClickHouse cache miss, falling back to API`);
+    }
+
+    // Fallback на Яндекс API
     const campaigns = await clickhouseService.getCampaignsByConnectionId(connection.id);
     const campaignIds = campaigns.map(c => parseInt(c.externalId));
 
@@ -1455,11 +1507,6 @@ router.get('/income/:projectId', async (req, res) => {
       return res.json([]);
     }
 
-    // Форматируем даты для API
-    const dateFrom = startDate.toISOString().split('T')[0];
-    const dateTo = endDate.toISOString().split('T')[0];
-
-    // Получаем статистику по платёжеспособности
     const incomeData = await yandexDirectService.getIncomeReport(
       connection.accessToken,
       connection.login,
