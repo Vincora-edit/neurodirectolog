@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { projectsService } from '../services/api';
 import { useProjectStore } from '../store/projectStore';
+import { useAuthStore } from '../store/authStore';
 import {
   TrendingUp,
   FileText,
@@ -21,11 +22,14 @@ import {
   Zap,
   Clock,
   FlaskConical,
-  ChevronDown
+  ChevronDown,
+  Lock
 } from 'lucide-react';
 
 export default function Dashboard() {
   const { activeProjectId, setActiveProjectId } = useProjectStore();
+  const { user } = useAuthStore();
+  const isAdmin = user?.isAdmin;
   const [showProjectSelector, setShowProjectSelector] = useState(false);
 
   // Загружаем проекты пользователя
@@ -64,7 +68,8 @@ export default function Dashboard() {
       icon: BarChart3,
       href: '/yandex-dashboard',
       color: 'bg-red-500',
-      status: 'empty', // Статус определяется по подключению
+      status: 'empty',
+      available: true, // Доступен всем
     },
     {
       id: 'analytics',
@@ -78,6 +83,7 @@ export default function Dashboard() {
         segments: activeProject.analytics.targetAudienceAnalysis?.segments?.length || 0,
         mediaPlan: !!activeProject.analytics.mediaPlan,
       } : null,
+      available: isAdmin,
     },
     {
       id: 'keywordAnalysis',
@@ -92,6 +98,7 @@ export default function Dashboard() {
         target: activeProject.keywordAnalysis.statistics.target,
         minusWords: activeProject.keywordAnalysis.minusWords.length,
       } : null,
+      available: isAdmin,
     },
     {
       id: 'ads',
@@ -105,6 +112,7 @@ export default function Dashboard() {
         count: activeProject.completeAds.ads.length,
         type: activeProject.completeAds.campaignType === 'search' ? 'Поиск' : 'РСЯ',
       } : null,
+      available: isAdmin,
     },
     {
       id: 'semantics',
@@ -117,6 +125,7 @@ export default function Dashboard() {
       stats: activeProject?.semantics ? {
         keywords: activeProject.semantics.keywords.length,
       } : null,
+      available: isAdmin,
     },
     {
       id: 'creatives',
@@ -129,6 +138,7 @@ export default function Dashboard() {
       stats: activeProject?.creatives ? {
         ideas: activeProject.creatives.ideas.length,
       } : null,
+      available: isAdmin,
     },
     {
       id: 'campaign',
@@ -138,6 +148,7 @@ export default function Dashboard() {
       href: '/campaign',
       color: 'bg-rose-500',
       status: getModuleStatus('campaigns'),
+      available: isAdmin,
     },
     {
       id: 'strategy',
@@ -147,6 +158,7 @@ export default function Dashboard() {
       href: '/strategy',
       color: 'bg-red-500',
       status: getModuleStatus('strategy'),
+      available: isAdmin,
     },
     {
       id: 'minusWords',
@@ -159,6 +171,7 @@ export default function Dashboard() {
       stats: activeProject?.minusWords ? {
         count: activeProject.minusWords.words.length,
       } : null,
+      available: isAdmin,
     },
   ];
 
@@ -335,6 +348,34 @@ export default function Dashboard() {
           {modules.map((module) => {
             const Icon = module.icon;
             const isCompleted = module.status === 'completed';
+            const isAvailable = module.available;
+
+            // Заблокированный модуль
+            if (!isAvailable) {
+              return (
+                <div
+                  key={module.id}
+                  className="bg-gray-100 rounded-xl shadow-sm border-2 border-gray-200 p-5 relative overflow-hidden opacity-60 cursor-not-allowed"
+                >
+                  {/* Coming soon badge */}
+                  <div className="absolute top-3 right-3 flex items-center gap-1 bg-gray-200 text-gray-500 text-xs px-2 py-1 rounded-full">
+                    <Lock size={12} />
+                    <span>Coming soon</span>
+                  </div>
+
+                  {/* Иконка модуля */}
+                  <div className="bg-gray-400 p-3 rounded-lg inline-flex mb-3">
+                    <Icon className="text-white" size={22} />
+                  </div>
+
+                  {/* Название */}
+                  <h3 className="text-base font-semibold text-gray-500 mb-1 pr-16">
+                    {module.name}
+                  </h3>
+                  <p className="text-xs text-gray-400 mb-3">{module.description}</p>
+                </div>
+              );
+            }
 
             return (
               <Link
@@ -416,8 +457,8 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* Быстрые действия */}
-      {activeProject && (
+      {/* Быстрые действия - только для админов */}
+      {activeProject && isAdmin && (
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
           <h2 className="text-lg font-bold text-gray-900 mb-4 flex items-center gap-2">
             <Zap size={20} />

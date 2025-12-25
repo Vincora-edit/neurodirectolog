@@ -14,6 +14,8 @@ import {
   PanelLeftClose,
   PanelLeft,
   Shield,
+  Lock,
+  BarChart3,
 } from 'lucide-react';
 import { useAuthStore } from '../store/authStore';
 
@@ -22,17 +24,21 @@ export default function Layout() {
   const { user, logout } = useAuthStore();
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
+  // Для админов - полный доступ, для остальных - только Yandex Dashboard
+  const isAdmin = user?.isAdmin;
+
   const navigation = [
-    { name: 'Dashboard', href: '/', icon: LayoutDashboard },
-    { name: 'Проекты', href: '/projects', icon: FolderOpen },
-    { name: 'Аналитика', href: '/analytics', icon: TrendingUp },
-    { name: 'Семантика', href: '/semantics', icon: FileText },
-    { name: 'Кампании', href: '/campaign', icon: Megaphone },
-    { name: 'Креативы', href: '/creatives', icon: Lightbulb },
-    { name: 'Объявления', href: '/ads', icon: MessageSquare },
-    { name: 'Стратегия', href: '/strategy', icon: Target },
-    { name: 'Минус-слова', href: '/minus-words', icon: Filter },
-    ...(user?.isAdmin ? [{ name: 'Админ-панель', href: '/admin', icon: Shield }] : []),
+    { name: 'Аналитика кампаний', href: '/yandex-dashboard', icon: BarChart3, available: true },
+    { name: 'Dashboard', href: '/', icon: LayoutDashboard, available: isAdmin },
+    { name: 'Проекты', href: '/projects', icon: FolderOpen, available: isAdmin },
+    { name: 'Аналитика', href: '/analytics', icon: TrendingUp, available: isAdmin },
+    { name: 'Семантика', href: '/semantics', icon: FileText, available: isAdmin },
+    { name: 'Кампании', href: '/campaign', icon: Megaphone, available: isAdmin },
+    { name: 'Креативы', href: '/creatives', icon: Lightbulb, available: isAdmin },
+    { name: 'Объявления', href: '/ads', icon: MessageSquare, available: isAdmin },
+    { name: 'Стратегия', href: '/strategy', icon: Target, available: isAdmin },
+    { name: 'Минус-слова', href: '/minus-words', icon: Filter, available: isAdmin },
+    ...(isAdmin ? [{ name: 'Админ-панель', href: '/admin', icon: Shield, available: true }] : []),
   ];
 
   return (
@@ -54,6 +60,23 @@ export default function Layout() {
               {navigation.map((item) => {
                 const Icon = item.icon;
                 const isActive = location.pathname === item.href;
+                const isAvailable = item.available;
+
+                if (!isAvailable) {
+                  // Заблокированный пункт меню с замочком
+                  return (
+                    <div
+                      key={item.name}
+                      className="flex items-center gap-3 px-4 py-3 rounded-lg text-gray-400 cursor-not-allowed"
+                      title="Coming soon"
+                    >
+                      <Icon size={20} />
+                      <span className="flex-1">{item.name}</span>
+                      <Lock size={14} className="text-gray-300" />
+                    </div>
+                  );
+                }
+
                 return (
                   <Link
                     key={item.name}

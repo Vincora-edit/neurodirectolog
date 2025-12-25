@@ -87,12 +87,6 @@ export default function Login() {
             </p>
           </div>
 
-          {/* Подсказка с тестовыми данными */}
-          <div className="mt-4 p-3 bg-gray-50 rounded-lg border border-gray-200">
-            <p className="text-xs text-gray-500 text-center">
-              Тестовый вход: <span className="font-mono">admin@neurodirectolog.ru</span> / <span className="font-mono">admin123</span>
-            </p>
-          </div>
         </div>
       </div>
     </div>
