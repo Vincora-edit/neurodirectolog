@@ -96,6 +96,7 @@ interface DashboardHeaderProps {
   lastSyncAt?: string;
 
   // Header state
+  isScrolled: boolean;
   isCollapsed: boolean;
   onCollapsedChange: (collapsed: boolean) => void;
 }
@@ -128,6 +129,7 @@ export function DashboardHeader({
   isSyncing,
   onSync,
   lastSyncAt,
+  isScrolled,
   isCollapsed,
   onCollapsedChange,
 }: DashboardHeaderProps) {
@@ -184,9 +186,13 @@ export function DashboardHeader({
           isCollapsed ? 'hidden' : ''
         }`}
       >
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4">
-          {/* Первая строка: Заголовок и кнопка обновления */}
-          <div className="flex items-start justify-between mb-4">
+        <div className={`bg-white rounded-xl shadow-sm border border-gray-200 transition-all duration-200 ${isScrolled ? 'p-3' : 'p-4'}`}>
+          {/* Первая строка: Заголовок и кнопка обновления - скрывается при скролле */}
+          <div
+            className={`flex items-start justify-between overflow-hidden transition-all duration-200 ${
+              isScrolled ? 'max-h-0 opacity-0 mb-0' : 'max-h-24 opacity-100 mb-4'
+            }`}
+          >
             <div>
               <h1 className="text-3xl font-bold text-gray-900 mb-2">
                 {projectName || 'Аналитика Яндекс.Директ'}
@@ -216,6 +222,24 @@ export function DashboardHeader({
 
           {/* Вторая строка: Селекторы */}
           <div className="flex items-start gap-4 flex-wrap">
+            {/* Кнопка обновления при скролле */}
+            {isScrolled && (
+              <div className="flex flex-col gap-1.5">
+                <label className="text-xs font-medium text-transparent">Обновить</label>
+                <button
+                  onClick={onSync}
+                  disabled={isSyncing}
+                  className="flex items-center gap-2 bg-primary-600 text-white px-3 py-2 rounded-lg hover:bg-primary-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm"
+                >
+                  {isSyncing ? (
+                    <Loader2 className="animate-spin" size={16} />
+                  ) : (
+                    <RefreshCw size={16} />
+                  )}
+                </button>
+              </div>
+            )}
+
             {/* Селектор аккаунтов */}
             {connections.length > 0 && (
               <div className="flex flex-col gap-1.5 relative">
