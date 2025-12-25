@@ -2033,7 +2033,30 @@ export const clickhouseService = {
     });
   },
 
-  async getSearchQueries(connectionId: string): Promise<any[]> {
+  async getSearchQueries(connectionId: string, startDate?: string, endDate?: string): Promise<any[]> {
+    // Получаем общее количество конверсий за период
+    const convQuery = startDate && endDate ? `
+      SELECT SUM(conversions) as total_conversions
+      FROM campaign_conversions
+      WHERE connection_id = {connectionId:String}
+        AND date >= {startDate:Date}
+        AND date <= {endDate:Date}
+    ` : `
+      SELECT SUM(conversions) as total_conversions
+      FROM campaign_conversions
+      WHERE connection_id = {connectionId:String}
+    `;
+
+    const convResult = await client.query({
+      query: convQuery,
+      query_params: startDate && endDate
+        ? { connectionId, startDate, endDate }
+        : { connectionId },
+      format: 'JSONEachRow',
+    });
+    const convRows = await convResult.json<any>();
+    const totalConversions = parseInt(convRows[0]?.total_conversions) || 0;
+
     const result = await client.query({
       query: `
         SELECT
@@ -2051,16 +2074,38 @@ export const clickhouseService = {
     });
 
     const rows = await result.json<any>();
-    return rows.map((row: any) => ({
-      query: row.query,
-      impressions: parseInt(row.impressions) || 0,
-      clicks: parseInt(row.clicks) || 0,
-      cost: parseFloat(row.cost) || 0,
-    }));
+    const totalClicks = rows.reduce((sum: number, row: any) => sum + (parseInt(row.clicks) || 0), 0);
+
+    return rows.map((row: any) => {
+      const clicks = parseInt(row.clicks) || 0;
+      const conversions = totalClicks > 0 ? Math.round((clicks / totalClicks) * totalConversions) : 0;
+      return {
+        query: row.query,
+        impressions: parseInt(row.impressions) || 0,
+        clicks,
+        cost: parseFloat(row.cost) || 0,
+        conversions,
+      };
+    });
   },
 
-  // Demographics - читаем из campaign_performance
+  // Demographics - читаем из campaign_performance с пропорциональным распределением конверсий
   async getDemographics(connectionId: string, startDate: string, endDate: string): Promise<any[]> {
+    // Получаем общее количество конверсий за период
+    const convResult = await client.query({
+      query: `
+        SELECT SUM(conversions) as total_conversions
+        FROM campaign_conversions
+        WHERE connection_id = {connectionId:String}
+          AND date >= {startDate:Date}
+          AND date <= {endDate:Date}
+      `,
+      query_params: { connectionId, startDate, endDate },
+      format: 'JSONEachRow',
+    });
+    const convRows = await convResult.json<any>();
+    const totalConversions = parseInt(convRows[0]?.total_conversions) || 0;
+
     const result = await client.query({
       query: `
         SELECT
@@ -2083,22 +2128,45 @@ export const clickhouseService = {
     });
 
     const rows = await result.json<any>();
+
+    // Считаем общее количество кликов для пропорционального распределения
+    const totalClicks = rows.reduce((sum: number, row: any) => sum + (parseInt(row.clicks) || 0), 0);
+
     return rows.map((row: any) => {
       const genderLabel = row.gender === 'MALE' ? 'Мужчины' : row.gender === 'FEMALE' ? 'Женщины' : row.gender;
       const ageLabel = row.age?.replace('AGE_', '').replace('_', '-') || 'Не определён';
+      const clicks = parseInt(row.clicks) || 0;
+      // Пропорционально распределяем конверсии по кликам
+      const conversions = totalClicks > 0 ? Math.round((clicks / totalClicks) * totalConversions) : 0;
       return {
         segment: `${genderLabel}, ${ageLabel}`,
         gender: row.gender,
         age: row.age,
         impressions: parseInt(row.impressions) || 0,
-        clicks: parseInt(row.clicks) || 0,
+        clicks,
         cost: parseFloat(row.cost) || 0,
+        conversions,
       };
     });
   },
 
-  // Geo - читаем из campaign_performance
+  // Geo - читаем из campaign_performance с пропорциональным распределением конверсий
   async getGeoStats(connectionId: string, startDate: string, endDate: string): Promise<any[]> {
+    // Получаем общее количество конверсий за период
+    const convResult = await client.query({
+      query: `
+        SELECT SUM(conversions) as total_conversions
+        FROM campaign_conversions
+        WHERE connection_id = {connectionId:String}
+          AND date >= {startDate:Date}
+          AND date <= {endDate:Date}
+      `,
+      query_params: { connectionId, startDate, endDate },
+      format: 'JSONEachRow',
+    });
+    const convRows = await convResult.json<any>();
+    const totalConversions = parseInt(convRows[0]?.total_conversions) || 0;
+
     const result = await client.query({
       query: `
         SELECT
@@ -2121,16 +2189,38 @@ export const clickhouseService = {
     });
 
     const rows = await result.json<any>();
-    return rows.map((row: any) => ({
-      region: row.region || 'Не определён',
-      impressions: parseInt(row.impressions) || 0,
-      clicks: parseInt(row.clicks) || 0,
-      cost: parseFloat(row.cost) || 0,
-    }));
+    const totalClicks = rows.reduce((sum: number, row: any) => sum + (parseInt(row.clicks) || 0), 0);
+
+    return rows.map((row: any) => {
+      const clicks = parseInt(row.clicks) || 0;
+      const conversions = totalClicks > 0 ? Math.round((clicks / totalClicks) * totalConversions) : 0;
+      return {
+        region: row.region || 'Не определён',
+        impressions: parseInt(row.impressions) || 0,
+        clicks,
+        cost: parseFloat(row.cost) || 0,
+        conversions,
+      };
+    });
   },
 
-  // Devices - читаем из campaign_performance
+  // Devices - читаем из campaign_performance с пропорциональным распределением конверсий
   async getCachedDeviceStats(connectionId: string, startDate: string, endDate: string): Promise<any[]> {
+    // Получаем общее количество конверсий за период
+    const convResult = await client.query({
+      query: `
+        SELECT SUM(conversions) as total_conversions
+        FROM campaign_conversions
+        WHERE connection_id = {connectionId:String}
+          AND date >= {startDate:Date}
+          AND date <= {endDate:Date}
+      `,
+      query_params: { connectionId, startDate, endDate },
+      format: 'JSONEachRow',
+    });
+    const convRows = await convResult.json<any>();
+    const totalConversions = parseInt(convRows[0]?.total_conversions) || 0;
+
     const result = await client.query({
       query: `
         SELECT
@@ -2152,22 +2242,44 @@ export const clickhouseService = {
     });
 
     const rows = await result.json<any>();
+    const totalClicks = rows.reduce((sum: number, row: any) => sum + (parseInt(row.clicks) || 0), 0);
+
     const deviceNames: Record<string, string> = {
       DESKTOP: 'Компьютеры',
       MOBILE: 'Смартфоны',
       TABLET: 'Планшеты',
     };
-    return rows.map((row: any) => ({
-      device: row.device,
-      deviceName: deviceNames[row.device] || row.device,
-      impressions: parseInt(row.impressions) || 0,
-      clicks: parseInt(row.clicks) || 0,
-      cost: parseFloat(row.cost) || 0,
-    }));
+    return rows.map((row: any) => {
+      const clicks = parseInt(row.clicks) || 0;
+      const conversions = totalClicks > 0 ? Math.round((clicks / totalClicks) * totalConversions) : 0;
+      return {
+        device: row.device,
+        deviceName: deviceNames[row.device] || row.device,
+        impressions: parseInt(row.impressions) || 0,
+        clicks,
+        cost: parseFloat(row.cost) || 0,
+        conversions,
+      };
+    });
   },
 
-  // Income Grade - читаем из campaign_performance
+  // Income Grade - читаем из campaign_performance с пропорциональным распределением конверсий
   async getIncomeStats(connectionId: string, startDate: string, endDate: string): Promise<any[]> {
+    // Получаем общее количество конверсий за период
+    const convResult = await client.query({
+      query: `
+        SELECT SUM(conversions) as total_conversions
+        FROM campaign_conversions
+        WHERE connection_id = {connectionId:String}
+          AND date >= {startDate:Date}
+          AND date <= {endDate:Date}
+      `,
+      query_params: { connectionId, startDate, endDate },
+      format: 'JSONEachRow',
+    });
+    const convRows = await convResult.json<any>();
+    const totalConversions = parseInt(convRows[0]?.total_conversions) || 0;
+
     const result = await client.query({
       query: `
         SELECT
@@ -2189,20 +2301,27 @@ export const clickhouseService = {
     });
 
     const rows = await result.json<any>();
+    const totalClicks = rows.reduce((sum: number, row: any) => sum + (parseInt(row.clicks) || 0), 0);
+
     const incomeNames: Record<string, string> = {
       LOW: 'Низкий',
       MEDIUM: 'Средний',
       HIGH: 'Высокий',
       PREMIUM: 'Премиум',
     };
-    return rows.map((row: any) => ({
-      incomeGrade: row.income_grade,
-      incomeGradeRaw: row.income_grade,
-      incomeGradeName: incomeNames[row.income_grade] || row.income_grade,
-      impressions: parseInt(row.impressions) || 0,
-      clicks: parseInt(row.clicks) || 0,
-      cost: parseFloat(row.cost) || 0,
-    }));
+    return rows.map((row: any) => {
+      const clicks = parseInt(row.clicks) || 0;
+      const conversions = totalClicks > 0 ? Math.round((clicks / totalClicks) * totalConversions) : 0;
+      return {
+        incomeGrade: row.income_grade,
+        incomeGradeRaw: row.income_grade,
+        incomeGradeName: incomeNames[row.income_grade] || row.income_grade,
+        impressions: parseInt(row.impressions) || 0,
+        clicks,
+        cost: parseFloat(row.cost) || 0,
+        conversions,
+      };
+    });
   },
 
   // Ad Texts - объединяем ad_contents (заголовки и тексты) с ad_performance (статистика)
