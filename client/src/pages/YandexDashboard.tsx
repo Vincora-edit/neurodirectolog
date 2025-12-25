@@ -298,8 +298,9 @@ export function YandexDashboard() {
     refetchInterval: 10 * 60 * 1000,
   });
 
-  // Отчёты
-  const { data: searchQueriesData } = useQuery({
+  // Отчёты - загружаем только когда выбран соответствующий таб
+  // Это предотвращает ошибку "Превышено ограничение на размер очереди" от Яндекс API
+  const { data: searchQueriesData, isLoading: searchQueriesLoading } = useQuery({
     queryKey: ['yandex-search-queries', activeProjectId, activeConnectionId, dateRange],
     queryFn: async () => {
       const response = await fetch(
@@ -307,10 +308,11 @@ export function YandexDashboard() {
       );
       return response.json();
     },
-    enabled: !!activeProjectId && !!activeConnectionId,
+    enabled: !!activeProjectId && !!activeConnectionId && audienceReportTab === 'search',
+    staleTime: 5 * 60 * 1000, // кэшируем на 5 минут
   });
 
-  const { data: deviceStatsData } = useQuery({
+  const { data: deviceStatsData, isLoading: deviceStatsLoading } = useQuery({
     queryKey: ['yandex-device-stats', activeProjectId, activeConnectionId, dateRange],
     queryFn: async () => {
       const response = await fetch(
@@ -318,10 +320,11 @@ export function YandexDashboard() {
       );
       return response.json();
     },
-    enabled: !!activeProjectId && !!activeConnectionId,
+    enabled: !!activeProjectId && !!activeConnectionId && audienceReportTab === 'devices',
+    staleTime: 5 * 60 * 1000,
   });
 
-  const { data: geoStatsData } = useQuery({
+  const { data: geoStatsData, isLoading: geoStatsLoading } = useQuery({
     queryKey: ['yandex-geo-stats', activeProjectId, activeConnectionId, dateRange],
     queryFn: async () => {
       const response = await fetch(
@@ -329,10 +332,11 @@ export function YandexDashboard() {
       );
       return response.json();
     },
-    enabled: !!activeProjectId && !!activeConnectionId,
+    enabled: !!activeProjectId && !!activeConnectionId && audienceReportTab === 'region',
+    staleTime: 5 * 60 * 1000,
   });
 
-  const { data: demographicsData } = useQuery({
+  const { data: demographicsData, isLoading: demographicsLoading } = useQuery({
     queryKey: ['yandex-demographics', activeProjectId, activeConnectionId, dateRange],
     queryFn: async () => {
       const response = await fetch(
@@ -340,10 +344,11 @@ export function YandexDashboard() {
       );
       return response.json();
     },
-    enabled: !!activeProjectId && !!activeConnectionId,
+    enabled: !!activeProjectId && !!activeConnectionId && audienceReportTab === 'demographics',
+    staleTime: 5 * 60 * 1000,
   });
 
-  const { data: incomeData } = useQuery({
+  const { data: incomeData, isLoading: incomeLoading } = useQuery({
     queryKey: ['yandex-income', activeProjectId, activeConnectionId, dateRange],
     queryFn: async () => {
       const response = await fetch(
@@ -351,10 +356,11 @@ export function YandexDashboard() {
       );
       return response.json();
     },
-    enabled: !!activeProjectId && !!activeConnectionId,
+    enabled: !!activeProjectId && !!activeConnectionId && audienceReportTab === 'income',
+    staleTime: 5 * 60 * 1000,
   });
 
-  const { data: targetingCategoriesData } = useQuery({
+  const { data: targetingCategoriesData, isLoading: targetingCategoriesLoading } = useQuery({
     queryKey: ['yandex-targeting-categories', activeProjectId, activeConnectionId, dateRange],
     queryFn: async () => {
       const response = await fetch(
@@ -362,10 +368,11 @@ export function YandexDashboard() {
       );
       return response.json();
     },
-    enabled: !!activeProjectId && !!activeConnectionId,
+    enabled: !!activeProjectId && !!activeConnectionId && technicalReportTab === 'categories',
+    staleTime: 5 * 60 * 1000,
   });
 
-  const { data: criteriaData } = useQuery({
+  const { data: criteriaData, isLoading: criteriaLoading } = useQuery({
     queryKey: ['yandex-criteria', activeProjectId, activeConnectionId, dateRange],
     queryFn: async () => {
       const response = await fetch(
@@ -373,10 +380,11 @@ export function YandexDashboard() {
       );
       return response.json();
     },
-    enabled: !!activeProjectId && !!activeConnectionId,
+    enabled: !!activeProjectId && !!activeConnectionId && technicalReportTab === 'criteria',
+    staleTime: 5 * 60 * 1000,
   });
 
-  const { data: placementsData } = useQuery({
+  const { data: placementsData, isLoading: placementsLoading } = useQuery({
     queryKey: ['yandex-placements', activeProjectId, activeConnectionId, dateRange],
     queryFn: async () => {
       const response = await fetch(
@@ -384,10 +392,11 @@ export function YandexDashboard() {
       );
       return response.json();
     },
-    enabled: !!activeProjectId && !!activeConnectionId,
+    enabled: !!activeProjectId && !!activeConnectionId && technicalReportTab === 'placements',
+    staleTime: 5 * 60 * 1000,
   });
 
-  const { data: adTextsData } = useQuery({
+  const { data: adTextsData, isLoading: adTextsLoading } = useQuery({
     queryKey: ['yandex-ad-texts', activeProjectId, activeConnectionId, dateRange],
     queryFn: async () => {
       const response = await fetch(
@@ -395,7 +404,8 @@ export function YandexDashboard() {
       );
       return response.json();
     },
-    enabled: !!activeProjectId && !!activeConnectionId,
+    enabled: !!activeProjectId && !!activeConnectionId && technicalReportTab === 'ads',
+    staleTime: 5 * 60 * 1000,
   });
 
   // Обработанные данные - API возвращает массив напрямую
@@ -649,6 +659,29 @@ export function YandexDashboard() {
   const renderReportTable = (reportId: string) => {
     const report = getReportData(reportId);
     const isPlacementsReport = reportId === 'placements';
+
+    // Проверяем загрузку для соответствующего отчёта
+    const isLoading =
+      (reportId === 'search' && searchQueriesLoading) ||
+      (reportId === 'devices' && deviceStatsLoading) ||
+      (reportId === 'region' && geoStatsLoading) ||
+      (reportId === 'demographics' && demographicsLoading) ||
+      (reportId === 'income' && incomeLoading) ||
+      (reportId === 'categories' && targetingCategoriesLoading) ||
+      (reportId === 'criteria' && criteriaLoading) ||
+      (reportId === 'placements' && placementsLoading) ||
+      (reportId === 'ads' && adTextsLoading);
+
+    if (isLoading) {
+      return (
+        <div className="flex items-center justify-center py-12">
+          <div className="flex items-center gap-3 text-gray-500">
+            <div className="w-5 h-5 border-2 border-gray-300 border-t-blue-500 rounded-full animate-spin" />
+            <span>Загрузка отчёта...</span>
+          </div>
+        </div>
+      );
+    }
 
     return (
       <div className="overflow-x-auto">
