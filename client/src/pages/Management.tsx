@@ -43,7 +43,7 @@ interface ManagementResponse {
   projects: ProjectData[];
 }
 
-type SortColumn = 'name' | 'impressions' | 'clicks' | 'cost' | 'conversions' | 'ctr' | 'cpl' | 'costProgress' | 'leadsProgress';
+type SortColumn = 'name' | 'impressions' | 'clicks' | 'cost' | 'conversions' | 'cpl' | 'costProgress' | 'leadsProgress';
 type SortDirection = 'asc' | 'desc';
 
 export default function Management() {
@@ -69,10 +69,7 @@ export default function Management() {
     return new Intl.NumberFormat('ru-RU').format(value);
   };
 
-  const formatPercent = (value: number) => {
-    return `${value.toFixed(2)}%`;
-  };
-
+  
   const handleSort = (column: SortColumn) => {
     if (sortColumn === column) {
       setSortDirection(prev => prev === 'desc' ? 'asc' : 'desc');
@@ -89,7 +86,6 @@ export default function Management() {
       case 'clicks': return project.stats.clicks;
       case 'cost': return project.stats.cost;
       case 'conversions': return project.stats.conversions;
-      case 'ctr': return project.stats.ctr;
       case 'cpl': return project.stats.cpl;
       case 'costProgress': return project.kpi?.costProgress || 0;
       case 'leadsProgress': return project.kpi?.leadsProgress || 0;
@@ -169,7 +165,6 @@ export default function Management() {
     { impressions: 0, clicks: 0, cost: 0, conversions: 0 }
   );
 
-  const totalCtr = totals.impressions > 0 ? (totals.clicks / totals.impressions) * 100 : 0;
   const totalCpl = totals.conversions > 0 ? totals.cost / totals.conversions : 0;
 
   return (
@@ -276,7 +271,6 @@ export default function Management() {
                 <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase">Аккаунт</th>
                 <SortHeader column="impressions" label="Показы" />
                 <SortHeader column="clicks" label="Клики" />
-                <SortHeader column="ctr" label="CTR" />
                 <SortHeader column="cost" label="Расход" />
                 <SortHeader column="conversions" label="Лиды" />
                 <SortHeader column="cpl" label="CPL" />
@@ -305,14 +299,6 @@ export default function Management() {
                   <td className="px-3 py-3 text-right text-gray-900">
                     {formatNumber(project.stats.clicks)}
                   </td>
-                  <td className="px-3 py-3 text-right">
-                    <span className={`font-medium ${
-                      project.stats.ctr >= 5 ? 'text-green-600' :
-                      project.stats.ctr >= 3 ? 'text-yellow-600' : 'text-red-600'
-                    }`}>
-                      {formatPercent(project.stats.ctr)}
-                    </span>
-                  </td>
                   <td className="px-3 py-3 text-right font-semibold text-gray-900">
                     {formatCurrency(project.stats.cost)}
                   </td>
@@ -321,8 +307,25 @@ export default function Management() {
                       {formatNumber(project.stats.conversions)}
                     </span>
                   </td>
-                  <td className="px-3 py-3 text-right text-gray-900">
-                    {project.stats.cpl > 0 ? formatCurrency(project.stats.cpl) : '—'}
+                  <td className="px-3 py-3 text-right">
+                    {project.stats.cpl > 0 ? (
+                      <div className="flex flex-col items-end">
+                        <span className={`font-medium ${
+                          project.kpi?.targetCpl && project.stats.cpl > project.kpi.targetCpl * 1.1
+                            ? 'text-red-600'
+                            : project.kpi?.targetCpl && project.stats.cpl <= project.kpi.targetCpl
+                            ? 'text-green-600'
+                            : 'text-gray-900'
+                        }`}>
+                          {formatCurrency(project.stats.cpl)}
+                        </span>
+                        {project.kpi?.targetCpl ? (
+                          <span className="text-xs text-gray-400">
+                            цель: {formatCurrency(project.kpi.targetCpl)}
+                          </span>
+                        ) : null}
+                      </div>
+                    ) : '—'}
                   </td>
                   <td className="px-3 py-3">
                     {project.kpi ? (
@@ -348,7 +351,6 @@ export default function Management() {
                   <td className="px-3 py-3 text-gray-500 text-sm">{sortedProjects.length} проектов</td>
                   <td className="px-3 py-3 text-right text-gray-900">{formatNumber(totals.impressions)}</td>
                   <td className="px-3 py-3 text-right text-gray-900">{formatNumber(totals.clicks)}</td>
-                  <td className="px-3 py-3 text-right text-gray-900">{formatPercent(totalCtr)}</td>
                   <td className="px-3 py-3 text-right text-gray-900">{formatCurrency(totals.cost)}</td>
                   <td className="px-3 py-3 text-right text-gray-900">{formatNumber(totals.conversions)}</td>
                   <td className="px-3 py-3 text-right text-gray-900">{totalCpl > 0 ? formatCurrency(totalCpl) : '—'}</td>
