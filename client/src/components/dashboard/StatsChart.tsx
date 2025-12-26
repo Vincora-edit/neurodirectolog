@@ -9,7 +9,7 @@ import {
   ResponsiveContainer,
   Legend,
 } from 'recharts';
-import { ChevronDown, ChevronUp } from 'lucide-react';
+import { ChevronDown, ChevronUp, TrendingUp } from 'lucide-react';
 import { CHART_METRICS } from '../../constants';
 
 interface DailyStats {
@@ -73,18 +73,21 @@ export function StatsChart({ data, title = 'Динамика', defaultOpen = tru
   }));
 
   return (
-    <div className="bg-white rounded-xl shadow-sm border border-gray-200 mb-6 overflow-hidden">
-      <div
-        className="flex items-center justify-between p-4 cursor-pointer hover:bg-gray-50 transition-colors"
+    <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+      <button
+        className="w-full px-5 py-4 flex items-center justify-between hover:bg-gray-50 transition-colors"
         onClick={() => setIsOpen(!isOpen)}
       >
-        <h3 className="text-lg font-semibold text-gray-900">{title}</h3>
+        <div className="flex items-center gap-3">
+          <TrendingUp size={20} className="text-green-600" />
+          <span className="font-semibold text-gray-900">{title}</span>
+        </div>
         {isOpen ? (
           <ChevronUp size={20} className="text-gray-400" />
         ) : (
           <ChevronDown size={20} className="text-gray-400" />
         )}
-      </div>
+      </button>
 
       {isOpen && (
         <div className="px-6 pb-6">
