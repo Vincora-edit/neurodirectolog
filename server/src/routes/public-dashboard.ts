@@ -8,6 +8,8 @@ router.get('/:token', async (req: Request, res: Response, next: NextFunction) =>
   try {
     const { token } = req.params;
     const days = parseInt(req.query.days as string) || 30;
+    const customStartDate = req.query.startDate as string | undefined;
+    const customEndDate = req.query.endDate as string | undefined;
 
     // Проверяем валидность ссылки
     const { valid, share } = await clickhouseService.isPublicShareValid(token);
@@ -55,9 +57,17 @@ router.get('/:token', async (req: Request, res: Response, next: NextFunction) =>
     }
 
     // Вычисляем даты
-    const endDate = new Date();
-    const startDate = new Date();
-    startDate.setDate(startDate.getDate() - days);
+    let startDate: Date;
+    let endDate: Date;
+
+    if (customStartDate && customEndDate) {
+      startDate = new Date(customStartDate);
+      endDate = new Date(customEndDate);
+    } else {
+      endDate = new Date();
+      startDate = new Date();
+      startDate.setDate(startDate.getDate() - days);
+    }
 
     const startDateStr = startDate.toISOString().split('T')[0];
     const endDateStr = endDate.toISOString().split('T')[0];
@@ -148,6 +158,7 @@ router.get('/:token', async (req: Request, res: Response, next: NextFunction) =>
         ctr: c.avgCtr || 0,
         cpc: c.avgCpc || 0,
         cpl: (c.totalConversions || 0) > 0 ? (c.totalCost || 0) / c.totalConversions : 0,
+        bounceRate: c.avgBounceRate || null,
       })),
       dailyStats: dailyStats.map((d: any) => ({
         date: d.date,

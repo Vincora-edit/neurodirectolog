@@ -10,8 +10,9 @@ import {
   ResponsiveContainer,
   Legend,
 } from 'recharts';
-import { TrendingUp, DollarSign, MousePointer, Target, AlertCircle, Gauge } from 'lucide-react';
+import { TrendingUp, DollarSign, MousePointer, Target, AlertCircle, Gauge, Calendar, ChevronDown, ChevronUp, ArrowUpDown, LayoutGrid, Table } from 'lucide-react';
 import { CircularProgress } from '../components/dashboard/CircularProgress';
+import { DATE_RANGES } from '../constants';
 
 interface DashboardData {
   shareName: string;
@@ -77,6 +78,10 @@ interface DashboardData {
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001/api';
 
+// Тип сортировки для таблицы кампаний
+type SortColumn = 'impressions' | 'clicks' | 'cost' | 'cpc' | 'ctr' | 'bounceRate' | 'conversions' | 'cr' | 'cpl';
+type SortDirection = 'asc' | 'desc';
+
 export default function PublicDashboard() {
   const { token } = useParams<{ token: string }>();
   const [data, setData] = useState<DashboardData | null>(null);
@@ -86,29 +91,52 @@ export default function PublicDashboard() {
     new Set(['cost', 'clicks'])
   );
 
-  useEffect(() => {
-    const fetchData = async () => {
-      try {
-        const response = await fetch(`${API_URL}/public/dashboard/${token}`);
-        if (!response.ok) {
-          if (response.status === 404) {
-            throw new Error('Ссылка не найдена или срок действия истёк');
-          }
-          throw new Error('Не удалось загрузить данные');
-        }
-        const result = await response.json();
-        setData(result);
-      } catch (err) {
-        setError(err instanceof Error ? err.message : 'Произошла ошибка');
-      } finally {
-        setIsLoading(false);
-      }
-    };
+  // Состояние для выбора дат
+  const [dateRange, setDateRange] = useState(30);
+  const [customDateMode, setCustomDateMode] = useState(false);
+  const [customStartDate, setCustomStartDate] = useState('');
+  const [customEndDate, setCustomEndDate] = useState('');
 
-    if (token) {
-      fetchData();
+  // Состояние для таблицы кампаний
+  const [campaignsOpen, setCampaignsOpen] = useState(true);
+  const [sortColumn, setSortColumn] = useState<SortColumn>('cost');
+  const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
+
+  // Состояние для таблицы по дням
+  const [dailyTableOpen, setDailyTableOpen] = useState(true);
+
+  const fetchData = async (days: number, startDate?: string, endDate?: string) => {
+    setIsLoading(true);
+    try {
+      let url = `${API_URL}/public/dashboard/${token}?days=${days}`;
+      if (startDate && endDate) {
+        url = `${API_URL}/public/dashboard/${token}?startDate=${startDate}&endDate=${endDate}`;
+      }
+      const response = await fetch(url);
+      if (!response.ok) {
+        if (response.status === 404) {
+          throw new Error('Ссылка не найдена или срок действия истёк');
+        }
+        throw new Error('Не удалось загрузить данные');
+      }
+      const result = await response.json();
+      setData(result);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Произошла ошибка');
+    } finally {
+      setIsLoading(false);
     }
-  }, [token]);
+  };
+
+  useEffect(() => {
+    if (token) {
+      if (customDateMode && customStartDate && customEndDate) {
+        fetchData(dateRange, customStartDate, customEndDate);
+      } else {
+        fetchData(dateRange);
+      }
+    }
+  }, [token, dateRange, customDateMode, customStartDate, customEndDate]);
 
   const formatCurrency = (value: number | undefined | null) => {
     return new Intl.NumberFormat('ru-RU', {
@@ -146,6 +174,69 @@ export default function PublicDashboard() {
       return next;
     });
   };
+
+  const handleSort = (column: SortColumn) => {
+    if (sortColumn === column) {
+      setSortDirection((prev) => (prev === 'desc' ? 'asc' : 'desc'));
+    } else {
+      setSortColumn(column);
+      setSortDirection('desc');
+    }
+  };
+
+  const getSortValue = (item: any, column: SortColumn): number => {
+    switch (column) {
+      case 'impressions': return item.impressions || 0;
+      case 'clicks': return item.clicks || 0;
+      case 'cost': return item.cost || 0;
+      case 'cpc': return item.cpc || 0;
+      case 'ctr': return item.ctr || 0;
+      case 'bounceRate': return item.bounceRate || 0;
+      case 'conversions': return item.conversions || 0;
+      case 'cr': return item.clicks > 0 ? ((item.conversions || 0) / item.clicks) * 100 : 0;
+      case 'cpl': return item.conversions > 0 ? (item.cost || 0) / item.conversions : 0;
+      default: return 0;
+    }
+  };
+
+  const sortedCampaigns = data?.campaigns ? [...data.campaigns].sort((a, b) => {
+    const aVal = getSortValue(a, sortColumn);
+    const bVal = getSortValue(b, sortColumn);
+    return sortDirection === 'desc' ? bVal - aVal : aVal - bVal;
+  }) : [];
+
+  // Итоги таблицы кампаний
+  const campaignTotals = data?.campaigns ? data.campaigns.reduce(
+    (acc, c) => ({
+      impressions: acc.impressions + (c.impressions || 0),
+      clicks: acc.clicks + (c.clicks || 0),
+      cost: acc.cost + (c.cost || 0),
+      conversions: acc.conversions + (c.conversions || 0),
+    }),
+    { impressions: 0, clicks: 0, cost: 0, conversions: 0 }
+  ) : { impressions: 0, clicks: 0, cost: 0, conversions: 0 };
+
+  const totalCtr = campaignTotals.impressions > 0 ? (campaignTotals.clicks / campaignTotals.impressions) * 100 : 0;
+  const totalCpc = campaignTotals.clicks > 0 ? campaignTotals.cost / campaignTotals.clicks : 0;
+  const totalCr = campaignTotals.clicks > 0 ? (campaignTotals.conversions / campaignTotals.clicks) * 100 : 0;
+  const totalCpl = campaignTotals.conversions > 0 ? campaignTotals.cost / campaignTotals.conversions : 0;
+
+  // Компонент заголовка для сортировки
+  const SortHeader = ({ column, label }: { column: SortColumn; label: string }) => (
+    <th
+      className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase cursor-pointer hover:bg-gray-100 select-none"
+      onClick={() => handleSort(column)}
+    >
+      <div className="flex items-center justify-end gap-1">
+        {label}
+        {sortColumn === column ? (
+          sortDirection === 'desc' ? <ChevronDown size={14} /> : <ChevronUp size={14} />
+        ) : (
+          <ArrowUpDown size={14} className="opacity-30" />
+        )}
+      </div>
+    </th>
+  );
 
   const CHART_METRICS = [
     { value: 'cost', label: 'Расход', color: '#ef4444' },
@@ -187,18 +278,70 @@ export default function PublicDashboard() {
       {/* Header */}
       <header className="bg-white border-b border-gray-200">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between flex-wrap gap-4">
             <div>
               <h1 className="text-xl font-bold text-gray-900">
                 Статистика Yandex.Direct
               </h1>
               <p className="text-sm text-gray-500">
-                Аккаунт: {data.accountLogin} | Период: {formatDate(data.period.startDate)} — {formatDate(data.period.endDate)}
+                Аккаунт: {data.accountLogin}
               </p>
             </div>
             <div className="text-right text-sm text-gray-500">
               Обновлено: {new Date(data.lastUpdated).toLocaleString('ru-RU')}
             </div>
+          </div>
+          {/* Date Range Selector */}
+          <div className="mt-4 flex items-center gap-2 flex-wrap">
+            <div className="flex items-center gap-1 bg-gray-100 rounded-lg p-1">
+              {DATE_RANGES.map((range) => (
+                <button
+                  key={range.value}
+                  onClick={() => {
+                    setDateRange(range.value);
+                    setCustomDateMode(false);
+                  }}
+                  className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${
+                    !customDateMode && dateRange === range.value
+                      ? 'bg-white text-gray-900 shadow-sm'
+                      : 'text-gray-600 hover:text-gray-900'
+                  }`}
+                >
+                  {range.label}
+                </button>
+              ))}
+            </div>
+            <button
+              onClick={() => setCustomDateMode(!customDateMode)}
+              className={`flex items-center gap-2 px-3 py-1.5 text-sm font-medium rounded-lg transition-colors ${
+                customDateMode
+                  ? 'bg-blue-100 text-blue-700'
+                  : 'bg-gray-100 text-gray-600 hover:text-gray-900'
+              }`}
+            >
+              <Calendar className="w-4 h-4" />
+              Произвольный
+            </button>
+            {customDateMode && (
+              <div className="flex items-center gap-2">
+                <input
+                  type="date"
+                  value={customStartDate}
+                  onChange={(e) => setCustomStartDate(e.target.value)}
+                  className="px-3 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                />
+                <span className="text-gray-400">—</span>
+                <input
+                  type="date"
+                  value={customEndDate}
+                  onChange={(e) => setCustomEndDate(e.target.value)}
+                  className="px-3 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                />
+              </div>
+            )}
+            <span className="text-sm text-gray-500 ml-2">
+              {formatDate(data.period.startDate)} — {formatDate(data.period.endDate)}
+            </span>
           </div>
         </div>
       </header>
@@ -450,75 +593,243 @@ export default function PublicDashboard() {
 
         {/* Campaigns Table */}
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-          <div className="px-5 py-4 border-b border-gray-200">
-            <span className="font-semibold text-gray-900">Кампании</span>
-            <span className="ml-2 text-sm text-gray-500">
-              {data.campaigns.length} кампаний
-            </span>
-          </div>
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                    Название
-                  </th>
-                  <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">
-                    Расход
-                  </th>
-                  <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">
-                    Клики
-                  </th>
-                  <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">
-                    CTR
-                  </th>
-                  <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">
-                    Конв.
-                  </th>
-                  <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">
-                    CPL
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-200">
-                {data.campaigns.map((campaign) => (
-                  <tr key={campaign.id} className="hover:bg-gray-50">
-                    <td className="px-4 py-3">
-                      <div className="flex items-center gap-2">
-                        <span
-                          className={`w-2 h-2 rounded-full ${
-                            campaign.status === 'ON'
-                              ? 'bg-green-500'
-                              : campaign.status === 'OFF'
-                              ? 'bg-gray-400'
-                              : 'bg-yellow-500'
-                          }`}
-                        />
-                        <span className="font-medium text-gray-900 truncate max-w-[300px]">
-                          {campaign.name}
-                        </span>
-                      </div>
-                    </td>
-                    <td className="px-4 py-3 text-right text-gray-900">
-                      {formatCurrency(campaign.cost)}
-                    </td>
-                    <td className="px-4 py-3 text-right text-gray-900">
-                      {formatNumber(campaign.clicks)}
-                    </td>
-                    <td className="px-4 py-3 text-right text-gray-900">
-                      {formatPercent(campaign.ctr)}
-                    </td>
-                    <td className="px-4 py-3 text-right text-gray-900">
-                      {formatNumber(campaign.conversions)}
-                    </td>
-                    <td className="px-4 py-3 text-right text-gray-900">
-                      {(campaign.cpl || 0) > 0 ? formatCurrency(campaign.cpl) : '—'}
-                    </td>
+          <button
+            onClick={() => setCampaignsOpen(!campaignsOpen)}
+            className="w-full px-5 py-4 flex items-center justify-between hover:bg-gray-50 transition-colors"
+          >
+            <div className="flex items-center gap-3">
+              <LayoutGrid size={20} className="text-blue-600" />
+              <span className="font-semibold text-gray-900">Кампании</span>
+              <span className="text-xs text-gray-400">{data.campaigns.length} кампаний</span>
+            </div>
+            {campaignsOpen ? (
+              <ChevronUp size={20} className="text-gray-400" />
+            ) : (
+              <ChevronDown size={20} className="text-gray-400" />
+            )}
+          </button>
+          {campaignsOpen && (
+            <div className="border-t border-gray-200 overflow-x-auto">
+              <table className="w-full">
+                <thead className="bg-gray-50 border-b border-gray-200">
+                  <tr>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                      Название
+                    </th>
+                    <SortHeader column="impressions" label="Показы" />
+                    <SortHeader column="clicks" label="Клики" />
+                    <SortHeader column="cost" label="Расход" />
+                    <SortHeader column="cpc" label="CPC" />
+                    <SortHeader column="ctr" label="CTR" />
+                    <SortHeader column="bounceRate" label="Отказы" />
+                    <SortHeader column="conversions" label="Конверсии" />
+                    <SortHeader column="cr" label="CR %" />
+                    <SortHeader column="cpl" label="CPL" />
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody className="divide-y divide-gray-200">
+                  {sortedCampaigns.map((campaign) => {
+                    const campaignCr = campaign.clicks > 0 ? (campaign.conversions / campaign.clicks) * 100 : 0;
+                    return (
+                      <tr key={campaign.id} className="hover:bg-gray-50">
+                        <td className="px-4 py-3">
+                          <div className="flex items-center gap-2">
+                            <span
+                              className={`w-2 h-2 rounded-full ${
+                                campaign.status === 'ON'
+                                  ? 'bg-green-500'
+                                  : campaign.status === 'OFF'
+                                  ? 'bg-gray-400'
+                                  : 'bg-yellow-500'
+                              }`}
+                            />
+                            <span className="font-medium text-gray-900 truncate max-w-[300px]">
+                              {campaign.name}
+                            </span>
+                          </div>
+                        </td>
+                        <td className="px-4 py-3 text-right text-gray-900">
+                          {formatNumber(campaign.impressions)}
+                        </td>
+                        <td className="px-4 py-3 text-right text-gray-900">
+                          {formatNumber(campaign.clicks)}
+                        </td>
+                        <td className="px-4 py-3 text-right font-semibold text-gray-900">
+                          {formatCurrency(campaign.cost)}
+                        </td>
+                        <td className="px-4 py-3 text-right text-gray-900">
+                          {(campaign.cpc || 0).toFixed(2)} ₽
+                        </td>
+                        <td className="px-4 py-3 text-right">
+                          <span className={`font-medium ${
+                            (campaign.ctr || 0) >= 5 ? 'text-green-600' :
+                            (campaign.ctr || 0) >= 3 ? 'text-yellow-600' : 'text-red-600'
+                          }`}>
+                            {formatPercent(campaign.ctr)}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 text-right text-gray-900">
+                          {typeof (campaign as any).bounceRate === 'number'
+                            ? `${(campaign as any).bounceRate.toFixed(2)}%`
+                            : '—'}
+                        </td>
+                        <td className="px-4 py-3 text-right">
+                          <span className={`font-medium ${
+                            (campaign.conversions || 0) > 0 ? 'text-green-600' : 'text-gray-400'
+                          }`}>
+                            {formatNumber(campaign.conversions)}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 text-right">
+                          <span className={`font-medium ${
+                            campaignCr >= 10 ? 'text-green-600' :
+                            campaignCr >= 5 ? 'text-yellow-600' : 'text-gray-600'
+                          }`}>
+                            {campaignCr > 0 ? `${campaignCr.toFixed(2)}%` : '—'}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 text-right text-gray-900">
+                          {(campaign.cpl || 0) > 0 ? formatCurrency(campaign.cpl) : '—'}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                  {/* Totals row */}
+                  {data.campaigns.length > 0 && (
+                    <tr className="bg-gray-100 border-t-2 border-gray-300 font-semibold">
+                      <td className="px-4 py-3 text-gray-900">
+                        ИТОГО ({data.campaigns.length} кампаний)
+                      </td>
+                      <td className="px-4 py-3 text-right text-gray-900">
+                        {formatNumber(campaignTotals.impressions)}
+                      </td>
+                      <td className="px-4 py-3 text-right text-gray-900">
+                        {formatNumber(campaignTotals.clicks)}
+                      </td>
+                      <td className="px-4 py-3 text-right text-gray-900">
+                        {formatCurrency(campaignTotals.cost)}
+                      </td>
+                      <td className="px-4 py-3 text-right text-gray-900">
+                        {totalCpc.toFixed(2)} ₽
+                      </td>
+                      <td className="px-4 py-3 text-right text-gray-900">
+                        {totalCtr.toFixed(2)}%
+                      </td>
+                      <td className="px-4 py-3 text-right text-gray-900">—</td>
+                      <td className="px-4 py-3 text-right text-gray-900">
+                        {formatNumber(campaignTotals.conversions)}
+                      </td>
+                      <td className="px-4 py-3 text-right text-gray-900">
+                        {totalCr > 0 ? `${totalCr.toFixed(2)}%` : '—'}
+                      </td>
+                      <td className="px-4 py-3 text-right text-gray-900">
+                        {totalCpl > 0 ? formatCurrency(totalCpl) : '—'}
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+
+        {/* Daily Stats Table */}
+        <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+          <button
+            onClick={() => setDailyTableOpen(!dailyTableOpen)}
+            className="w-full px-5 py-4 flex items-center justify-between hover:bg-gray-50 transition-colors"
+          >
+            <div className="flex items-center gap-3">
+              <Table size={20} className="text-purple-600" />
+              <span className="font-semibold text-gray-900">Статистика по дням</span>
+              <span className="text-xs text-gray-400">{data.dailyStats.length} дней</span>
+            </div>
+            {dailyTableOpen ? (
+              <ChevronUp size={20} className="text-gray-400" />
+            ) : (
+              <ChevronDown size={20} className="text-gray-400" />
+            )}
+          </button>
+          {dailyTableOpen && (
+            <div className="border-t border-gray-200 overflow-x-auto">
+              <table className="w-full">
+                <thead className="bg-gray-50 border-b border-gray-200">
+                  <tr>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                      Дата
+                    </th>
+                    <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">
+                      Показы
+                    </th>
+                    <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">
+                      Клики
+                    </th>
+                    <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">
+                      CTR
+                    </th>
+                    <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">
+                      Расход
+                    </th>
+                    <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">
+                      CPC
+                    </th>
+                    <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">
+                      Конверсии
+                    </th>
+                    <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">
+                      CPL
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-200">
+                  {[...data.dailyStats].reverse().map((day) => {
+                    const dayCpl = day.conversions > 0 ? day.cost / day.conversions : 0;
+                    return (
+                      <tr key={day.date} className="hover:bg-gray-50">
+                        <td className="px-4 py-3 font-medium text-gray-900">
+                          {new Date(day.date).toLocaleDateString('ru-RU', {
+                            day: 'numeric',
+                            month: 'short',
+                            weekday: 'short',
+                          })}
+                        </td>
+                        <td className="px-4 py-3 text-right text-gray-900">
+                          {formatNumber(day.impressions)}
+                        </td>
+                        <td className="px-4 py-3 text-right text-gray-900">
+                          {formatNumber(day.clicks)}
+                        </td>
+                        <td className="px-4 py-3 text-right">
+                          <span className={`font-medium ${
+                            (day.ctr || 0) >= 5 ? 'text-green-600' :
+                            (day.ctr || 0) >= 3 ? 'text-yellow-600' : 'text-red-600'
+                          }`}>
+                            {formatPercent(day.ctr)}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 text-right font-semibold text-gray-900">
+                          {formatCurrency(day.cost)}
+                        </td>
+                        <td className="px-4 py-3 text-right text-gray-900">
+                          {(day.cpc || 0).toFixed(2)} ₽
+                        </td>
+                        <td className="px-4 py-3 text-right">
+                          <span className={`font-medium ${
+                            (day.conversions || 0) > 0 ? 'text-green-600' : 'text-gray-400'
+                          }`}>
+                            {formatNumber(day.conversions)}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 text-right text-gray-900">
+                          {dayCpl > 0 ? formatCurrency(dayCpl) : '—'}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
       </main>
 
