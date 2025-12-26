@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import {
   BarChart3,
@@ -86,7 +86,19 @@ function SortableHeader({
 // Компонент tooltip для полного текста
 function TextWithTooltip({ text, maxWidth = 300 }: { text: string; maxWidth?: number }) {
   const [showTooltip, setShowTooltip] = useState(false);
+  const [position, setPosition] = useState<'bottom' | 'top'>('bottom');
+  const spanRef = useRef<HTMLSpanElement>(null);
   const needsTruncation = text.length > 40;
+
+  const handleMouseEnter = () => {
+    if (spanRef.current) {
+      const rect = spanRef.current.getBoundingClientRect();
+      const spaceBelow = window.innerHeight - rect.bottom;
+      // Если снизу меньше 150px, показываем сверху
+      setPosition(spaceBelow < 150 ? 'top' : 'bottom');
+    }
+    setShowTooltip(true);
+  };
 
   if (!needsTruncation) {
     return <span>{text}</span>;
@@ -95,17 +107,26 @@ function TextWithTooltip({ text, maxWidth = 300 }: { text: string; maxWidth?: nu
   return (
     <div className="relative">
       <span
+        ref={spanRef}
         className="truncate block cursor-help"
         style={{ maxWidth: `${maxWidth}px` }}
-        onMouseEnter={() => setShowTooltip(true)}
+        onMouseEnter={handleMouseEnter}
         onMouseLeave={() => setShowTooltip(false)}
       >
         {text}
       </span>
       {showTooltip && (
-        <div className="absolute z-50 left-0 top-full mt-1 p-3 bg-gray-900 text-white text-sm rounded-lg shadow-xl max-w-md whitespace-normal break-words">
+        <div
+          className={`absolute z-50 left-0 p-3 bg-gray-900 text-white text-sm rounded-lg shadow-xl max-w-md whitespace-normal break-words ${
+            position === 'top' ? 'bottom-full mb-1' : 'top-full mt-1'
+          }`}
+        >
           {text}
-          <div className="absolute -top-1 left-4 w-2 h-2 bg-gray-900 rotate-45" />
+          <div
+            className={`absolute left-4 w-2 h-2 bg-gray-900 rotate-45 ${
+              position === 'top' ? '-bottom-1' : '-top-1'
+            }`}
+          />
         </div>
       )}
     </div>
