@@ -11,7 +11,7 @@ router.use(authenticate);
 router.post('/', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { connectionId, name, expiresInDays } = req.body;
-    const userId = (req as any).user.userId;
+    const userId = (req as any).userId;
 
     console.log('[PublicShares] Creating share:', { connectionId, name, expiresInDays, userId });
 
@@ -58,7 +58,7 @@ router.post('/', async (req: Request, res: Response, next: NextFunction) => {
 router.get('/connection/:connectionId', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { connectionId } = req.params;
-    const userId = (req as any).user.userId;
+    const userId = (req as any).userId;
 
     // Проверяем доступ
     const connection = await clickhouseService.getConnectionById(connectionId);
@@ -99,7 +99,7 @@ router.patch('/:id', async (req: Request, res: Response, next: NextFunction) => 
   try {
     const { id } = req.params;
     const { isActive, name } = req.body;
-    const userId = (req as any).user.userId;
+    const userId = (req as any).userId;
 
     // Проверяем что ссылка существует
     const share = await clickhouseService.getPublicShareById(id);
@@ -122,7 +122,7 @@ router.patch('/:id', async (req: Request, res: Response, next: NextFunction) => 
 router.delete('/:id', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { id } = req.params;
-    const userId = (req as any).user.userId;
+    const userId = (req as any).userId;
 
     // Проверяем что ссылка существует
     const share = await clickhouseService.getPublicShareById(id);
