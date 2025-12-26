@@ -46,6 +46,8 @@ import yandexRouter from './routes/yandex';
 import adminRouter from './routes/admin';
 import { startSyncJob } from './jobs/sync.job';
 import { redisService } from './services/redis.service';
+import { queueService } from './services/queue.service';
+import { initSyncWorker, startScheduledSync } from './workers/sync.worker';
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -141,11 +143,18 @@ app.listen(PORT, async () => {
   const redisConnected = await redisService.connect();
   if (redisConnected) {
     console.log('📦 Redis кеширование включено');
+
+    // Инициализируем Bull Queue worker если Redis доступен
+    if (queueService.isAvailable()) {
+      initSyncWorker();
+      startScheduledSync(60); // Синхронизация каждые 60 минут
+      console.log('📋 Bull Queue worker запущен');
+    }
   } else {
     console.log('⚠️  Redis недоступен, работаем без кеша');
   }
 
-  // Start the cron job for Yandex.Direct sync
+  // Start the cron job for Yandex.Direct sync (fallback без Redis)
   startSyncJob();
   console.log(`⏰ Yandex.Direct sync job started`);
 });
@@ -153,6 +162,7 @@ app.listen(PORT, async () => {
 // Graceful shutdown
 process.on('SIGTERM', async () => {
   console.log('🛑 Получен SIGTERM, завершаем работу...');
+  await queueService.close();
   await redisService.disconnect();
   process.exit(0);
 });
