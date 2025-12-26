@@ -10,6 +10,9 @@ import {
   ChevronUp,
   ArrowUpDown,
   RefreshCw,
+  PanelRightClose,
+  PanelRight,
+  Gauge,
 } from 'lucide-react';
 import { api } from '../services/api';
 import { DATE_RANGES } from '../constants';
@@ -50,6 +53,7 @@ export default function Management() {
   const [days, setDays] = useState(30);
   const [sortColumn, setSortColumn] = useState<SortColumn>('cost');
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
+  const [showKpiPanel, setShowKpiPanel] = useState(true);
 
   const { data, isLoading, refetch, isFetching } = useQuery<ManagementResponse>({
     queryKey: ['management', days],
@@ -180,6 +184,19 @@ export default function Management() {
             <RefreshCw size={16} className={isFetching ? 'animate-spin' : ''} />
             Обновить
           </button>
+
+          <button
+            onClick={() => setShowKpiPanel(!showKpiPanel)}
+            className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-colors ${
+              showKpiPanel
+                ? 'bg-purple-100 text-purple-700 hover:bg-purple-200'
+                : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+            }`}
+            title={showKpiPanel ? 'Скрыть KPI' : 'Показать KPI'}
+          >
+            {showKpiPanel ? <PanelRightClose size={16} /> : <PanelRight size={16} />}
+            KPI
+          </button>
         </div>
       </div>
 
@@ -236,10 +253,14 @@ export default function Management() {
         </div>
       </div>
 
-      {/* Main table */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full">
+      {/* Main content: Table + KPI Panel */}
+      <div className="flex gap-6">
+        {/* Main table */}
+        <div className={`bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden transition-all ${
+          showKpiPanel ? 'flex-1' : 'w-full'
+        }`}>
+          <div className="overflow-x-auto">
+            <table className="w-full">
             <thead className="bg-gray-50 border-b border-gray-200">
               <tr>
                 <SortHeader column="name" label="Проект" align="left" />
@@ -272,61 +293,14 @@ export default function Management() {
                   <td className="px-3 py-3 text-right text-gray-900">
                     {formatNumber(project.stats.clicks)}
                   </td>
-                  <td className="px-3 py-3 text-right">
-                    <div className="flex flex-col items-end">
-                      <span className={`font-semibold ${
-                        project.kpi?.targetCost && project.kpi.costProgress > project.kpi.dayProgress + 10
-                          ? 'text-red-600'
-                          : project.kpi?.targetCost && project.kpi.costProgress >= project.kpi.dayProgress - 5
-                          ? 'text-green-600'
-                          : 'text-gray-900'
-                      }`}>
-                        {formatCurrency(project.stats.cost)}
-                      </span>
-                      {project.kpi?.targetCost ? (
-                        <span className="text-xs text-gray-400">
-                          {project.kpi.costProgress}% из {formatCurrency(project.kpi.targetCost)}
-                        </span>
-                      ) : null}
-                    </div>
+                  <td className="px-3 py-3 text-right font-semibold text-gray-900">
+                    {formatCurrency(project.stats.cost)}
                   </td>
-                  <td className="px-3 py-3 text-right">
-                    <div className="flex flex-col items-end">
-                      <span className={`font-medium ${
-                        project.kpi?.targetLeads && project.kpi.leadsProgress >= project.kpi.dayProgress
-                          ? 'text-green-600'
-                          : project.kpi?.targetLeads && project.kpi.leadsProgress < project.kpi.dayProgress - 10
-                          ? 'text-red-600'
-                          : project.stats.conversions > 0 ? 'text-amber-600' : 'text-gray-400'
-                      }`}>
-                        {formatNumber(project.stats.conversions)}
-                      </span>
-                      {project.kpi?.targetLeads ? (
-                        <span className="text-xs text-gray-400">
-                          {project.kpi.leadsProgress}% из {project.kpi.targetLeads}
-                        </span>
-                      ) : null}
-                    </div>
+                  <td className="px-3 py-3 text-right font-medium text-gray-900">
+                    {formatNumber(project.stats.conversions)}
                   </td>
-                  <td className="px-3 py-3 text-right">
-                    {project.stats.cpl > 0 ? (
-                      <div className="flex flex-col items-end">
-                        <span className={`font-medium ${
-                          project.kpi?.targetCpl && project.stats.cpl > project.kpi.targetCpl * 1.1
-                            ? 'text-red-600'
-                            : project.kpi?.targetCpl && project.stats.cpl <= project.kpi.targetCpl
-                            ? 'text-green-600'
-                            : 'text-gray-900'
-                        }`}>
-                          {formatCurrency(project.stats.cpl)}
-                        </span>
-                        {project.kpi?.targetCpl ? (
-                          <span className="text-xs text-gray-400">
-                            цель: {formatCurrency(project.kpi.targetCpl)}
-                          </span>
-                        ) : null}
-                      </div>
-                    ) : '—'}
+                  <td className="px-3 py-3 text-right font-medium text-gray-900">
+                    {project.stats.cpl > 0 ? formatCurrency(project.stats.cpl) : '—'}
                   </td>
                 </tr>
               ))}
@@ -347,10 +321,130 @@ export default function Management() {
           </table>
         </div>
 
-        {sortedProjects.length === 0 && (
-          <div className="text-center py-12 text-gray-500">
-            <LayoutGrid size={48} className="mx-auto mb-3 text-gray-300" />
-            <p>Нет проектов с подключениями Yandex.Direct</p>
+          {sortedProjects.length === 0 && (
+            <div className="text-center py-12 text-gray-500">
+              <LayoutGrid size={48} className="mx-auto mb-3 text-gray-300" />
+              <p>Нет проектов с подключениями Yandex.Direct</p>
+            </div>
+          )}
+        </div>
+
+        {/* KPI Panel */}
+        {showKpiPanel && (
+          <div className="w-80 bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden flex-shrink-0">
+            <div className="px-4 py-3 bg-purple-50 border-b border-gray-200">
+              <div className="flex items-center gap-2">
+                <Gauge size={18} className="text-purple-600" />
+                <h3 className="font-semibold text-gray-900">KPI текущего месяца</h3>
+              </div>
+              <p className="text-xs text-gray-500 mt-1">
+                {new Date().toLocaleDateString('ru-RU', { month: 'long', year: 'numeric' })}
+              </p>
+            </div>
+            <div className="divide-y divide-gray-100 max-h-[600px] overflow-y-auto">
+              {sortedProjects.filter(p => p.kpi).map((project) => (
+                <div key={project.id} className="p-3 hover:bg-gray-50">
+                  <div className="font-medium text-gray-900 text-sm mb-2 truncate" title={project.name}>
+                    {project.name}
+                  </div>
+
+                  {/* День месяца прогресс */}
+                  <div className="text-xs text-gray-500 mb-2">
+                    День: {project.kpi!.dayProgress}% месяца
+                  </div>
+
+                  {/* Расход */}
+                  <div className="flex items-center justify-between text-sm mb-1">
+                    <span className="text-gray-600">Расход:</span>
+                    <div className="text-right">
+                      <span className={`font-medium ${
+                        project.kpi!.costProgress > project.kpi!.dayProgress + 10
+                          ? 'text-red-600'
+                          : project.kpi!.costProgress >= project.kpi!.dayProgress - 5
+                          ? 'text-green-600'
+                          : 'text-gray-900'
+                      }`}>
+                        {project.kpi!.costProgress}%
+                      </span>
+                      <span className="text-gray-400 text-xs ml-1">
+                        / {formatCurrency(project.kpi!.targetCost)}
+                      </span>
+                    </div>
+                  </div>
+                  <div className="w-full bg-gray-200 rounded-full h-1.5 mb-2">
+                    <div
+                      className={`h-1.5 rounded-full ${
+                        project.kpi!.costProgress > project.kpi!.dayProgress + 10
+                          ? 'bg-red-500'
+                          : project.kpi!.costProgress >= project.kpi!.dayProgress - 5
+                          ? 'bg-green-500'
+                          : 'bg-amber-500'
+                      }`}
+                      style={{ width: `${Math.min(project.kpi!.costProgress, 100)}%` }}
+                    />
+                  </div>
+
+                  {/* Лиды */}
+                  <div className="flex items-center justify-between text-sm mb-1">
+                    <span className="text-gray-600">Лиды:</span>
+                    <div className="text-right">
+                      <span className={`font-medium ${
+                        project.kpi!.leadsProgress >= project.kpi!.dayProgress
+                          ? 'text-green-600'
+                          : project.kpi!.leadsProgress < project.kpi!.dayProgress - 10
+                          ? 'text-red-600'
+                          : 'text-amber-600'
+                      }`}>
+                        {project.kpi!.leadsProgress}%
+                      </span>
+                      <span className="text-gray-400 text-xs ml-1">
+                        / {project.kpi!.targetLeads}
+                      </span>
+                    </div>
+                  </div>
+                  <div className="w-full bg-gray-200 rounded-full h-1.5 mb-2">
+                    <div
+                      className={`h-1.5 rounded-full ${
+                        project.kpi!.leadsProgress >= project.kpi!.dayProgress
+                          ? 'bg-green-500'
+                          : project.kpi!.leadsProgress < project.kpi!.dayProgress - 10
+                          ? 'bg-red-500'
+                          : 'bg-amber-500'
+                      }`}
+                      style={{ width: `${Math.min(project.kpi!.leadsProgress, 100)}%` }}
+                    />
+                  </div>
+
+                  {/* CPL */}
+                  {project.kpi!.targetCpl > 0 && (
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="text-gray-600">CPL:</span>
+                      <div className="text-right">
+                        <span className={`font-medium ${
+                          project.stats.cpl > project.kpi!.targetCpl * 1.1
+                            ? 'text-red-600'
+                            : project.stats.cpl <= project.kpi!.targetCpl
+                            ? 'text-green-600'
+                            : 'text-amber-600'
+                        }`}>
+                          {formatCurrency(project.stats.cpl)}
+                        </span>
+                        <span className="text-gray-400 text-xs ml-1">
+                          / {formatCurrency(project.kpi!.targetCpl)}
+                        </span>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ))}
+
+              {sortedProjects.filter(p => p.kpi).length === 0 && (
+                <div className="p-6 text-center text-gray-500">
+                  <Gauge size={32} className="mx-auto mb-2 text-gray-300" />
+                  <p className="text-sm">Нет проектов с KPI</p>
+                </div>
+              )}
+            </div>
           </div>
         )}
       </div>
