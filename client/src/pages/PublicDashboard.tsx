@@ -11,6 +11,7 @@ import {
   Legend,
 } from 'recharts';
 import { TrendingUp, DollarSign, MousePointer, Target, AlertCircle, Gauge } from 'lucide-react';
+import { CircularProgress } from '../components/dashboard/CircularProgress';
 
 interface DashboardData {
   shareName: string;
@@ -278,60 +279,23 @@ export default function PublicDashboard() {
                 )}
               </div>
             </div>
-            <div className="p-6">
+            <div className="px-6 pb-6 pt-2">
               <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
                 {/* Расход */}
                 <div className="flex flex-col items-center">
-                  <div className="relative" style={{ width: 120, height: 120 }}>
-                    <svg className="w-full h-full transform -rotate-90">
-                      <circle
-                        cx="60"
-                        cy="60"
-                        r="52"
-                        fill="none"
-                        stroke="#fee2e2"
-                        strokeWidth="12"
-                      />
-                      <circle
-                        cx="60"
-                        cy="60"
-                        r="52"
-                        fill="none"
-                        stroke="#fca5a5"
-                        strokeWidth="12"
-                        strokeDasharray={`${((data.kpiProgress?.costDayProgress || 0) / 100) * 327} 327`}
-                        strokeLinecap="round"
-                      />
-                      <circle
-                        cx="60"
-                        cy="60"
-                        r="52"
-                        fill="none"
-                        stroke="#ef4444"
-                        strokeWidth="12"
-                        strokeDasharray={`${((data.kpiProgress?.costProgress || 0) / 100) * 327} 327`}
-                        strokeLinecap="round"
-                      />
-                    </svg>
-                    <div className="absolute inset-0 flex flex-col items-center justify-center">
-                      <span className="text-2xl font-bold text-gray-900">
-                        {Math.round((data.kpiStats?.currentCost || 0) / 1000)}K
-                      </span>
-                      <span className="text-xs text-gray-500">₽</span>
-                    </div>
-                  </div>
-                  <div className="mt-2 text-center">
-                    <div className="text-sm font-bold text-gray-900">
-                      {Math.round(data.kpiProgress?.costProgress || 0)}%
-                    </div>
-                    <div className="text-xs text-gray-500">
-                      к дню: {Math.round(data.kpiProgress?.costDayProgress || 0)}%
-                    </div>
-                  </div>
-                  <div className="mt-2 text-center">
+                  <CircularProgress
+                    value={data.kpiProgress?.costProgress || 0}
+                    dayValue={data.kpiProgress?.costDayProgress || 0}
+                    size={120}
+                    color="#ef4444"
+                    dayColor="#fca5a5"
+                    label={`${Math.round((data.kpiStats?.currentCost || 0) / 1000)}K`}
+                    sublabel="₽"
+                  />
+                  <div className="mt-3 text-center">
                     <div className="text-sm font-medium text-gray-700">Расход</div>
                     <div className="text-xs text-gray-500">
-                      {formatNumber(data.kpiStats?.currentCost || 0)} / {formatNumber(data.kpi.targetCost)} ₽
+                      {(data.kpiStats?.currentCost || 0).toLocaleString('ru-RU')} / {(data.kpi.targetCost || 0).toLocaleString('ru-RU')} ₽
                     </div>
                   </div>
                 </div>
@@ -370,60 +334,23 @@ export default function PublicDashboard() {
                     })()}
                     <div className="text-sm font-medium text-gray-700 mt-1">CPL</div>
                     <div className="text-xs text-gray-500">
-                      {Math.round(data.kpiStats?.currentCpl || 0).toLocaleString('ru-RU')} / {formatNumber(data.kpi.targetCpl)} ₽
+                      {Math.round(data.kpiStats?.currentCpl || 0).toLocaleString('ru-RU')} / {(data.kpi.targetCpl || 0).toLocaleString('ru-RU')} ₽
                     </div>
                   </div>
                 </div>
 
                 {/* Лиды */}
                 <div className="flex flex-col items-center">
-                  <div className="relative" style={{ width: 120, height: 120 }}>
-                    <svg className="w-full h-full transform -rotate-90">
-                      <circle
-                        cx="60"
-                        cy="60"
-                        r="52"
-                        fill="none"
-                        stroke="#dcfce7"
-                        strokeWidth="12"
-                      />
-                      <circle
-                        cx="60"
-                        cy="60"
-                        r="52"
-                        fill="none"
-                        stroke="#86efac"
-                        strokeWidth="12"
-                        strokeDasharray={`${((data.kpiProgress?.leadsDayProgress || 0) / 100) * 327} 327`}
-                        strokeLinecap="round"
-                      />
-                      <circle
-                        cx="60"
-                        cy="60"
-                        r="52"
-                        fill="none"
-                        stroke="#22c55e"
-                        strokeWidth="12"
-                        strokeDasharray={`${((data.kpiProgress?.leadsProgress || 0) / 100) * 327} 327`}
-                        strokeLinecap="round"
-                      />
-                    </svg>
-                    <div className="absolute inset-0 flex flex-col items-center justify-center">
-                      <span className="text-2xl font-bold text-gray-900">
-                        {data.kpiStats?.currentLeads || 0}
-                      </span>
-                      <span className="text-xs text-gray-500">лидов</span>
-                    </div>
-                  </div>
-                  <div className="mt-2 text-center">
-                    <div className="text-sm font-bold text-gray-900">
-                      {Math.round(data.kpiProgress?.leadsProgress || 0)}%
-                    </div>
-                    <div className="text-xs text-gray-500">
-                      к дню: {Math.round(data.kpiProgress?.leadsDayProgress || 0)}%
-                    </div>
-                  </div>
-                  <div className="mt-2 text-center">
+                  <CircularProgress
+                    value={data.kpiProgress?.leadsProgress || 0}
+                    dayValue={data.kpiProgress?.leadsDayProgress || 0}
+                    size={120}
+                    color="#22c55e"
+                    dayColor="#86efac"
+                    label={`${data.kpiStats?.currentLeads || 0}`}
+                    sublabel="лидов"
+                  />
+                  <div className="mt-3 text-center">
                     <div className="text-sm font-medium text-gray-700">Лиды</div>
                     <div className="text-xs text-gray-500">
                       {data.kpiStats?.currentLeads || 0} / {data.kpi.targetLeads}
