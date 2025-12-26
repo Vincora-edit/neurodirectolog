@@ -1765,13 +1765,16 @@ export const clickhouseService = {
     targetLeads: number;
     goalIds?: string[];
   }) {
+    // Преобразуем goalIds в строки (могут прийти как числа)
+    const goalIdsAsStrings = (kpi.goalIds || []).map(id => String(id));
+
     const values = [{
       connection_id: connectionId,
       month: month,
       target_cost: kpi.targetCost,
       target_cpl: kpi.targetCpl,
       target_leads: kpi.targetLeads,
-      goal_ids: JSON.stringify(kpi.goalIds || []),
+      goal_ids: JSON.stringify(goalIdsAsStrings),
       updated_at: formatDate(new Date()),
     }];
 
