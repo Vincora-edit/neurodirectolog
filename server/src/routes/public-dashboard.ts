@@ -23,6 +23,37 @@ router.get('/:token', async (req: Request, res: Response, next: NextFunction) =>
       return res.status(404).json({ error: 'Connection not found' });
     }
 
+    // Получаем KPI для текущего месяца
+    const now = new Date();
+    const month = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+    const kpi = await clickhouseService.getAccountKpi(connectionId, month);
+    const kpiGoalIds = kpi?.goalIds && kpi.goalIds.length > 0 ? kpi.goalIds : undefined;
+    const monthStats = await clickhouseService.getMonthStats(connectionId, kpiGoalIds);
+
+    // Рассчитываем прогресс KPI
+    let costProgress = 0;
+    let costDayProgress = 0;
+    let leadsProgress = 0;
+    let leadsDayProgress = 0;
+    let cplStatus: 'good' | 'warning' | 'bad' = 'good';
+
+    if (kpi) {
+      costProgress = kpi.targetCost > 0 ? (monthStats.currentCost / kpi.targetCost) * 100 : 0;
+      const expectedCostToday = kpi.targetCost * monthStats.dayProgress;
+      costDayProgress = expectedCostToday > 0 ? (monthStats.currentCost / expectedCostToday) * 100 : 0;
+
+      leadsProgress = kpi.targetLeads > 0 ? (monthStats.currentLeads / kpi.targetLeads) * 100 : 0;
+      const expectedLeadsToday = kpi.targetLeads * monthStats.dayProgress;
+      leadsDayProgress = expectedLeadsToday > 0 ? (monthStats.currentLeads / expectedLeadsToday) * 100 : 0;
+
+      if (kpi.targetCpl > 0 && monthStats.currentCpl > 0) {
+        const cplRatio = monthStats.currentCpl / kpi.targetCpl;
+        if (cplRatio <= 1) cplStatus = 'good';
+        else if (cplRatio <= 1.2) cplStatus = 'warning';
+        else cplStatus = 'bad';
+      }
+    }
+
     // Вычисляем даты
     const endDate = new Date();
     const startDate = new Date();
@@ -85,6 +116,27 @@ router.get('/:token', async (req: Request, res: Response, next: NextFunction) =>
         days,
       },
       totals,
+      kpi: kpi ? {
+        targetCost: kpi.targetCost,
+        targetCpl: kpi.targetCpl,
+        targetLeads: kpi.targetLeads,
+      } : null,
+      kpiStats: {
+        currentCost: monthStats.currentCost,
+        currentLeads: monthStats.currentLeads,
+        currentCpl: monthStats.currentCpl,
+        dayProgress: monthStats.dayProgress,
+        daysInMonth: monthStats.daysInMonth,
+        currentDay: monthStats.currentDay,
+      },
+      kpiProgress: {
+        costProgress: Math.min(costProgress, 150),
+        costDayProgress: Math.min(costDayProgress, 150),
+        leadsProgress: Math.min(leadsProgress, 150),
+        leadsDayProgress: Math.min(leadsDayProgress, 150),
+        cplStatus,
+      },
+      month,
       campaigns: hierarchicalStats.map((c: any) => ({
         id: c.campaignId,
         name: c.campaignName,

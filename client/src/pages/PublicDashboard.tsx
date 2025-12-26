@@ -10,7 +10,7 @@ import {
   ResponsiveContainer,
   Legend,
 } from 'recharts';
-import { TrendingUp, DollarSign, MousePointer, Target, AlertCircle } from 'lucide-react';
+import { TrendingUp, DollarSign, MousePointer, Target, AlertCircle, Gauge } from 'lucide-react';
 
 interface DashboardData {
   shareName: string;
@@ -29,6 +29,27 @@ interface DashboardData {
     cpc: number;
     cpl: number;
   };
+  kpi?: {
+    targetCost: number;
+    targetCpl: number;
+    targetLeads: number;
+  } | null;
+  kpiStats?: {
+    currentCost: number;
+    currentLeads: number;
+    currentCpl: number;
+    dayProgress: number;
+    daysInMonth: number;
+    currentDay: number;
+  };
+  kpiProgress?: {
+    costProgress: number;
+    costDayProgress: number;
+    leadsProgress: number;
+    leadsDayProgress: number;
+    cplStatus: 'good' | 'warning' | 'bad';
+  };
+  month?: string;
   campaigns: Array<{
     id: string;
     name: string;
@@ -240,6 +261,163 @@ export default function PublicDashboard() {
             </div>
           </div>
         </div>
+
+        {/* KPI Widget */}
+        {data.kpi && (data.kpi.targetCost > 0 || data.kpi.targetLeads > 0) && (
+          <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+            <div className="px-5 py-4 border-b border-gray-200">
+              <div className="flex items-center gap-3">
+                <Gauge size={20} className="text-blue-600" />
+                <span className="font-semibold text-gray-900">
+                  KPI {data.month ? new Date(data.month + '-01').toLocaleString('ru-RU', { month: 'long', year: 'numeric' }) : ''}
+                </span>
+                {data.kpiStats && (
+                  <span className="text-sm text-gray-500">
+                    (день {data.kpiStats.currentDay} из {data.kpiStats.daysInMonth})
+                  </span>
+                )}
+              </div>
+            </div>
+            <div className="p-6">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+                {/* Расход */}
+                <div className="flex flex-col items-center">
+                  <div className="relative" style={{ width: 120, height: 120 }}>
+                    <svg className="w-full h-full transform -rotate-90">
+                      <circle
+                        cx="60"
+                        cy="60"
+                        r="52"
+                        fill="none"
+                        stroke="#fee2e2"
+                        strokeWidth="12"
+                      />
+                      <circle
+                        cx="60"
+                        cy="60"
+                        r="52"
+                        fill="none"
+                        stroke="#fca5a5"
+                        strokeWidth="12"
+                        strokeDasharray={`${((data.kpiProgress?.costDayProgress || 0) / 100) * 327} 327`}
+                        strokeLinecap="round"
+                      />
+                      <circle
+                        cx="60"
+                        cy="60"
+                        r="52"
+                        fill="none"
+                        stroke="#ef4444"
+                        strokeWidth="12"
+                        strokeDasharray={`${((data.kpiProgress?.costProgress || 0) / 100) * 327} 327`}
+                        strokeLinecap="round"
+                      />
+                    </svg>
+                    <div className="absolute inset-0 flex flex-col items-center justify-center">
+                      <span className="text-2xl font-bold text-gray-900">
+                        {Math.round((data.kpiStats?.currentCost || 0) / 1000)}K
+                      </span>
+                      <span className="text-xs text-gray-500">₽</span>
+                    </div>
+                  </div>
+                  <div className="mt-3 text-center">
+                    <div className="text-sm font-medium text-gray-700">Расход</div>
+                    <div className="text-xs text-gray-500">
+                      {formatNumber(data.kpiStats?.currentCost || 0)} / {formatNumber(data.kpi.targetCost)} ₽
+                    </div>
+                  </div>
+                </div>
+
+                {/* CPL */}
+                <div className="flex flex-col items-center">
+                  <div className="relative" style={{ width: 120, height: 120 }}>
+                    <div
+                      className={`w-full h-full rounded-full flex flex-col items-center justify-center border-8 ${
+                        data.kpiProgress?.cplStatus === 'good'
+                          ? 'border-green-500 bg-green-50'
+                          : data.kpiProgress?.cplStatus === 'warning'
+                          ? 'border-yellow-500 bg-yellow-50'
+                          : 'border-red-500 bg-red-50'
+                      }`}
+                    >
+                      <span className="text-2xl font-bold text-gray-900">
+                        {Math.round(data.kpiStats?.currentCpl || 0).toLocaleString('ru-RU')}
+                      </span>
+                      <span className="text-xs text-gray-500">₽</span>
+                    </div>
+                  </div>
+                  <div className="mt-3 text-center">
+                    {(() => {
+                      const currentCpl = data.kpiStats?.currentCpl || 0;
+                      const targetCpl = data.kpi?.targetCpl || 0;
+                      if (targetCpl > 0 && currentCpl > 0) {
+                        const diff = ((currentCpl - targetCpl) / targetCpl) * 100;
+                        return (
+                          <div className={`text-xs font-medium ${diff > 0 ? 'text-red-600' : 'text-green-600'}`}>
+                            {diff > 0 ? '+' : ''}{Math.round(diff)}%
+                          </div>
+                        );
+                      }
+                      return null;
+                    })()}
+                    <div className="text-sm font-medium text-gray-700 mt-1">CPL</div>
+                    <div className="text-xs text-gray-500">
+                      {Math.round(data.kpiStats?.currentCpl || 0).toLocaleString('ru-RU')} / {formatNumber(data.kpi.targetCpl)} ₽
+                    </div>
+                  </div>
+                </div>
+
+                {/* Лиды */}
+                <div className="flex flex-col items-center">
+                  <div className="relative" style={{ width: 120, height: 120 }}>
+                    <svg className="w-full h-full transform -rotate-90">
+                      <circle
+                        cx="60"
+                        cy="60"
+                        r="52"
+                        fill="none"
+                        stroke="#dcfce7"
+                        strokeWidth="12"
+                      />
+                      <circle
+                        cx="60"
+                        cy="60"
+                        r="52"
+                        fill="none"
+                        stroke="#86efac"
+                        strokeWidth="12"
+                        strokeDasharray={`${((data.kpiProgress?.leadsDayProgress || 0) / 100) * 327} 327`}
+                        strokeLinecap="round"
+                      />
+                      <circle
+                        cx="60"
+                        cy="60"
+                        r="52"
+                        fill="none"
+                        stroke="#22c55e"
+                        strokeWidth="12"
+                        strokeDasharray={`${((data.kpiProgress?.leadsProgress || 0) / 100) * 327} 327`}
+                        strokeLinecap="round"
+                      />
+                    </svg>
+                    <div className="absolute inset-0 flex flex-col items-center justify-center">
+                      <span className="text-2xl font-bold text-gray-900">
+                        {data.kpiStats?.currentLeads || 0}
+                      </span>
+                      <span className="text-xs text-gray-500">лидов</span>
+                    </div>
+                  </div>
+                  <div className="mt-3 text-center">
+                    <div className="text-sm font-medium text-gray-700">Лиды</div>
+                    <div className="text-xs text-gray-500">
+                      {data.kpiStats?.currentLeads || 0} / {data.kpi.targetLeads}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Chart */}
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
