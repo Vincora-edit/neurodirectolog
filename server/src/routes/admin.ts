@@ -8,7 +8,7 @@ import { usageService } from '../services/usage.service';
 const router = Router();
 
 // Middleware для проверки админских прав
-const requireAdmin = (req: AuthRequest, res: Response, next: NextFunction) => {
+const requireAdmin = (req: AuthRequest, _res: Response, next: NextFunction) => {
   if (!req.isAdmin) {
     return next(createError('Admin access required', 403));
   }
@@ -18,7 +18,7 @@ const requireAdmin = (req: AuthRequest, res: Response, next: NextFunction) => {
 /**
  * Получить список всех пользователей
  */
-router.get('/users', authenticate, requireAdmin, async (req, res, next) => {
+router.get('/users', authenticate, requireAdmin, async (_req, res, next) => {
   try {
     const users = await clickhouseService.getAllUsers();
 
@@ -159,7 +159,7 @@ router.put('/users/:userId/admin', authenticate, requireAdmin, async (req, res, 
 /**
  * Получить статистику системы
  */
-router.get('/stats', authenticate, requireAdmin, async (req, res, next) => {
+router.get('/stats', authenticate, requireAdmin, async (_req, res, next) => {
   try {
     const users = await clickhouseService.getAllUsers();
 
@@ -250,7 +250,7 @@ router.get('/stats', authenticate, requireAdmin, async (req, res, next) => {
 /**
  * Получить все подключения Яндекса
  */
-router.get('/connections', authenticate, requireAdmin, async (req, res, next) => {
+router.get('/connections', authenticate, requireAdmin, async (_req, res, next) => {
   try {
     const connections = await clickhouseService.query(`
       SELECT

@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { projectsService, API_BASE_URL } from '../services/api';
 import { useProjectStore } from '../store/projectStore';
-import { Sparkles, AlertCircle, CheckCircle2, FolderOpen, Key, User, ExternalLink } from 'lucide-react';
+import { Sparkles, AlertCircle, CheckCircle2, Key, User, ExternalLink } from 'lucide-react';
 
 const yandexService = {
   async connectSimple(data: {

@@ -60,7 +60,6 @@ redis.on('close', () => {
 // Префиксы ключей
 const CACHE_PREFIX = 'cache:';
 const LOCK_PREFIX = 'lock:';
-const SESSION_PREFIX = 'session:';
 
 export const redisService = {
   /**

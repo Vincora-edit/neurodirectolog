@@ -392,7 +392,7 @@ export const yandexDirectService = {
     accessToken: string,
     login: string,
     campaignIds: number[],
-    goalIds: string[],
+    _goalIds: string[],
     dateFrom: string,
     dateTo: string
   ): Promise<any[]> {
@@ -515,7 +515,7 @@ export const yandexDirectService = {
       const values = lines[i].split('\t');
       const row: any = {};
 
-      headers.forEach((header, index) => {
+      headers.forEach((header: string, index: number) => {
         row[header] = values[index] || null;
       });
 
@@ -635,7 +635,7 @@ export const yandexDirectService = {
           const values = lines[i].split('\t');
           const row: any = {};
 
-          headers.forEach((header, index) => {
+          headers.forEach((header: string, index: number) => {
             row[header] = values[index] || null;
           });
 
@@ -779,6 +779,10 @@ export const yandexDirectService = {
     }
 
     console.log(`[getAdGroupPerformanceReport] Got response, status: ${response?.status}, length: ${response?.data?.length || 0}`);
+    if (!response || !response.data) {
+      console.log(`[getAdGroupPerformanceReport] No response data, returning empty`);
+      return [];
+    }
     const lines = response.data.split('\n').filter((line: string) => line.trim());
     console.log(`[getAdGroupPerformanceReport] Parsed ${lines.length} lines`);
     if (lines.length < 2) {
@@ -792,7 +796,7 @@ export const yandexDirectService = {
     for (let i = 1; i < lines.length; i++) {
       const values = lines[i].split('\t');
       const row: any = {};
-      headers.forEach((header, index) => {
+      headers.forEach((header: string, index: number) => {
         row[header] = values[index] || null;
       });
       if (row.Date === 'Date') continue;
@@ -919,6 +923,11 @@ export const yandexDirectService = {
         }
 
         console.log(`[getAdGroupConversionsReport] Goal ${goalId} response status: ${response?.status}, length: ${response?.data?.length || 0}`);
+
+        if (!response || !response.data) {
+          console.log(`[getAdGroupConversionsReport] No response data for goal ${goalId}`);
+          continue;
+        }
 
         const lines = response.data.split('\n').filter((line: string) => line.trim());
         if (lines.length === 0) {
@@ -1057,6 +1066,11 @@ export const yandexDirectService = {
         }
 
         console.log(`[getAdConversionsReport] Goal ${goalId} response status: ${response?.status}, length: ${response?.data?.length || 0}`);
+
+        if (!response || !response.data) {
+          console.log(`[getAdConversionsReport] No response data for goal ${goalId}`);
+          continue;
+        }
 
         const lines = response.data.split('\n').filter((line: string) => line.trim());
         if (lines.length === 0) {

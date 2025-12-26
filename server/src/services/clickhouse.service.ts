@@ -2041,7 +2041,7 @@ export const clickhouseService = {
     });
   },
 
-  async getSearchQueries(connectionId: string, startDate?: string, endDate?: string): Promise<any[]> {
+  async getSearchQueries(connectionId: string, _startDate?: string, _endDate?: string): Promise<any[]> {
     // Примечание: Yandex API не поддерживает конверсии с разбивкой по поисковым запросам
     // Возвращаем данные без конверсий
     const result = await client.query({

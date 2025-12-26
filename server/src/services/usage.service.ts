@@ -56,32 +56,6 @@ function getToday(): string {
   return new Date().toISOString().split('T')[0];
 }
 
-// Получить или создать запись на сегодня
-function getOrCreateTodayRecord(userId: string): UsageRecord {
-  const data = loadUsageData();
-  const today = getToday();
-
-  if (!data[userId]) {
-    data[userId] = [];
-  }
-
-  let todayRecord = data[userId].find(r => r.date === today);
-  if (!todayRecord) {
-    todayRecord = {
-      date: today,
-      userId,
-      aiRequests: 0,
-      aiTokensUsed: 0,
-      yandexSyncs: 0,
-      apiRequests: 0,
-    };
-    data[userId].push(todayRecord);
-    saveUsageData(data);
-  }
-
-  return todayRecord;
-}
-
 // Инкремент использования
 function incrementUsage(
   userId: string,

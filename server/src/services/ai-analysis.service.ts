@@ -373,8 +373,8 @@ export const aiAnalysisService = {
       }), { impressions: 0, clicks: 0, cost: 0, conversions: 0 });
 
       const overallCtr = totalStats.impressions > 0 ? (totalStats.clicks / totalStats.impressions) * 100 : 0;
-      const overallCpc = totalStats.clicks > 0 ? totalStats.cost / totalStats.clicks : 0;
-      const overallCr = totalStats.clicks > 0 ? (totalStats.conversions / totalStats.clicks) * 100 : 0;
+      // const overallCpc = totalStats.clicks > 0 ? totalStats.cost / totalStats.clicks : 0;
+      // const overallCr = totalStats.clicks > 0 ? (totalStats.conversions / totalStats.clicks) * 100 : 0;
       const overallCpl = totalStats.conversions > 0 ? totalStats.cost / totalStats.conversions : 0;
 
       // 3. Получаем информацию о кампаниях
@@ -489,7 +489,7 @@ export const aiAnalysisService = {
       const limitedRecs = recommendations.slice(0, 8);
 
       // Сортируем: critical -> warning -> suggestion -> success
-      const typeOrder = { critical: 0, warning: 1, suggestion: 2, success: 3 };
+      const typeOrder: { [key: string]: number } = { critical: 0, warning: 1, suggestion: 2, success: 3 };
       limitedRecs.sort((a, b) => typeOrder[a.type] - typeOrder[b.type]);
 
       console.log(`[AI Analysis] Generated ${limitedRecs.length} dashboard recommendations`);

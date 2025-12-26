@@ -39,7 +39,7 @@ router.post('/sync/:projectId', async (req, res) => {
  * POST /api/yandex/sync-all
  * Запустить синхронизацию всех подключений вручную
  */
-router.post('/sync-all', async (req, res) => {
+router.post('/sync-all', async (_req, res) => {
   try {
     // Запускаем синхронизацию асинхронно
     syncService.syncAllConnections().catch(err => {

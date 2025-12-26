@@ -40,7 +40,7 @@ const REDIRECT_URI = process.env.YANDEX_REDIRECT_URI || 'http://localhost:5173/y
  * GET /api/yandex/auth-url
  * Получить URL для OAuth авторизации Яндекс.Директ
  */
-router.get('/auth-url', (req, res) => {
+router.get('/auth-url', (_req, res) => {
   const authUrl = yandexDirectService.getAuthUrl(YANDEX_CLIENT_ID, REDIRECT_URI);
   res.json({ authUrl });
 });
@@ -49,7 +49,7 @@ router.get('/auth-url', (req, res) => {
  * POST /api/yandex/connect
  * Завершить OAuth и сохранить подключение
  */
-router.post('/connect', authenticate, async (req, res, next) => {
+router.post('/connect', authenticate, async (req, res, _next) => {
   try {
     const { error, value } = connectSchema.validate(req.body);
     if (error) {
@@ -80,11 +80,11 @@ router.post('/connect', authenticate, async (req, res, next) => {
 
     // 4. Сохраняем подключение в ClickHouse
     const connectionId = await clickhouseService.createConnection({
-      userId,
+      userId: userId || '',
       projectId,
       login: userInfo.login,
       accessToken: tokens.access_token,
-      refreshToken: tokens.refresh_token,
+      refreshToken: tokens.refresh_token || '',
       metrikaCounterId: metrikaCounterId || '',
       metrikaToken: metrikaToken || '',
       conversionGoals: JSON.stringify(conversionGoals || []),
@@ -112,7 +112,7 @@ router.post('/connect', authenticate, async (req, res, next) => {
  * POST /api/yandex/connect-simple
  * Упрощенное подключение с фиксированным токеном (без OAuth)
  */
-router.post('/connect-simple', authenticate, async (req, res, next) => {
+router.post('/connect-simple', authenticate, async (req, res, _next) => {
   try {
     const { error, value } = connectSimpleSchema.validate(req.body);
     if (error) {
@@ -139,7 +139,7 @@ router.post('/connect-simple', authenticate, async (req, res, next) => {
 
     // 3. Сохраняем подключение в ClickHouse
     const connectionId = await clickhouseService.createConnection({
-      userId,
+      userId: userId || '',
       projectId,
       login,
       accessToken,
@@ -238,7 +238,7 @@ router.get('/agency-clients', authenticate, async (req, res) => {
  */
 router.post('/connect-agency-client', authenticate, async (req, res) => {
   try {
-    const { accessToken, refreshToken, agencyLogin, clientLogin, projectId, metrikaCounterId, metrikaToken, conversionGoals } = req.body;
+    const { accessToken, refreshToken, agencyLogin: _agencyLogin, clientLogin, projectId, metrikaCounterId, metrikaToken, conversionGoals } = req.body;
     const userId = (req as AuthRequest).userId;
 
     if (!accessToken || !clientLogin || !projectId) {
@@ -263,7 +263,7 @@ router.post('/connect-agency-client', authenticate, async (req, res) => {
 
     // 3. Сохраняем подключение в ClickHouse
     const connectionId = await clickhouseService.createConnection({
-      userId,
+      userId: userId || '',
       projectId,
       login: clientLogin,
       accessToken,

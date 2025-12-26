@@ -1,7 +1,7 @@
 import { useState } from 'react';
-import { useMutation, useQuery } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import { campaignService } from '../services/api';
-import { Download, Plus } from 'lucide-react';
+import { Plus } from 'lucide-react';
 
 export default function Campaign() {
   const [showCreateForm, setShowCreateForm] = useState(false);

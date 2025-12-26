@@ -140,7 +140,7 @@ export function KpiWidget({ kpiData, availableGoals, connectionId, onSaveKpi }: 
         {/* Content */}
         {!isCollapsed && (
           <div className="px-6 pb-6 pt-2">
-            {kpiData?.kpi?.targetCost > 0 || kpiData?.kpi?.targetLeads > 0 ? (
+            {(kpiData?.kpi?.targetCost ?? 0) > 0 || (kpiData?.kpi?.targetLeads ?? 0) > 0 ? (
               <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
                 {/* Расход */}
                 <div className="flex flex-col items-center">

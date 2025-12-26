@@ -51,7 +51,7 @@ router.post('/generate', authenticate, trackAiRequest(2000), async (req, res, ne
  */
 router.post('/export', authenticate, async (req, res, next) => {
   try {
-    const { keywords, format = 'xlsx' } = req.body;
+    const { keywords, format: _format = 'xlsx' } = req.body;
 
     if (!keywords || !Array.isArray(keywords)) {
       throw createError('Keywords array is required', 400);

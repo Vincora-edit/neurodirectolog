@@ -3,7 +3,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { projectsService, API_BASE_URL } from '../services/api';
 import { useProjectStore } from '../store/projectStore';
-import { Sparkles, AlertCircle, CheckCircle2, FolderOpen, Link as LinkIcon, Building2, User, Users } from 'lucide-react';
+import { Sparkles, AlertCircle, CheckCircle2, Link as LinkIcon, Building2, User, Users } from 'lucide-react';
 
 // API Service для Yandex подключения
 const yandexService = {

@@ -39,7 +39,7 @@ export default function Dashboard() {
   });
 
   // Находим активный проект или берём первый
-  const activeProject = projects.find(p => p.id === activeProjectId) || projects[0];
+  const activeProject = projects.find((p: { id: string }) => p.id === activeProjectId) || projects[0];
 
   // Устанавливаем первый проект как активный, если нет выбранного
   useEffect(() => {
@@ -213,7 +213,7 @@ export default function Dashboard() {
 
                   {showProjectSelector && (
                     <div className="absolute top-full left-0 mt-2 bg-white rounded-lg shadow-xl py-2 min-w-[250px] z-50">
-                      {projects.map((project) => (
+                      {projects.map((project: { id: string; name: string; brief?: { niche?: string; geo?: string } }) => (
                         <button
                           key={project.id}
                           onClick={() => handleSelectProject(project.id)}
@@ -225,7 +225,7 @@ export default function Dashboard() {
                             {project.name}
                           </div>
                           <div className="text-sm text-gray-500">
-                            {project.brief.niche} • {project.brief.geo}
+                            {project.brief?.niche} • {project.brief?.geo}
                           </div>
                         </button>
                       ))}

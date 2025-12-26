@@ -20,8 +20,8 @@ import {
 export default function Analytics() {
   const { activeProjectId, setActiveProjectId } = useProjectStore();
   const selectedProjectId = activeProjectId || '';
-  const [competitorAdsAnalysis, setCompetitorAdsAnalysis] = useState<any>(null);
-  const [competitorWebsitesAnalysis, setCompetitorWebsitesAnalysis] = useState<any>(null);
+  const [_competitorAdsAnalysis, setCompetitorAdsAnalysis] = useState<any>(null);
+  const [_competitorWebsitesAnalysis, setCompetitorWebsitesAnalysis] = useState<any>(null);
   const [targetAudienceAnalysis, setTargetAudienceAnalysis] = useState<any>(null);
   const [landingPageAnalysis, setLandingPageAnalysis] = useState<any>(null);
   const [mediaPlan, setMediaPlan] = useState<any>(null);

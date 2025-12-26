@@ -1,6 +1,5 @@
 import { clickhouseService } from './clickhouse.service';
 import { yandexDirectService } from './yandex-direct.service';
-import { yandexMetrikaService } from './yandex-metrika.service';
 import { aiAnalysisService } from './ai-analysis.service';
 import { usageService } from './usage.service';
 

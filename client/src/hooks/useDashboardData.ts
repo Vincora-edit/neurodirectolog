@@ -1,8 +1,7 @@
-import { useState, useEffect } from 'react';
+import { useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useProjectStore } from '../store/projectStore';
 import { projectsService, API_BASE_URL } from '../services/api';
-import type { GroupByPeriod } from '../types/yandex';
 
 // Dashboard API Service
 const dashboardService = {

@@ -21,12 +21,6 @@ import {
 } from '../components/dashboard';
 import { dashboardService } from '../hooks/useDashboardData';
 
-// Типы
-interface GroupByPeriod {
-  value: string;
-  label: string;
-}
-
 // Функция группировки данных
 function groupDataByPeriod(data: any[], period: string): any[] {
   if (period === 'day' || data.length === 0) return data;
@@ -142,14 +136,6 @@ export function YandexDashboard() {
     window.addEventListener('scroll', handleScroll);
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
-
-  // Модалки
-  const [editingConnection, setEditingConnection] = useState<any>(null);
-  const [editForm, setEditForm] = useState({ accessToken: '', selectedGoals: [] as number[] });
-  const [editAvailableGoals, setEditAvailableGoals] = useState<any[]>([]);
-  const [isLoadingGoals, setIsLoadingGoals] = useState(false);
-  const [isSavingConnection, setIsSavingConnection] = useState(false);
-  const [showConnectionsModal, setShowConnectionsModal] = useState(false);
 
   // Загрузка проектов
   const { data: projects = [], isLoading: projectsLoading } = useQuery({
@@ -327,19 +313,6 @@ export function YandexDashboard() {
     }
     setGlobalFilterAdGroupId(adGroupId);
     setGlobalFilterAdId(null);
-  };
-
-  const formatLastSync = (date: any) => {
-    if (!date) return 'Никогда';
-    const d = new Date(date);
-    const now = new Date();
-    const diffMs = now.getTime() - d.getTime();
-    const diffMins = Math.floor(diffMs / 60000);
-
-    if (diffMins < 1) return 'Только что';
-    if (diffMins < 60) return `${diffMins} мин назад`;
-    if (diffMins < 1440) return `${Math.floor(diffMins / 60)} ч назад`;
-    return d.toLocaleDateString('ru-RU');
   };
 
   // Нет проектов

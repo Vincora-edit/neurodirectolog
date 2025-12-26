@@ -54,7 +54,7 @@ const PORT = process.env.PORT || 3001;
 app.set('trust proxy', 1);
 
 // Health check - до всех middleware, чтобы работал без CORS
-app.get('/health', (req, res) => {
+app.get('/health', (_req, res) => {
   res.json({ status: 'ok', message: 'Neurodirectolog API is running', timestamp: new Date().toISOString() });
 });
 

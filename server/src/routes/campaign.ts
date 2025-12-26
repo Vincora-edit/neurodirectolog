@@ -31,7 +31,7 @@ router.post('/create', authenticate, async (req, res, next) => {
 /**
  * Получение списка кампаний
  */
-router.get('/list', authenticate, async (req, res, next) => {
+router.get('/list', authenticate, async (_req, res, next) => {
   try {
     const campaigns = await yandexDirectService.getCampaigns();
 
