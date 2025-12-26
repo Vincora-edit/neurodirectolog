@@ -105,7 +105,18 @@
       "Bash(openssl rand:*)",
       "Bash(wc:*)",
       "Bash(scp:*)",
-      "Bash(npm run lint:*)"
+      "Bash(npm run lint:*)",
+      "Bash(sshpass -p 'c9R+eLvxtQJ-,x' ssh -o StrictHostKeyChecking=no root@91.222.239.217 \"cd /root/neurodirectolog && git pull && docker-compose -f docker-compose.prod.yml build --parallel client server && docker stop neurodirectolog-client neurodirectolog-server 2>/dev/null; docker rm neurodirectolog-client neurodirectolog-server 2>/dev/null; docker-compose -f docker-compose.prod.yml up -d client server\")",
+      "Bash(sshpass -p 'c9R+eLvxtQJ-,x' ssh -o StrictHostKeyChecking=no root@91.222.239.217 \"docker run -d --name neurodirectolog-server --network neurodirectolog_neurodirectolog-network -p 3001:3001 --env-file /root/neurodirectolog/.env neurodirectolog_server:latest && docker run -d --name neurodirectolog-client --network neurodirectolog_neurodirectolog-network -p 3000:80 neurodirectolog_client:latest && docker ps\")",
+      "Bash(sshpass -p 'c9R+eLvxtQJ-,x' ssh -o StrictHostKeyChecking=no root@91.222.239.217 \"docker logs neurodirectolog-server --tail 15\")",
+      "Bash(sshpass -p 'c9R+eLvxtQJ-,x' ssh -o StrictHostKeyChecking=no root@91.222.239.217 \"docker ps -a | grep neurodirectolog\")",
+      "Bash(sshpass -p 'c9R+eLvxtQJ-,x' ssh -o StrictHostKeyChecking=no root@91.222.239.217 \"nginx -t && systemctl status nginx | head -10\")",
+      "Bash(sshpass -p 'c9R+eLvxtQJ-,x' ssh -o StrictHostKeyChecking=no root@91.222.239.217 \"cat /etc/nginx/sites-enabled/neurodirectolog 2>/dev/null || cat /etc/nginx/conf.d/neurodirectolog.conf 2>/dev/null || ls -la /etc/nginx/sites-enabled/\")",
+      "Bash(sshpass -p 'c9R+eLvxtQJ-,x' ssh -o StrictHostKeyChecking=no root@91.222.239.217 \"sed -i ''s/proxy_pass http:\\\\/\\\\/127.0.0.1:8080/proxy_pass http:\\\\/\\\\/127.0.0.1:3000/g'' /etc/nginx/sites-enabled/neurodirectolog && nginx -t && systemctl reload nginx\")",
+      "Bash(sshpass -p 'c9R+eLvxtQJ-,x' ssh -o StrictHostKeyChecking=no root@91.222.239.217 \"ls -la /etc/nginx/sites-enabled/ && ls -la /etc/nginx/conf.d/\")",
+      "Bash(sshpass -p 'c9R+eLvxtQJ-,x' ssh -o StrictHostKeyChecking=no root@91.222.239.217 \"sed -i ''s/proxy_pass http:\\\\/\\\\/127.0.0.1:8080/proxy_pass http:\\\\/\\\\/127.0.0.1:3000/g'' /etc/nginx/conf.d/neurodirectolog.conf && nginx -t && systemctl reload nginx && echo ''Done!''\")",
+      "Bash(sshpass -p 'c9R+eLvxtQJ-,x' ssh -o StrictHostKeyChecking=no root@91.222.239.217 \"docker logs neurodirectolog-server --tail 30 2>&1 | grep -i error\")",
+      "Bash(sshpass -p 'c9R+eLvxtQJ-,x' ssh -o StrictHostKeyChecking=no root@91.222.239.217 \"docker logs neurodirectolog-server --tail 50\")"
     ]
   }
 }

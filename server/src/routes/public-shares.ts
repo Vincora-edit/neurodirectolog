@@ -13,16 +13,21 @@ router.post('/', async (req: Request, res: Response, next: NextFunction) => {
     const { connectionId, name, expiresInDays } = req.body;
     const userId = (req as any).user.userId;
 
+    console.log('[PublicShares] Creating share:', { connectionId, name, expiresInDays, userId });
+
     if (!connectionId) {
       return res.status(400).json({ error: 'connectionId is required' });
     }
 
     // Проверяем что подключение существует и принадлежит пользователю
     const connection = await clickhouseService.getConnectionById(connectionId);
+    console.log('[PublicShares] Connection:', connection ? { id: connection.id, userId: connection.userId } : null);
+
     if (!connection) {
       return res.status(404).json({ error: 'Connection not found' });
     }
     if (connection.userId !== userId) {
+      console.log('[PublicShares] Access denied: connection.userId=', connection.userId, 'userId=', userId);
       return res.status(403).json({ error: 'Access denied' });
     }
 

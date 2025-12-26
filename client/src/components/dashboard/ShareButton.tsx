@@ -53,8 +53,10 @@ export function ShareButton({ connectionId }: ShareButtonProps) {
       setExpiresInDays(null);
       setIsCreating(false);
       loadShares();
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error creating share:', error);
+      const message = error?.response?.data?.error || error?.message || 'Не удалось создать ссылку';
+      alert(message);
     }
   };
 
