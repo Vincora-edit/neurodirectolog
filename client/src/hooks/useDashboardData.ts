@@ -195,14 +195,16 @@ export function useDashboardData(options: UseDashboardDataOptions) {
     retry: false,
   });
 
-  const activeProjectId = globalActiveProjectId || projects[0]?.id || '';
+  // Проверяем, существует ли сохранённый проект в списке проектов
+  const savedProjectExists = projects.some((p: any) => p.id === globalActiveProjectId);
+  const activeProjectId = (savedProjectExists ? globalActiveProjectId : projects[0]?.id) || '';
 
-  // Устанавливаем первый проект как активный
+  // Устанавливаем первый проект как активный, если сохранённый не существует
   useEffect(() => {
-    if (projects.length > 0 && !globalActiveProjectId) {
+    if (projects.length > 0 && (!globalActiveProjectId || !savedProjectExists)) {
       setActiveProjectId(projects[0].id);
     }
-  }, [projects, globalActiveProjectId, setActiveProjectId]);
+  }, [projects, globalActiveProjectId, savedProjectExists, setActiveProjectId]);
 
   // Загрузка подключений
   const { data: connections = [], isLoading: connectionsLoading } = useQuery({

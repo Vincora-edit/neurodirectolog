@@ -144,14 +144,17 @@ export function YandexDashboard() {
     retry: false,
   });
 
-  const activeProjectId = globalActiveProjectId || projects[0]?.id || '';
+  // Проверяем, существует ли сохранённый проект в списке проектов
+  const savedProjectExists = projects.some((p: any) => p.id === globalActiveProjectId);
+  const activeProjectId = (savedProjectExists ? globalActiveProjectId : projects[0]?.id) || '';
   const activeProject = projects.find((p: any) => p.id === activeProjectId);
 
   useEffect(() => {
-    if (projects.length > 0 && !globalActiveProjectId) {
+    // Устанавливаем первый проект, если сохранённый не существует или отсутствует
+    if (projects.length > 0 && (!globalActiveProjectId || !savedProjectExists)) {
       setActiveProjectId(projects[0].id);
     }
-  }, [projects, globalActiveProjectId, setActiveProjectId]);
+  }, [projects, globalActiveProjectId, savedProjectExists, setActiveProjectId]);
 
   // Загрузка подключений
   const { data: connections = [], isLoading: connectionsLoading } = useQuery({
