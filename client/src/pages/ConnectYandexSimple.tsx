@@ -85,36 +85,58 @@ export default function ConnectYandexSimple() {
       <div className="bg-blue-50 border border-blue-200 rounded-xl p-6 mb-8">
         <h3 className="text-lg font-bold text-blue-900 mb-3 flex items-center gap-2">
           <Sparkles className="text-blue-600" size={20} />
-          Как получить токен доступа
+          Шаг 1: Получите токен доступа
         </h3>
+
+        {/* Две кнопки для разных типов аккаунтов */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+          <a
+            href="https://oauth.yandex.ru/authorize?response_type=token&client_id=db0084b785964e89908f2b32e246f1de"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex flex-col items-center gap-3 p-4 bg-white rounded-lg border-2 border-blue-200 hover:border-blue-400 hover:shadow-md transition-all group"
+          >
+            <User size={32} className="text-blue-600 group-hover:scale-110 transition-transform" />
+            <div className="text-center">
+              <div className="font-semibold text-gray-900">Личный аккаунт</div>
+              <div className="text-xs text-gray-500 mt-1">Для прямых рекламодателей</div>
+            </div>
+            <span className="text-blue-600 text-sm flex items-center gap-1">
+              Получить токен <ExternalLink size={14} />
+            </span>
+          </a>
+
+          <a
+            href="https://oauth.yandex.ru/authorize?response_type=token&client_id=db0084b785964e89908f2b32e246f1de&force_confirm=true"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex flex-col items-center gap-3 p-4 bg-white rounded-lg border-2 border-purple-200 hover:border-purple-400 hover:shadow-md transition-all group"
+          >
+            <svg className="w-8 h-8 text-purple-600 group-hover:scale-110 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+            </svg>
+            <div className="text-center">
+              <div className="font-semibold text-gray-900">Организация / Агентство</div>
+              <div className="text-xs text-gray-500 mt-1">Для управления клиентами</div>
+            </div>
+            <span className="text-purple-600 text-sm flex items-center gap-1">
+              Получить токен <ExternalLink size={14} />
+            </span>
+          </a>
+        </div>
+
+        <h4 className="font-semibold text-blue-900 mb-2">Шаг 2: Скопируйте токен</h4>
         <ol className="space-y-2 text-sm text-blue-800">
           <li className="flex items-start gap-2">
             <span className="font-bold min-w-[24px]">1.</span>
-            <div>
-              Перейдите по ссылке для получения токена:
-              <div className="mt-2 p-3 bg-white rounded-lg font-mono text-xs break-all">
-                <a
-                  href="https://oauth.yandex.ru/authorize?response_type=token&client_id=361b531e8f114f2884f12e8897fefa9a"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-blue-600 hover:underline flex items-center gap-2"
-                >
-                  Получить токен доступа
-                  <ExternalLink size={14} />
-                </a>
-              </div>
-            </div>
+            <span>После авторизации вы будете перенаправлены на страницу с токеном</span>
           </li>
           <li className="flex items-start gap-2">
             <span className="font-bold min-w-[24px]">2.</span>
-            <span>Авторизуйтесь в Яндексе и разрешите доступ к API</span>
-          </li>
-          <li className="flex items-start gap-2">
-            <span className="font-bold min-w-[24px]">3.</span>
             <span>Скопируйте токен из URL после <code className="bg-white px-1 rounded">#access_token=</code></span>
           </li>
           <li className="flex items-start gap-2">
-            <span className="font-bold min-w-[24px]">4.</span>
+            <span className="font-bold min-w-[24px]">3.</span>
             <span>Вставьте токен и логин в форму ниже</span>
           </li>
         </ol>
