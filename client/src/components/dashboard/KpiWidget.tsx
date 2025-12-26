@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { ChevronDown, Gauge, Settings, Target, X, Loader2 } from 'lucide-react';
 import { CircularProgress } from './CircularProgress';
 
@@ -43,12 +43,30 @@ export function KpiWidget({ kpiData, availableGoals, connectionId, onSaveKpi }: 
   const [showModal, setShowModal] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [showGoalsDropdown, setShowGoalsDropdown] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
   const [form, setForm] = useState({
     targetCost: 0,
     targetCpl: 0,
     targetLeads: 0,
     goalIds: [] as string[],
   });
+
+  // Закрываем dropdown при клике вне его
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setShowGoalsDropdown(false);
+      }
+    };
+
+    if (showGoalsDropdown) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [showGoalsDropdown]);
 
   const openModal = () => {
     if (kpiData?.kpi) {
@@ -344,7 +362,7 @@ export function KpiWidget({ kpiData, availableGoals, connectionId, onSaveKpi }: 
                     <p className="text-xs text-gray-500 mb-2">
                       Выберите цели, по которым будут считаться лиды и CPL для KPI
                     </p>
-                    <div className="relative">
+                    <div className="relative" ref={dropdownRef}>
                       <button
                         type="button"
                         onClick={() => setShowGoalsDropdown(!showGoalsDropdown)}
