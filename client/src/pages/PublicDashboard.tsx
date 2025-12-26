@@ -320,7 +320,15 @@ export default function PublicDashboard() {
                       <span className="text-xs text-gray-500">₽</span>
                     </div>
                   </div>
-                  <div className="mt-3 text-center">
+                  <div className="mt-2 text-center">
+                    <div className="text-sm font-bold text-gray-900">
+                      {Math.round(data.kpiProgress?.costProgress || 0)}%
+                    </div>
+                    <div className="text-xs text-gray-500">
+                      к дню: {Math.round(data.kpiProgress?.costDayProgress || 0)}%
+                    </div>
+                  </div>
+                  <div className="mt-2 text-center">
                     <div className="text-sm font-medium text-gray-700">Расход</div>
                     <div className="text-xs text-gray-500">
                       {formatNumber(data.kpiStats?.currentCost || 0)} / {formatNumber(data.kpi.targetCost)} ₽
@@ -407,7 +415,15 @@ export default function PublicDashboard() {
                       <span className="text-xs text-gray-500">лидов</span>
                     </div>
                   </div>
-                  <div className="mt-3 text-center">
+                  <div className="mt-2 text-center">
+                    <div className="text-sm font-bold text-gray-900">
+                      {Math.round(data.kpiProgress?.leadsProgress || 0)}%
+                    </div>
+                    <div className="text-xs text-gray-500">
+                      к дню: {Math.round(data.kpiProgress?.leadsDayProgress || 0)}%
+                    </div>
+                  </div>
+                  <div className="mt-2 text-center">
                     <div className="text-sm font-medium text-gray-700">Лиды</div>
                     <div className="text-xs text-gray-500">
                       {data.kpiStats?.currentLeads || 0} / {data.kpi.targetLeads}
