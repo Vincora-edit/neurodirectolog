@@ -83,6 +83,35 @@ function SortableHeader({
   );
 }
 
+// Компонент tooltip для полного текста
+function TextWithTooltip({ text, maxWidth = 300 }: { text: string; maxWidth?: number }) {
+  const [showTooltip, setShowTooltip] = useState(false);
+  const needsTruncation = text.length > 40;
+
+  if (!needsTruncation) {
+    return <span>{text}</span>;
+  }
+
+  return (
+    <div className="relative">
+      <span
+        className="truncate block cursor-help"
+        style={{ maxWidth: `${maxWidth}px` }}
+        onMouseEnter={() => setShowTooltip(true)}
+        onMouseLeave={() => setShowTooltip(false)}
+      >
+        {text}
+      </span>
+      {showTooltip && (
+        <div className="absolute z-50 left-0 top-full mt-1 p-3 bg-gray-900 text-white text-sm rounded-lg shadow-xl max-w-md whitespace-normal break-words">
+          {text}
+          <div className="absolute -top-1 left-4 w-2 h-2 bg-gray-900 rotate-45" />
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function ReportsSection({
   activeProjectId,
   activeConnectionId,
@@ -92,8 +121,11 @@ export function ReportsSection({
   const [openReportSections, setOpenReportSections] = useState(new Set(['audience']));
   const [audienceReportTab, setAudienceReportTab] = useState('search');
   const [technicalReportTab, setTechnicalReportTab] = useState('categories');
-  const [sortColumn, setSortColumn] = useState<string>('cost');
-  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
+  // Независимая сортировка для каждой секции
+  const [audienceSortColumn, setAudienceSortColumn] = useState<string>('cost');
+  const [audienceSortDirection, setAudienceSortDirection] = useState<'asc' | 'desc'>('desc');
+  const [technicalSortColumn, setTechnicalSortColumn] = useState<string>('cost');
+  const [technicalSortDirection, setTechnicalSortDirection] = useState<'asc' | 'desc'>('desc');
 
   // Отчёты - загружаем только когда выбран соответствующий таб
   const { data: searchQueriesData, isLoading: searchQueriesLoading } = useQuery({
@@ -216,12 +248,21 @@ export function ReportsSection({
     });
   };
 
-  const handleSortClick = (column: string) => {
-    if (sortColumn === column) {
-      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
+  const handleAudienceSortClick = (column: string) => {
+    if (audienceSortColumn === column) {
+      setAudienceSortDirection(audienceSortDirection === 'asc' ? 'desc' : 'asc');
     } else {
-      setSortColumn(column);
-      setSortDirection('desc');
+      setAudienceSortColumn(column);
+      setAudienceSortDirection('desc');
+    }
+  };
+
+  const handleTechnicalSortClick = (column: string) => {
+    if (technicalSortColumn === column) {
+      setTechnicalSortDirection(technicalSortDirection === 'asc' ? 'desc' : 'asc');
+    } else {
+      setTechnicalSortColumn(column);
+      setTechnicalSortDirection('desc');
     }
   };
 
@@ -368,9 +409,14 @@ export function ReportsSection({
     }
   };
 
-  const renderReportTable = (reportId: string) => {
+  const renderReportTable = (reportId: string, section: 'audience' | 'technical') => {
     const report = getReportData(reportId);
     const isPlacementsReport = reportId === 'placements';
+
+    // Используем сортировку соответствующей секции
+    const sortColumn = section === 'audience' ? audienceSortColumn : technicalSortColumn;
+    const sortDirection = section === 'audience' ? audienceSortDirection : technicalSortDirection;
+    const handleSortClick = section === 'audience' ? handleAudienceSortClick : handleTechnicalSortClick;
 
     const isLoading =
       (reportId === 'search' && searchQueriesLoading) ||
@@ -483,9 +529,7 @@ export function ReportsSection({
                           <span>{item.name}</span>
                         </div>
                       ) : (
-                        <span className="truncate block max-w-[300px]" title={item.name}>
-                          {item.name}
-                        </span>
+                        <TextWithTooltip text={item.name} maxWidth={350} />
                       )}
                     </td>
                     {isPlacementsReport && (
@@ -569,7 +613,7 @@ export function ReportsSection({
                 );
               })}
             </div>
-            {renderReportTable(audienceReportTab)}
+            {renderReportTable(audienceReportTab, 'audience')}
           </div>
         )}
       </div>
@@ -612,7 +656,7 @@ export function ReportsSection({
                 );
               })}
             </div>
-            {renderReportTable(technicalReportTab)}
+            {renderReportTable(technicalReportTab, 'technical')}
           </div>
         )}
       </div>
