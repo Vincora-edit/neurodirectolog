@@ -19,6 +19,7 @@ async function initializeAuth() {
   try {
     // Создаем таблицы если не существуют
     await clickhouseService.initializeUserProjectsTables();
+    await clickhouseService.initializePublicSharesTable();
 
     // Проверяем, есть ли пользователи
     const userCount = await clickhouseService.countUsers();

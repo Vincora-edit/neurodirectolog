@@ -104,7 +104,8 @@
       "Bash(/Users/artemsubbotin/Desktop/Neurodirectolog/scripts/status.sh:*)",
       "Bash(openssl rand:*)",
       "Bash(wc:*)",
-      "Bash(scp:*)"
+      "Bash(scp:*)",
+      "Bash(npm run lint:*)"
     ]
   }
 }

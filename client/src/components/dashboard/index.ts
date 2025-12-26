@@ -11,3 +11,4 @@ export { StatsChart } from './StatsChart';
 export { ReportsSection } from './ReportsSection';
 export { AIRecommendations } from './AIRecommendations';
 export { LandingPagesTable } from './LandingPagesTable';
+export { ShareButton } from './ShareButton';

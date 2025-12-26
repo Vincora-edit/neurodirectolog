@@ -2774,4 +2774,153 @@ export const clickhouseService = {
 
     console.log('✅ ClickHouse tables users/projects initialized');
   },
+
+  // ===========================================
+  // Public Shares (публичные ссылки на дашборд)
+  // ===========================================
+
+  async initializePublicSharesTable(): Promise<void> {
+    await client.command({
+      query: `
+        CREATE TABLE IF NOT EXISTS public_shares (
+          id String,
+          connection_id String,
+          user_id String,
+          name String,
+          is_active UInt8 DEFAULT 1,
+          expires_at Nullable(DateTime),
+          created_at DateTime DEFAULT now(),
+          updated_at DateTime DEFAULT now()
+        ) ENGINE = ReplacingMergeTree(updated_at)
+        ORDER BY (id)
+        SETTINGS index_granularity = 8192
+      `,
+    });
+    console.log('✅ ClickHouse table public_shares initialized');
+  },
+
+  async createPublicShare(data: {
+    connectionId: string;
+    userId: string;
+    name: string;
+    expiresAt?: Date;
+  }): Promise<string> {
+    const id = uuidv4();
+    const now = formatDate(new Date());
+
+    await client.insert({
+      table: 'public_shares',
+      values: [{
+        id,
+        connection_id: data.connectionId,
+        user_id: data.userId,
+        name: data.name,
+        is_active: 1,
+        expires_at: data.expiresAt ? formatDate(data.expiresAt) : null,
+        created_at: now,
+        updated_at: now,
+      }],
+      format: 'JSONEachRow',
+    });
+
+    return id;
+  },
+
+  async getPublicSharesByConnection(connectionId: string): Promise<any[]> {
+    const result = await client.query({
+      query: `
+        SELECT *
+        FROM public_shares FINAL
+        WHERE connection_id = {connectionId:String}
+        ORDER BY created_at DESC
+      `,
+      query_params: { connectionId },
+      format: 'JSONEachRow',
+    });
+
+    return await result.json();
+  },
+
+  async getPublicShareById(id: string): Promise<any | null> {
+    const result = await client.query({
+      query: `
+        SELECT ps.*, ydc.login as account_login, ydc.project_id
+        FROM public_shares ps FINAL
+        LEFT JOIN yandex_direct_connections ydc FINAL ON ps.connection_id = ydc.id
+        WHERE ps.id = {id:String}
+        LIMIT 1
+      `,
+      query_params: { id },
+      format: 'JSONEachRow',
+    });
+
+    const rows = await result.json<any>();
+    return rows.length > 0 ? rows[0] : null;
+  },
+
+  async updatePublicShare(id: string, data: { isActive?: boolean; name?: string }): Promise<boolean> {
+    const share = await this.getPublicShareById(id);
+    if (!share) return false;
+
+    const now = formatDate(new Date());
+
+    await client.insert({
+      table: 'public_shares',
+      values: [{
+        id: share.id,
+        connection_id: share.connection_id,
+        user_id: share.user_id,
+        name: data.name !== undefined ? data.name : share.name,
+        is_active: data.isActive !== undefined ? (data.isActive ? 1 : 0) : share.is_active,
+        expires_at: share.expires_at,
+        created_at: share.created_at,
+        updated_at: now,
+      }],
+      format: 'JSONEachRow',
+    });
+
+    return true;
+  },
+
+  async deletePublicShare(id: string): Promise<boolean> {
+    // В ClickHouse ReplacingMergeTree - помечаем как неактивную и с истёкшим сроком
+    const share = await this.getPublicShareById(id);
+    if (!share) return false;
+
+    const now = formatDate(new Date());
+    const pastDate = formatDate(new Date('2000-01-01'));
+
+    await client.insert({
+      table: 'public_shares',
+      values: [{
+        id: share.id,
+        connection_id: share.connection_id,
+        user_id: share.user_id,
+        name: share.name,
+        is_active: 0,
+        expires_at: pastDate,
+        created_at: share.created_at,
+        updated_at: now,
+      }],
+      format: 'JSONEachRow',
+    });
+
+    return true;
+  },
+
+  async isPublicShareValid(id: string): Promise<{ valid: boolean; share?: any }> {
+    const share = await this.getPublicShareById(id);
+    if (!share) return { valid: false };
+
+    // Проверяем активность
+    if (!share.is_active) return { valid: false };
+
+    // Проверяем срок действия
+    if (share.expires_at) {
+      const expiresAt = new Date(share.expires_at);
+      if (expiresAt < new Date()) return { valid: false };
+    }
+
+    return { valid: true, share };
+  },
 };

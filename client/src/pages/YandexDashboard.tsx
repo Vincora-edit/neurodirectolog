@@ -18,6 +18,7 @@ import {
   ReportsSection,
   AIRecommendations,
   LandingPagesTable,
+  ShareButton,
 } from '../components/dashboard';
 import { dashboardService } from '../hooks/useDashboardData';
 
@@ -397,6 +398,13 @@ export function YandexDashboard() {
         isCollapsed={isHeaderCollapsed}
         onCollapsedChange={setIsHeaderCollapsed}
       />
+
+      {/* Кнопка "Поделиться" */}
+      {activeConnectionId && (
+        <div className="flex justify-end mb-4">
+          <ShareButton connectionId={activeConnectionId} />
+        </div>
+      )}
 
       {/* Индикатор загрузки */}
       {isLoading && (

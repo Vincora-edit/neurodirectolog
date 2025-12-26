@@ -44,6 +44,8 @@ import analyticsRouter from './routes/analytics';
 import keywordsRouter from './routes/keywords';
 import yandexRouter from './routes/yandex';
 import adminRouter from './routes/admin';
+import publicSharesRouter from './routes/public-shares';
+import publicDashboardRouter from './routes/public-dashboard';
 import { startSyncJob } from './jobs/sync.job';
 import { redisService } from './services/redis.service';
 import { queueService } from './services/queue.service';
@@ -131,6 +133,8 @@ app.use('/api/strategy', apiLimiter, strategyRouter);
 app.use('/api/minus-words', apiLimiter, minusWordsRouter);
 app.use('/api/yandex', apiLimiter, yandexRouter);
 app.use('/api/admin', apiLimiter, adminRouter);
+app.use('/api/public-shares', apiLimiter, publicSharesRouter);
+app.use('/api/public/dashboard', apiLimiter, publicDashboardRouter);
 
 // Error handling
 app.use(errorHandler);

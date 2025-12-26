@@ -23,6 +23,7 @@ const ConnectYandex = lazy(() => import('./pages/ConnectYandex'));
 const ConnectYandexSimple = lazy(() => import('./pages/ConnectYandexSimple'));
 const YandexDashboard = lazy(() => import('./pages/YandexDashboard').then(m => ({ default: m.YandexDashboard })));
 const AdminPanel = lazy(() => import('./pages/AdminPanel'));
+const PublicDashboard = lazy(() => import('./pages/PublicDashboard'));
 
 const queryClient = new QueryClient();
 
@@ -49,6 +50,7 @@ function App() {
           <Routes>
             <Route path="/login" element={<Login />} />
             <Route path="/register" element={<Register />} />
+            <Route path="/public/:token" element={<PublicDashboard />} />
             <Route
               path="/"
               element={
