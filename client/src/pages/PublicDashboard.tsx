@@ -88,20 +88,21 @@ export default function PublicDashboard() {
     }
   }, [token]);
 
-  const formatCurrency = (value: number) => {
+  const formatCurrency = (value: number | undefined | null) => {
     return new Intl.NumberFormat('ru-RU', {
       style: 'currency',
       currency: 'RUB',
       minimumFractionDigits: 0,
       maximumFractionDigits: 0,
-    }).format(value);
+    }).format(value || 0);
   };
 
-  const formatNumber = (value: number) => {
-    return new Intl.NumberFormat('ru-RU').format(value);
+  const formatNumber = (value: number | undefined | null) => {
+    return new Intl.NumberFormat('ru-RU').format(value || 0);
   };
 
-  const formatPercent = (value: number) => {
+  const formatPercent = (value: number | undefined | null) => {
+    if (value === undefined || value === null) return '0.00%';
     return `${value.toFixed(2)}%`;
   };
 
@@ -233,7 +234,7 @@ export default function PublicDashboard() {
               <div>
                 <p className="text-sm text-gray-500">CPL</p>
                 <p className="text-xl font-bold text-gray-900">
-                  {data.totals.cpl > 0 ? formatCurrency(data.totals.cpl) : '—'}
+                  {(data.totals.cpl || 0) > 0 ? formatCurrency(data.totals.cpl) : '—'}
                 </p>
               </div>
             </div>
@@ -390,7 +391,7 @@ export default function PublicDashboard() {
                       {formatNumber(campaign.conversions)}
                     </td>
                     <td className="px-4 py-3 text-right text-gray-900">
-                      {campaign.cpl > 0 ? formatCurrency(campaign.cpl) : '—'}
+                      {(campaign.cpl || 0) > 0 ? formatCurrency(campaign.cpl) : '—'}
                     </td>
                   </tr>
                 ))}
