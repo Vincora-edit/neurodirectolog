@@ -144,11 +144,14 @@ app.listen(PORT, async () => {
   if (redisConnected) {
     console.log('📦 Redis кеширование включено');
 
-    // Инициализируем Bull Queue worker если Redis доступен
-    if (queueService.isAvailable()) {
+    // Ожидаем готовности Bull Queue
+    const queueReady = await queueService.waitForReady();
+    if (queueReady) {
       initSyncWorker();
       startScheduledSync(60); // Синхронизация каждые 60 минут
       console.log('📋 Bull Queue worker запущен');
+    } else {
+      console.log('⚠️  Bull Queue недоступна, синхронизация через cron');
     }
   } else {
     console.log('⚠️  Redis недоступен, работаем без кеша');

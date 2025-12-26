@@ -56,6 +56,7 @@ export interface JobStatus {
 
 // Флаг доступности очереди
 let isQueueAvailable = false;
+let queueReadyPromise: Promise<void>;
 
 // Создаём очередь для синхронизации
 const syncQueue: Queue<SyncJobData> = new Bull<SyncJobData>('yandex-sync', {
@@ -78,6 +79,27 @@ const syncQueue: Queue<SyncJobData> = new Bull<SyncJobData>('yandex-sync', {
     stalledInterval: 60000, // Проверка зависших задач каждую минуту
     maxStalledCount: 2, // После 2 зависаний - fail
   },
+});
+
+// Promise для ожидания готовности очереди
+queueReadyPromise = new Promise((resolve) => {
+  // Таймаут на случай если Redis не отвечает
+  const timeout = setTimeout(() => {
+    if (!isQueueAvailable) {
+      console.warn('⚠️ Bull Queue: таймаут подключения');
+      resolve();
+    }
+  }, 5000);
+
+  syncQueue.once('ready', () => {
+    clearTimeout(timeout);
+    resolve();
+  });
+
+  syncQueue.once('error', () => {
+    clearTimeout(timeout);
+    resolve(); // Резолвим чтобы не блокировать запуск
+  });
 });
 
 // Обработчики событий очереди
@@ -116,6 +138,14 @@ export const queueService = {
    * Проверка доступности очереди
    */
   isAvailable(): boolean {
+    return isQueueAvailable;
+  },
+
+  /**
+   * Ожидание готовности очереди
+   */
+  async waitForReady(): Promise<boolean> {
+    await queueReadyPromise;
     return isQueueAvailable;
   },
 
