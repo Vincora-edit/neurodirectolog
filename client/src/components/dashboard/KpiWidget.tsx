@@ -263,10 +263,20 @@ export function KpiWidget({ kpiData, availableGoals, connectionId, onSaveKpi }: 
                   </label>
                   <input
                     type="number"
-                    value={form.targetCost}
-                    onChange={(e) =>
-                      setForm({ ...form, targetCost: parseFloat(e.target.value) || 0 })
-                    }
+                    value={form.targetCost || ''}
+                    onChange={(e) => {
+                      const newCost = parseFloat(e.target.value) || 0;
+                      const newForm = { ...form, targetCost: newCost };
+                      // Если есть CPL, рассчитываем лиды
+                      if (newCost > 0 && form.targetCpl > 0) {
+                        newForm.targetLeads = Math.round(newCost / form.targetCpl);
+                      }
+                      // Если есть лиды, рассчитываем CPL
+                      else if (newCost > 0 && form.targetLeads > 0) {
+                        newForm.targetCpl = Math.round(newCost / form.targetLeads);
+                      }
+                      setForm(newForm);
+                    }}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-400 focus:border-transparent"
                     placeholder="900000"
                   />
@@ -278,10 +288,20 @@ export function KpiWidget({ kpiData, availableGoals, connectionId, onSaveKpi }: 
                   </label>
                   <input
                     type="number"
-                    value={form.targetCpl}
-                    onChange={(e) =>
-                      setForm({ ...form, targetCpl: parseFloat(e.target.value) || 0 })
-                    }
+                    value={form.targetCpl || ''}
+                    onChange={(e) => {
+                      const newCpl = parseFloat(e.target.value) || 0;
+                      const newForm = { ...form, targetCpl: newCpl };
+                      // Если есть расход, рассчитываем лиды
+                      if (newCpl > 0 && form.targetCost > 0) {
+                        newForm.targetLeads = Math.round(form.targetCost / newCpl);
+                      }
+                      // Если есть лиды, рассчитываем расход
+                      else if (newCpl > 0 && form.targetLeads > 0) {
+                        newForm.targetCost = Math.round(newCpl * form.targetLeads);
+                      }
+                      setForm(newForm);
+                    }}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-400 focus:border-transparent"
                     placeholder="4000"
                   />
@@ -293,14 +313,28 @@ export function KpiWidget({ kpiData, availableGoals, connectionId, onSaveKpi }: 
                   </label>
                   <input
                     type="number"
-                    value={form.targetLeads}
-                    onChange={(e) =>
-                      setForm({ ...form, targetLeads: parseInt(e.target.value) || 0 })
-                    }
+                    value={form.targetLeads || ''}
+                    onChange={(e) => {
+                      const newLeads = parseInt(e.target.value) || 0;
+                      const newForm = { ...form, targetLeads: newLeads };
+                      // Если есть расход, рассчитываем CPL
+                      if (newLeads > 0 && form.targetCost > 0) {
+                        newForm.targetCpl = Math.round(form.targetCost / newLeads);
+                      }
+                      // Если есть CPL, рассчитываем расход
+                      else if (newLeads > 0 && form.targetCpl > 0) {
+                        newForm.targetCost = Math.round(form.targetCpl * newLeads);
+                      }
+                      setForm(newForm);
+                    }}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-400 focus:border-transparent"
                     placeholder="225"
                   />
                 </div>
+
+                <p className="text-xs text-gray-500 bg-gray-50 p-2 rounded-lg">
+                  💡 Поля связаны: заполните любые два — третье рассчитается автоматически
+                </p>
 
                 {availableGoals.length > 0 && (
                   <div>
