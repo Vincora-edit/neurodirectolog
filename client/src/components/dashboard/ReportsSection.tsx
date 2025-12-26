@@ -1,4 +1,5 @@
-import { useState, useRef } from 'react';
+import React, { useState, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { useQuery } from '@tanstack/react-query';
 import {
   BarChart3,
@@ -83,10 +84,10 @@ function SortableHeader({
   );
 }
 
-// Компонент tooltip для полного текста
+// Компонент tooltip для полного текста (использует Portal для выхода из overflow:hidden)
 function TextWithTooltip({ text, maxWidth = 300 }: { text: string; maxWidth?: number }) {
   const [showTooltip, setShowTooltip] = useState(false);
-  const [position, setPosition] = useState<'bottom' | 'top'>('bottom');
+  const [tooltipStyle, setTooltipStyle] = useState<React.CSSProperties>({});
   const spanRef = useRef<HTMLSpanElement>(null);
   const needsTruncation = text.length > 40;
 
@@ -94,8 +95,15 @@ function TextWithTooltip({ text, maxWidth = 300 }: { text: string; maxWidth?: nu
     if (spanRef.current) {
       const rect = spanRef.current.getBoundingClientRect();
       const spaceBelow = window.innerHeight - rect.bottom;
-      // Если снизу меньше 150px, показываем сверху
-      setPosition(spaceBelow < 150 ? 'top' : 'bottom');
+      const showAbove = spaceBelow < 150;
+
+      setTooltipStyle({
+        position: 'fixed',
+        left: `${rect.left}px`,
+        top: showAbove ? `${rect.top - 8}px` : `${rect.bottom + 8}px`,
+        transform: showAbove ? 'translateY(-100%)' : 'translateY(0)',
+        zIndex: 9999,
+      });
     }
     setShowTooltip(true);
   };
@@ -104,8 +112,18 @@ function TextWithTooltip({ text, maxWidth = 300 }: { text: string; maxWidth?: nu
     return <span>{text}</span>;
   }
 
+  const tooltip = showTooltip ? createPortal(
+    <div
+      style={tooltipStyle}
+      className="p-3 bg-gray-900 text-white text-sm rounded-lg shadow-xl max-w-md whitespace-normal break-words pointer-events-none"
+    >
+      {text}
+    </div>,
+    document.body
+  ) : null;
+
   return (
-    <div className="relative">
+    <>
       <span
         ref={spanRef}
         className="truncate block cursor-help"
@@ -115,21 +133,8 @@ function TextWithTooltip({ text, maxWidth = 300 }: { text: string; maxWidth?: nu
       >
         {text}
       </span>
-      {showTooltip && (
-        <div
-          className={`absolute z-50 left-0 p-3 bg-gray-900 text-white text-sm rounded-lg shadow-xl max-w-md whitespace-normal break-words ${
-            position === 'top' ? 'bottom-full mb-1' : 'top-full mt-1'
-          }`}
-        >
-          {text}
-          <div
-            className={`absolute left-4 w-2 h-2 bg-gray-900 rotate-45 ${
-              position === 'top' ? '-bottom-1' : '-top-1'
-            }`}
-          />
-        </div>
-      )}
-    </div>
+      {tooltip}
+    </>
   );
 }
 
