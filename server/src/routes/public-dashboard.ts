@@ -32,12 +32,62 @@ router.get('/:token', async (req: Request, res: Response, next: NextFunction) =>
     const kpiGoalIds = kpi?.goalIds && kpi.goalIds.length > 0 ? kpi.goalIds : undefined;
     const monthStats = await clickhouseService.getMonthStats(connectionId, kpiGoalIds);
 
+    // Получаем статистику за последние 7 дней для расчёта среднего
+    const last7DaysEnd = new Date();
+    const last7DaysStart = new Date();
+    last7DaysStart.setDate(last7DaysStart.getDate() - 7);
+
+    const last7DaysStats = await clickhouseService.getDailyStats(
+      connectionId,
+      last7DaysStart,
+      last7DaysEnd,
+      kpiGoalIds
+    );
+
+    // Рассчитываем средние показатели за 7 дней
+    const avgDailyCost = last7DaysStats.length > 0
+      ? last7DaysStats.reduce((sum: number, d: any) => sum + (d.cost || 0), 0) / last7DaysStats.length
+      : 0;
+    const avgDailyLeads = last7DaysStats.length > 0
+      ? last7DaysStats.reduce((sum: number, d: any) => sum + (d.conversions || 0), 0) / last7DaysStats.length
+      : 0;
+    const avgDailyCpl = avgDailyLeads > 0 ? avgDailyCost / avgDailyLeads : 0;
+
     // Рассчитываем прогресс KPI
     let costProgress = 0;
     let costDayProgress = 0;
     let leadsProgress = 0;
     let leadsDayProgress = 0;
     let cplStatus: 'good' | 'warning' | 'bad' = 'good';
+
+    // Аналитика и рекомендации
+    let kpiAnalysis: {
+      cost: {
+        avgDaily7d: number;
+        projectedMonthly: number;
+        remainingDays: number;
+        remainingBudget: number;
+        requiredDailyBudget: number;
+        trend: 'on_track' | 'overspending' | 'underspending';
+        recommendation: string | null;
+      };
+      leads: {
+        avgDaily7d: number;
+        projectedMonthly: number;
+        remainingLeads: number;
+        requiredDailyLeads: number;
+        trend: 'on_track' | 'behind' | 'ahead';
+        recommendation: string | null;
+      };
+      cpl: {
+        current: number;
+        target: number;
+        avgDaily7d: number;
+        trend: 'good' | 'warning' | 'bad';
+        recommendation: string | null;
+      };
+      diagnosis: string | null;
+    } | null = null;
 
     if (kpi) {
       costProgress = kpi.targetCost > 0 ? (monthStats.currentCost / kpi.targetCost) * 100 : 0;
@@ -54,6 +104,100 @@ router.get('/:token', async (req: Request, res: Response, next: NextFunction) =>
         else if (cplRatio <= 1.2) cplStatus = 'warning';
         else cplStatus = 'bad';
       }
+
+      // Расширенная аналитика
+      const remainingDays = monthStats.daysInMonth - monthStats.currentDay;
+      const remainingBudget = Math.max(0, kpi.targetCost - monthStats.currentCost);
+      const requiredDailyBudget = remainingDays > 0 ? remainingBudget / remainingDays : 0;
+      const projectedMonthlyCost = monthStats.currentCost + (avgDailyCost * remainingDays);
+
+      const remainingLeads = Math.max(0, kpi.targetLeads - monthStats.currentLeads);
+      const requiredDailyLeads = remainingDays > 0 ? remainingLeads / remainingDays : 0;
+      const projectedMonthlyLeads = monthStats.currentLeads + (avgDailyLeads * remainingDays);
+
+      // Определяем тренды
+      let costTrend: 'on_track' | 'overspending' | 'underspending' = 'on_track';
+      let costRecommendation: string | null = null;
+
+      if (kpi.targetCost > 0) {
+        const costDeviation = (avgDailyCost - requiredDailyBudget) / requiredDailyBudget;
+        if (costDeviation > 0.15) {
+          costTrend = 'overspending';
+          const weeklyReduction = Math.round((avgDailyCost - requiredDailyBudget) * 7);
+          costRecommendation = `Перерасход. Снизьте расход на ~${weeklyReduction.toLocaleString('ru-RU')} ₽/нед`;
+        } else if (costDeviation < -0.15) {
+          costTrend = 'underspending';
+          const weeklyIncrease = Math.round((requiredDailyBudget - avgDailyCost) * 7);
+          costRecommendation = `Недорасход. Увеличьте бюджет на ~${weeklyIncrease.toLocaleString('ru-RU')} ₽/нед`;
+        }
+      }
+
+      let leadsTrend: 'on_track' | 'behind' | 'ahead' = 'on_track';
+      let leadsRecommendation: string | null = null;
+
+      if (kpi.targetLeads > 0 && remainingDays > 0) {
+        const leadsDeviation = avgDailyLeads > 0
+          ? (avgDailyLeads - requiredDailyLeads) / requiredDailyLeads
+          : -1;
+        if (leadsDeviation < -0.2) {
+          leadsTrend = 'behind';
+          const deficit = Math.round(requiredDailyLeads - avgDailyLeads);
+          leadsRecommendation = `Отстаём. Нужно +${deficit} лидов/день`;
+        } else if (leadsDeviation > 0.2) {
+          leadsTrend = 'ahead';
+          leadsRecommendation = `Опережаем план`;
+        }
+      }
+
+      let cplRecommendation: string | null = null;
+      if (kpi.targetCpl > 0 && monthStats.currentCpl > 0) {
+        const cplDeviation = ((monthStats.currentCpl - kpi.targetCpl) / kpi.targetCpl) * 100;
+        if (cplDeviation > 20) {
+          cplRecommendation = `CPL выше плана на ${Math.round(cplDeviation)}%`;
+        } else if (cplDeviation < -10) {
+          cplRecommendation = `CPL ниже плана на ${Math.round(Math.abs(cplDeviation))}%`;
+        }
+      }
+
+      // Диагностика взаимосвязей
+      let diagnosis: string | null = null;
+      if (leadsTrend === 'behind' && costTrend === 'on_track') {
+        diagnosis = 'Бюджет расходуется по плану, но лидов мало. Проблема в конверсии или стоимости лида — проверьте качество трафика и посадочные страницы.';
+      } else if (leadsTrend === 'behind' && costTrend === 'underspending') {
+        diagnosis = 'Недостаточный расход и мало лидов. Нужно увеличить бюджет.';
+      } else if (leadsTrend === 'ahead' && costTrend === 'overspending') {
+        diagnosis = 'Лидов больше плана при перерасходе. Можно снизить бюджет без потери результата.';
+      } else if (cplStatus === 'bad' && leadsTrend !== 'ahead') {
+        diagnosis = 'Высокая стоимость лида. Оптимизируйте кампании: отключите неэффективные ключи, проверьте ставки.';
+      }
+
+      kpiAnalysis = {
+        cost: {
+          avgDaily7d: avgDailyCost,
+          projectedMonthly: projectedMonthlyCost,
+          remainingDays,
+          remainingBudget,
+          requiredDailyBudget,
+          trend: costTrend,
+          recommendation: costRecommendation,
+        },
+        leads: {
+          avgDaily7d: avgDailyLeads,
+          projectedMonthly: projectedMonthlyLeads,
+          remainingLeads,
+          requiredDailyLeads,
+          trend: leadsTrend,
+          recommendation: leadsRecommendation,
+        },
+        cpl: {
+          current: monthStats.currentCpl,
+          target: kpi.targetCpl,
+          avgDaily7d: avgDailyCpl,
+          trend: cplStatus,
+          recommendation: cplRecommendation,
+        },
+        diagnosis,
+      };
     }
 
     // Вычисляем даты
@@ -146,6 +290,7 @@ router.get('/:token', async (req: Request, res: Response, next: NextFunction) =>
         leadsDayProgress: Math.min(leadsDayProgress, 150),
         cplStatus,
       },
+      kpiAnalysis,
       month,
       campaigns: hierarchicalStats.map((c: any) => ({
         id: c.campaignId,

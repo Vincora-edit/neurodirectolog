@@ -1,6 +1,34 @@
 import { useState, useRef, useEffect } from 'react';
-import { ChevronDown, Gauge, Settings, Target, X, Loader2 } from 'lucide-react';
-import { CircularProgress } from './CircularProgress';
+import { ChevronDown, ChevronUp, Gauge, Settings, Target, X, Loader2, DollarSign, TrendingUp, TrendingDown, AlertTriangle, CheckCircle, AlertCircle, Info, Calendar } from 'lucide-react';
+
+// Типы для KPI аналитики
+export interface KpiAnalysis {
+  cost: {
+    avgDaily7d: number;
+    projectedMonthly: number;
+    remainingDays: number;
+    remainingBudget: number;
+    requiredDailyBudget: number;
+    trend: 'on_track' | 'overspending' | 'underspending';
+    recommendation: string | null;
+  };
+  leads: {
+    avgDaily7d: number;
+    projectedMonthly: number;
+    remainingLeads: number;
+    requiredDailyLeads: number;
+    trend: 'on_track' | 'behind' | 'ahead';
+    recommendation: string | null;
+  };
+  cpl: {
+    current: number;
+    target: number;
+    avgDaily7d: number;
+    trend: 'good' | 'warning' | 'bad';
+    recommendation: string | null;
+  };
+  diagnosis: string | null;
+}
 
 interface KpiData {
   kpi?: {
@@ -15,6 +43,7 @@ interface KpiData {
     currentLeads: number;
     currentDay: number;
     daysInMonth: number;
+    dayProgress: number;
   };
   progress?: {
     costProgress: number;
@@ -23,6 +52,7 @@ interface KpiData {
     leadsDayProgress: number;
     cplStatus: 'good' | 'warning' | 'bad';
   };
+  analysis?: KpiAnalysis | null;
   month?: string;
 }
 
@@ -36,6 +66,310 @@ interface KpiWidgetProps {
     targetLeads: number;
     goalIds: string[];
   }) => Promise<void>;
+}
+
+// Компонент контента KPI (переиспользуемый)
+export function KpiContent({
+  kpiData,
+  formatCurrency
+}: {
+  kpiData: KpiData;
+  formatCurrency: (value: number) => string;
+}) {
+  const { kpi, stats, progress, analysis } = kpiData;
+
+  if (!kpi || (kpi.targetCost <= 0 && kpi.targetLeads <= 0)) {
+    return (
+      <div className="text-center py-8 text-gray-500">
+        <Gauge size={48} className="mx-auto mb-3 text-gray-300" />
+        <p className="text-sm">KPI не настроены</p>
+        <p className="text-xs mt-1">Нажмите "Настроить" чтобы задать цели на месяц</p>
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      {/* Diagnosis Banner */}
+      {analysis?.diagnosis && (
+        <div className="mb-5 p-4 bg-amber-50 border border-amber-200 rounded-lg flex items-start gap-3">
+          <AlertTriangle size={20} className="text-amber-600 flex-shrink-0 mt-0.5" />
+          <div>
+            <div className="font-medium text-amber-800">Диагностика</div>
+            <div className="text-sm text-amber-700 mt-1">{analysis.diagnosis}</div>
+          </div>
+        </div>
+      )}
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+        {/* Расход */}
+        <div className={`p-4 rounded-xl border-2 ${
+          analysis?.cost.trend === 'on_track'
+            ? 'border-gray-200 bg-gray-50'
+            : analysis?.cost.trend === 'overspending'
+            ? 'border-red-200 bg-red-50'
+            : 'border-amber-200 bg-amber-50'
+        }`}>
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-2">
+              <DollarSign size={18} className="text-red-600" />
+              <span className="font-medium text-gray-900">Расход</span>
+            </div>
+            {analysis?.cost.trend === 'on_track' && (
+              <span className="flex items-center gap-1 text-xs font-medium text-green-600 bg-green-100 px-2 py-1 rounded-full">
+                <CheckCircle size={12} /> В плане
+              </span>
+            )}
+            {analysis?.cost.trend === 'overspending' && (
+              <span className="flex items-center gap-1 text-xs font-medium text-red-600 bg-red-100 px-2 py-1 rounded-full">
+                <TrendingUp size={12} /> Перерасход
+              </span>
+            )}
+            {analysis?.cost.trend === 'underspending' && (
+              <span className="flex items-center gap-1 text-xs font-medium text-amber-600 bg-amber-100 px-2 py-1 rounded-full">
+                <TrendingDown size={12} /> Недорасход
+              </span>
+            )}
+          </div>
+
+          {/* Progress bar */}
+          <div className="mb-3">
+            <div className="flex justify-between text-sm mb-1">
+              <span className="font-semibold text-gray-900">
+                {formatCurrency(stats?.currentCost || 0)}
+              </span>
+              <span className="text-gray-500">
+                из {formatCurrency(kpi.targetCost)}
+              </span>
+            </div>
+            <div className="h-3 bg-gray-200 rounded-full overflow-hidden">
+              <div
+                className={`h-full rounded-full transition-all ${
+                  analysis?.cost.trend === 'overspending' ? 'bg-red-500' : 'bg-red-400'
+                }`}
+                style={{ width: `${Math.min(progress?.costProgress || 0, 100)}%` }}
+              />
+            </div>
+            <div className="flex justify-between text-xs text-gray-500 mt-1">
+              <span>{Math.round(progress?.costProgress || 0)}%</span>
+              <span>ожидалось {Math.round((stats?.dayProgress || 0) * 100)}%</span>
+            </div>
+          </div>
+
+          {/* Stats */}
+          <div className="grid grid-cols-2 gap-2 text-sm">
+            <div className="bg-white/60 rounded-lg p-2">
+              <div className="text-xs text-gray-500">Ср. за 7 дней</div>
+              <div className="font-semibold text-gray-900">
+                {formatCurrency(analysis?.cost.avgDaily7d || 0)}/день
+              </div>
+            </div>
+            <div className="bg-white/60 rounded-lg p-2">
+              <div className="text-xs text-gray-500">Нужно тратить</div>
+              <div className="font-semibold text-gray-900">
+                {formatCurrency(analysis?.cost.requiredDailyBudget || 0)}/день
+              </div>
+            </div>
+          </div>
+
+          {/* Recommendation */}
+          {analysis?.cost.recommendation && (
+            <div className="mt-3 p-2 bg-white/80 rounded-lg text-xs text-gray-700 flex items-start gap-2">
+              <Info size={14} className="text-blue-500 flex-shrink-0 mt-0.5" />
+              {analysis.cost.recommendation}
+            </div>
+          )}
+        </div>
+
+        {/* Лиды */}
+        <div className={`p-4 rounded-xl border-2 ${
+          analysis?.leads.trend === 'on_track'
+            ? 'border-gray-200 bg-gray-50'
+            : analysis?.leads.trend === 'behind'
+            ? 'border-amber-200 bg-amber-50'
+            : 'border-green-200 bg-green-50'
+        }`}>
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-2">
+              <Target size={18} className="text-green-600" />
+              <span className="font-medium text-gray-900">Лиды</span>
+            </div>
+            {analysis?.leads.trend === 'on_track' && (
+              <span className="flex items-center gap-1 text-xs font-medium text-green-600 bg-green-100 px-2 py-1 rounded-full">
+                <CheckCircle size={12} /> В плане
+              </span>
+            )}
+            {analysis?.leads.trend === 'behind' && (
+              <span className="flex items-center gap-1 text-xs font-medium text-amber-600 bg-amber-100 px-2 py-1 rounded-full">
+                <TrendingDown size={12} /> Отстаём
+              </span>
+            )}
+            {analysis?.leads.trend === 'ahead' && (
+              <span className="flex items-center gap-1 text-xs font-medium text-green-600 bg-green-100 px-2 py-1 rounded-full">
+                <TrendingUp size={12} /> Опережаем
+              </span>
+            )}
+          </div>
+
+          {/* Progress bar */}
+          <div className="mb-3">
+            <div className="flex justify-between text-sm mb-1">
+              <span className="font-semibold text-gray-900">
+                {stats?.currentLeads || 0} лидов
+              </span>
+              <span className="text-gray-500">
+                из {kpi.targetLeads}
+              </span>
+            </div>
+            <div className="h-3 bg-gray-200 rounded-full overflow-hidden">
+              <div
+                className={`h-full rounded-full transition-all ${
+                  analysis?.leads.trend === 'ahead' ? 'bg-green-500' : 'bg-green-400'
+                }`}
+                style={{ width: `${Math.min(progress?.leadsProgress || 0, 100)}%` }}
+              />
+            </div>
+            <div className="flex justify-between text-xs text-gray-500 mt-1">
+              <span>{Math.round(progress?.leadsProgress || 0)}%</span>
+              <span>ожидалось {Math.round((stats?.dayProgress || 0) * 100)}%</span>
+            </div>
+          </div>
+
+          {/* Stats */}
+          <div className="grid grid-cols-2 gap-2 text-sm">
+            <div className="bg-white/60 rounded-lg p-2">
+              <div className="text-xs text-gray-500">Ср. за 7 дней</div>
+              <div className="font-semibold text-gray-900">
+                {(analysis?.leads.avgDaily7d || 0).toFixed(1)}/день
+              </div>
+            </div>
+            <div className="bg-white/60 rounded-lg p-2">
+              <div className="text-xs text-gray-500">Нужно получать</div>
+              <div className="font-semibold text-gray-900">
+                {(analysis?.leads.requiredDailyLeads || 0).toFixed(1)}/день
+              </div>
+            </div>
+          </div>
+
+          {/* Recommendation */}
+          {analysis?.leads.recommendation && (
+            <div className="mt-3 p-2 bg-white/80 rounded-lg text-xs text-gray-700 flex items-start gap-2">
+              <Info size={14} className="text-blue-500 flex-shrink-0 mt-0.5" />
+              {analysis.leads.recommendation}
+            </div>
+          )}
+        </div>
+
+        {/* CPL */}
+        <div className={`p-4 rounded-xl border-2 ${
+          analysis?.cpl.trend === 'good'
+            ? 'border-green-200 bg-green-50'
+            : analysis?.cpl.trend === 'warning'
+            ? 'border-amber-200 bg-amber-50'
+            : 'border-red-200 bg-red-50'
+        }`}>
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-2">
+              <Gauge size={18} className="text-purple-600" />
+              <span className="font-medium text-gray-900">CPL</span>
+            </div>
+            {analysis?.cpl.trend === 'good' && (
+              <span className="flex items-center gap-1 text-xs font-medium text-green-600 bg-green-100 px-2 py-1 rounded-full">
+                <CheckCircle size={12} /> В норме
+              </span>
+            )}
+            {analysis?.cpl.trend === 'warning' && (
+              <span className="flex items-center gap-1 text-xs font-medium text-amber-600 bg-amber-100 px-2 py-1 rounded-full">
+                <AlertTriangle size={12} /> Внимание
+              </span>
+            )}
+            {analysis?.cpl.trend === 'bad' && (
+              <span className="flex items-center gap-1 text-xs font-medium text-red-600 bg-red-100 px-2 py-1 rounded-full">
+                <AlertCircle size={12} /> Выше нормы
+              </span>
+            )}
+          </div>
+
+          {/* Current vs Target */}
+          <div className="mb-3 text-center">
+            <div className="text-3xl font-bold text-gray-900">
+              {formatCurrency(stats?.currentCpl || 0)}
+            </div>
+            <div className="text-sm text-gray-500 mt-1">
+              цель: {formatCurrency(kpi.targetCpl)}
+            </div>
+            {(() => {
+              const currentCpl = stats?.currentCpl || 0;
+              const targetCpl = kpi?.targetCpl || 0;
+              if (targetCpl > 0 && currentCpl > 0) {
+                const diff = ((currentCpl - targetCpl) / targetCpl) * 100;
+                return (
+                  <div className={`inline-flex items-center gap-1 mt-2 px-2 py-1 rounded-full text-sm font-medium ${
+                    diff > 0 ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'
+                  }`}>
+                    {diff > 0 ? <TrendingUp size={14} /> : <TrendingDown size={14} />}
+                    {diff > 0 ? '+' : ''}{Math.round(diff)}%
+                  </div>
+                );
+              }
+              return null;
+            })()}
+          </div>
+
+          {/* Stats */}
+          <div className="bg-white/60 rounded-lg p-2 text-center">
+            <div className="text-xs text-gray-500">Ср. CPL за 7 дней</div>
+            <div className="font-semibold text-gray-900">
+              {formatCurrency(analysis?.cpl.avgDaily7d || 0)}
+            </div>
+          </div>
+
+          {/* Recommendation */}
+          {analysis?.cpl.recommendation && (
+            <div className="mt-3 p-2 bg-white/80 rounded-lg text-xs text-gray-700 flex items-start gap-2">
+              <Info size={14} className="text-blue-500 flex-shrink-0 mt-0.5" />
+              {analysis.cpl.recommendation}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Projections */}
+      {analysis && (
+        <div className="mt-5 pt-4 border-t border-gray-200">
+          <div className="text-xs text-gray-500 mb-2">Прогноз на конец месяца (при текущем темпе)</div>
+          <div className="grid grid-cols-2 gap-4 text-sm">
+            <div className="flex items-center justify-between">
+              <span className="text-gray-600">Расход:</span>
+              <span className={`font-medium ${
+                (analysis.cost.projectedMonthly > kpi.targetCost * 1.1)
+                  ? 'text-red-600'
+                  : 'text-gray-900'
+              }`}>
+                {formatCurrency(analysis.cost.projectedMonthly)}
+                {analysis.cost.projectedMonthly > kpi.targetCost * 1.1 && (
+                  <span className="text-xs ml-1">(+{Math.round(((analysis.cost.projectedMonthly / kpi.targetCost) - 1) * 100)}%)</span>
+                )}
+              </span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-gray-600">Лиды:</span>
+              <span className={`font-medium ${
+                analysis.leads.projectedMonthly < kpi.targetLeads * 0.9
+                  ? 'text-amber-600'
+                  : 'text-gray-900'
+              }`}>
+                ~{Math.round(analysis.leads.projectedMonthly)} шт.
+                {analysis.leads.projectedMonthly < kpi.targetLeads * 0.9 && (
+                  <span className="text-xs ml-1">({Math.round(((analysis.leads.projectedMonthly / kpi.targetLeads) - 1) * 100)}%)</span>
+                )}
+              </span>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
 }
 
 export function KpiWidget({ kpiData, availableGoals, connectionId, onSaveKpi }: KpiWidgetProps) {
@@ -93,6 +427,15 @@ export function KpiWidget({ kpiData, availableGoals, connectionId, onSaveKpi }: 
     }
   };
 
+  const formatCurrency = (value: number) => {
+    return new Intl.NumberFormat('ru-RU', {
+      style: 'currency',
+      currency: 'RUB',
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 0,
+    }).format(value);
+  };
+
   if (!connectionId) return null;
 
   return (
@@ -104,10 +447,11 @@ export function KpiWidget({ kpiData, availableGoals, connectionId, onSaveKpi }: 
           onClick={() => setIsCollapsed(!isCollapsed)}
         >
           <div className="flex items-center gap-3">
-            <ChevronDown
-              size={20}
-              className={`text-gray-400 transition-transform ${isCollapsed ? '-rotate-90' : ''}`}
-            />
+            {isCollapsed ? (
+              <ChevronDown size={20} className="text-gray-400" />
+            ) : (
+              <ChevronUp size={20} className="text-gray-400" />
+            )}
             <Gauge size={20} className="text-blue-600" />
             <h3 className="text-lg font-semibold text-gray-900">
               KPI{' '}
@@ -119,9 +463,13 @@ export function KpiWidget({ kpiData, availableGoals, connectionId, onSaveKpi }: 
                 : ''}
             </h3>
             {kpiData?.stats && (
-              <span className="text-sm text-gray-500">
-                (день {kpiData.stats.currentDay} из {kpiData.stats.daysInMonth})
-              </span>
+              <div className="flex items-center gap-2 text-sm text-gray-500">
+                <Calendar size={14} />
+                <span>День {kpiData.stats.currentDay} из {kpiData.stats.daysInMonth}</span>
+                {kpiData.analysis?.cost.remainingDays !== undefined && (
+                  <span className="text-gray-400">• осталось {kpiData.analysis.cost.remainingDays} дн.</span>
+                )}
+              </div>
             )}
             {kpiData?.kpi?.goalIds && kpiData.kpi.goalIds.length > 0 && (
               <div className="flex items-center gap-1.5 text-xs text-gray-500 ml-2">
@@ -158,92 +506,8 @@ export function KpiWidget({ kpiData, availableGoals, connectionId, onSaveKpi }: 
         {/* Content */}
         {!isCollapsed && (
           <div className="px-6 pb-6 pt-2">
-            {(kpiData?.kpi?.targetCost ?? 0) > 0 || (kpiData?.kpi?.targetLeads ?? 0) > 0 ? (
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-                {/* Расход */}
-                <div className="flex flex-col items-center">
-                  <CircularProgress
-                    value={kpiData?.progress?.costProgress || 0}
-                    dayValue={kpiData?.progress?.costDayProgress || 0}
-                    size={120}
-                    color="#ef4444"
-                    dayColor="#fca5a5"
-                    label={`${Math.round((kpiData?.stats?.currentCost || 0) / 1000)}K`}
-                    sublabel="₽"
-                  />
-                  <div className="mt-3 text-center">
-                    <div className="text-sm font-medium text-gray-700">Расход</div>
-                    <div className="text-xs text-gray-500">
-                      {(kpiData?.stats?.currentCost || 0).toLocaleString('ru-RU')} /{' '}
-                      {(kpiData?.kpi?.targetCost || 0).toLocaleString('ru-RU')} ₽
-                    </div>
-                  </div>
-                </div>
-
-                {/* CPL */}
-                <div className="flex flex-col items-center">
-                  <div className="relative" style={{ width: 120, height: 120 }}>
-                    <div
-                      className={`w-full h-full rounded-full flex flex-col items-center justify-center border-8 ${
-                        kpiData?.progress?.cplStatus === 'good'
-                          ? 'border-green-500 bg-green-50'
-                          : kpiData?.progress?.cplStatus === 'warning'
-                          ? 'border-yellow-500 bg-yellow-50'
-                          : 'border-red-500 bg-red-50'
-                      }`}
-                    >
-                      <span className="text-2xl font-bold text-gray-900">
-                        {Math.round(kpiData?.stats?.currentCpl || 0).toLocaleString('ru-RU')}
-                      </span>
-                      <span className="text-xs text-gray-500">₽</span>
-                    </div>
-                  </div>
-                  <div className="mt-3 text-center">
-                    {(() => {
-                      const currentCpl = kpiData?.stats?.currentCpl || 0;
-                      const targetCpl = kpiData?.kpi?.targetCpl || 0;
-                      if (targetCpl > 0 && currentCpl > 0) {
-                        const diff = ((currentCpl - targetCpl) / targetCpl) * 100;
-                        return (
-                          <div
-                            className={`text-xs font-medium ${
-                              diff > 0 ? 'text-red-600' : 'text-green-600'
-                            }`}
-                          >
-                            {diff > 0 ? '+' : ''}
-                            {Math.round(diff)}%
-                          </div>
-                        );
-                      }
-                      return null;
-                    })()}
-                    <div className="text-sm font-medium text-gray-700 mt-1">CPL</div>
-                    <div className="text-xs text-gray-500">
-                      {Math.round(kpiData?.stats?.currentCpl || 0).toLocaleString('ru-RU')} /{' '}
-                      {(kpiData?.kpi?.targetCpl || 0).toLocaleString('ru-RU')} ₽
-                    </div>
-                  </div>
-                </div>
-
-                {/* Лиды */}
-                <div className="flex flex-col items-center">
-                  <CircularProgress
-                    value={kpiData?.progress?.leadsProgress || 0}
-                    dayValue={kpiData?.progress?.leadsDayProgress || 0}
-                    size={120}
-                    color="#22c55e"
-                    dayColor="#86efac"
-                    label={`${kpiData?.stats?.currentLeads || 0}`}
-                    sublabel="лидов"
-                  />
-                  <div className="mt-3 text-center">
-                    <div className="text-sm font-medium text-gray-700">Лиды</div>
-                    <div className="text-xs text-gray-500">
-                      {kpiData?.stats?.currentLeads || 0} / {kpiData?.kpi?.targetLeads || 0}
-                    </div>
-                  </div>
-                </div>
-              </div>
+            {kpiData ? (
+              <KpiContent kpiData={kpiData} formatCurrency={formatCurrency} />
             ) : (
               <div className="text-center py-8 text-gray-500">
                 <Gauge size={48} className="mx-auto mb-3 text-gray-300" />
@@ -351,7 +615,7 @@ export function KpiWidget({ kpiData, availableGoals, connectionId, onSaveKpi }: 
                 </div>
 
                 <p className="text-xs text-gray-500 bg-gray-50 p-2 rounded-lg">
-                  💡 Поля связаны: заполните любые два — третье рассчитается автоматически
+                  Поля связаны: заполните любые два — третье рассчитается автоматически
                 </p>
 
                 {availableGoals.length > 0 && (

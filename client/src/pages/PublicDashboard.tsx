@@ -11,8 +11,8 @@ import {
   Legend,
 } from 'recharts';
 import { TrendingUp, DollarSign, MousePointer, Target, AlertCircle, Gauge, Calendar, ChevronDown, ChevronUp, ArrowUpDown, LayoutGrid, Table } from 'lucide-react';
-import { CircularProgress } from '../components/dashboard/CircularProgress';
 import { DATE_RANGES } from '../constants';
+import { KpiContent } from '../components/dashboard';
 
 interface DashboardData {
   shareName: string;
@@ -51,6 +51,33 @@ interface DashboardData {
     leadsDayProgress: number;
     cplStatus: 'good' | 'warning' | 'bad';
   };
+  kpiAnalysis?: {
+    cost: {
+      avgDaily7d: number;
+      projectedMonthly: number;
+      remainingDays: number;
+      remainingBudget: number;
+      requiredDailyBudget: number;
+      trend: 'on_track' | 'overspending' | 'underspending';
+      recommendation: string | null;
+    };
+    leads: {
+      avgDaily7d: number;
+      projectedMonthly: number;
+      remainingLeads: number;
+      requiredDailyLeads: number;
+      trend: 'on_track' | 'behind' | 'ahead';
+      recommendation: string | null;
+    };
+    cpl: {
+      current: number;
+      target: number;
+      avgDaily7d: number;
+      trend: 'good' | 'warning' | 'bad';
+      recommendation: string | null;
+    };
+    diagnosis: string | null;
+  } | null;
   month?: string;
   campaigns: Array<{
     id: string;
@@ -406,101 +433,40 @@ export default function PublicDashboard() {
           </div>
         </div>
 
-        {/* KPI Widget */}
+        {/* KPI Widget - Using shared KpiContent component */}
         {data.kpi && (data.kpi.targetCost > 0 || data.kpi.targetLeads > 0) && (
           <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
             <div className="px-5 py-4 border-b border-gray-200">
-              <div className="flex items-center gap-3">
-                <Gauge size={20} className="text-blue-600" />
-                <span className="font-semibold text-gray-900">
-                  KPI {data.month ? new Date(data.month + '-01').toLocaleString('ru-RU', { month: 'long', year: 'numeric' }) : ''}
-                </span>
-                {data.kpiStats && (
-                  <span className="text-sm text-gray-500">
-                    (день {data.kpiStats.currentDay} из {data.kpiStats.daysInMonth})
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <Gauge size={20} className="text-blue-600" />
+                  <span className="font-semibold text-gray-900">
+                    KPI {data.month ? new Date(data.month + '-01').toLocaleString('ru-RU', { month: 'long', year: 'numeric' }) : ''}
                   </span>
+                </div>
+                {data.kpiStats && (
+                  <div className="flex items-center gap-2 text-sm text-gray-500">
+                    <Calendar size={14} />
+                    <span>День {data.kpiStats.currentDay} из {data.kpiStats.daysInMonth}</span>
+                    {data.kpiAnalysis?.cost.remainingDays !== undefined && (
+                      <span className="text-gray-400">• осталось {data.kpiAnalysis.cost.remainingDays} дн.</span>
+                    )}
+                  </div>
                 )}
               </div>
             </div>
-            <div className="px-6 pb-6 pt-2">
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-                {/* Расход */}
-                <div className="flex flex-col items-center">
-                  <CircularProgress
-                    value={data.kpiProgress?.costProgress || 0}
-                    dayValue={data.kpiProgress?.costDayProgress || 0}
-                    size={120}
-                    color="#ef4444"
-                    dayColor="#fca5a5"
-                    label={`${Math.round((data.kpiStats?.currentCost || 0) / 1000)}K`}
-                    sublabel="₽"
-                  />
-                  <div className="mt-3 text-center">
-                    <div className="text-sm font-medium text-gray-700">Расход</div>
-                    <div className="text-xs text-gray-500">
-                      {(data.kpiStats?.currentCost || 0).toLocaleString('ru-RU')} / {(data.kpi.targetCost || 0).toLocaleString('ru-RU')} ₽
-                    </div>
-                  </div>
-                </div>
 
-                {/* CPL */}
-                <div className="flex flex-col items-center">
-                  <div className="relative" style={{ width: 120, height: 120 }}>
-                    <div
-                      className={`w-full h-full rounded-full flex flex-col items-center justify-center border-8 ${
-                        data.kpiProgress?.cplStatus === 'good'
-                          ? 'border-green-500 bg-green-50'
-                          : data.kpiProgress?.cplStatus === 'warning'
-                          ? 'border-yellow-500 bg-yellow-50'
-                          : 'border-red-500 bg-red-50'
-                      }`}
-                    >
-                      <span className="text-2xl font-bold text-gray-900">
-                        {Math.round(data.kpiStats?.currentCpl || 0).toLocaleString('ru-RU')}
-                      </span>
-                      <span className="text-xs text-gray-500">₽</span>
-                    </div>
-                  </div>
-                  <div className="mt-3 text-center">
-                    {(() => {
-                      const currentCpl = data.kpiStats?.currentCpl || 0;
-                      const targetCpl = data.kpi?.targetCpl || 0;
-                      if (targetCpl > 0 && currentCpl > 0) {
-                        const diff = ((currentCpl - targetCpl) / targetCpl) * 100;
-                        return (
-                          <div className={`text-xs font-medium ${diff > 0 ? 'text-red-600' : 'text-green-600'}`}>
-                            {diff > 0 ? '+' : ''}{Math.round(diff)}%
-                          </div>
-                        );
-                      }
-                      return null;
-                    })()}
-                    <div className="text-sm font-medium text-gray-700 mt-1">CPL</div>
-                    <div className="text-xs text-gray-500">
-                      {Math.round(data.kpiStats?.currentCpl || 0).toLocaleString('ru-RU')} / {(data.kpi.targetCpl || 0).toLocaleString('ru-RU')} ₽
-                    </div>
-                  </div>
-                </div>
-
-                {/* Лиды */}
-                <div className="flex flex-col items-center">
-                  <CircularProgress
-                    value={data.kpiProgress?.leadsProgress || 0}
-                    dayValue={data.kpiProgress?.leadsDayProgress || 0}
-                    size={120}
-                    color="#22c55e"
-                    dayColor="#86efac"
-                    label={`${data.kpiStats?.currentLeads || 0}`}
-                    sublabel="лидов"
-                  />
-                  <div className="mt-3 text-center">
-                    <div className="text-sm font-medium text-gray-700">Лиды</div>
-                    <div className="text-xs text-gray-500">
-                      {data.kpiStats?.currentLeads || 0} / {data.kpi.targetLeads}
-                    </div>
-                  </div>
-                </div>
-              </div>
+            <div className="p-5">
+              <KpiContent
+                kpiData={{
+                  kpi: data.kpi,
+                  stats: data.kpiStats,
+                  progress: data.kpiProgress,
+                  analysis: data.kpiAnalysis,
+                  month: data.month,
+                }}
+                formatCurrency={formatCurrency}
+              />
             </div>
           </div>
         )}
