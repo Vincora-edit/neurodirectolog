@@ -62,16 +62,20 @@ interface CampaignsTableProps {
   campaigns: Campaign[];
   globalFilterCampaignId: string | null;
   globalFilterAdGroupId: string | null;
+  globalFilterAdId?: string | null;
   onCampaignFilterChange: (campaignId: string | null) => void;
   onAdGroupFilterChange: (adGroupId: string | null, campaignId?: string) => void;
+  onAdFilterChange?: (adId: string | null, adGroupId?: string, campaignId?: string) => void;
 }
 
 export function CampaignsTable({
   campaigns,
   globalFilterCampaignId,
   globalFilterAdGroupId,
+  globalFilterAdId,
   onCampaignFilterChange,
   onAdGroupFilterChange,
+  onAdFilterChange,
 }: CampaignsTableProps) {
   const [expandedCampaigns, setExpandedCampaigns] = useState<Set<string>>(new Set());
   const [expandedAdGroups, setExpandedAdGroups] = useState<Set<string>>(new Set());
@@ -478,7 +482,7 @@ export function CampaignsTable({
                                 >
                                   <td className="px-6 py-2 whitespace-nowrap">
                                     <div className="flex items-center gap-2 pl-14">
-                                      <div className="flex flex-col">
+                                      <div className="flex flex-col flex-1">
                                         <span className="text-xs text-gray-700 font-medium">
                                           {ad.adTitle || `Объявление ${ad.adId}`}
                                         </span>
@@ -486,6 +490,30 @@ export function CampaignsTable({
                                           ID: {ad.adId}
                                         </span>
                                       </div>
+                                      {onAdFilterChange && (
+                                        <button
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            if (globalFilterAdId === ad.adId) {
+                                              onAdFilterChange(null);
+                                            } else {
+                                              onAdFilterChange(ad.adId, adGroup.adGroupId, campaignId);
+                                            }
+                                          }}
+                                          className={`p-1 rounded transition-colors ${
+                                            globalFilterAdId === ad.adId
+                                              ? 'bg-green-100 text-green-600'
+                                              : 'text-gray-400 hover:text-green-600 hover:bg-green-50'
+                                          }`}
+                                          title={
+                                            globalFilterAdId === ad.adId
+                                              ? 'Убрать фильтр'
+                                              : 'Фильтровать по этому объявлению'
+                                          }
+                                        >
+                                          <Filter size={12} />
+                                        </button>
+                                      )}
                                     </div>
                                   </td>
                                   <td className="px-6 py-2 whitespace-nowrap text-right text-xs text-gray-600">

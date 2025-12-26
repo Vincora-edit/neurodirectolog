@@ -318,6 +318,16 @@ export function YandexDashboard() {
     setGlobalFilterAdId(null);
   };
 
+  const handleAdFilterChange = (adId: string | null, adGroupId?: string, campaignId?: string) => {
+    if (campaignId) {
+      setGlobalFilterCampaignId(campaignId);
+    }
+    if (adGroupId) {
+      setGlobalFilterAdGroupId(adGroupId);
+    }
+    setGlobalFilterAdId(adId);
+  };
+
   // Нет проектов
   if (!projectsLoading && projects.length === 0) {
     return (
@@ -414,8 +424,10 @@ export function YandexDashboard() {
         campaigns={campaigns}
         globalFilterCampaignId={globalFilterCampaignId}
         globalFilterAdGroupId={globalFilterAdGroupId}
+        globalFilterAdId={globalFilterAdId}
         onCampaignFilterChange={handleCampaignFilterChange}
         onAdGroupFilterChange={handleAdGroupFilterChange}
+        onAdFilterChange={handleAdFilterChange}
       />
 
       {/* График динамики */}
