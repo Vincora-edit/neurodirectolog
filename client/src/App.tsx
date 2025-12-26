@@ -24,6 +24,7 @@ const ConnectYandexSimple = lazy(() => import('./pages/ConnectYandexSimple'));
 const YandexDashboard = lazy(() => import('./pages/YandexDashboard').then(m => ({ default: m.YandexDashboard })));
 const AdminPanel = lazy(() => import('./pages/AdminPanel'));
 const PublicDashboard = lazy(() => import('./pages/PublicDashboard'));
+const Management = lazy(() => import('./pages/Management'));
 
 const queryClient = new QueryClient();
 
@@ -76,6 +77,7 @@ function App() {
               <Route path="yandex/callback" element={<ConnectYandex />} />
               <Route path="yandex-dashboard" element={<YandexDashboard />} />
               <Route path="admin" element={<AdminPanel />} />
+              <Route path="management" element={<Management />} />
             </Route>
           </Routes>
         </Suspense>

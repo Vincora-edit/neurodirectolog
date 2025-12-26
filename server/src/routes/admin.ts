@@ -337,4 +337,132 @@ router.get('/usage/:userId', authenticate, requireAdmin, async (req, res, next) 
   }
 });
 
+/**
+ * Управленческая таблица - сводка по всем проектам с KPI
+ */
+router.get('/management', authenticate, requireAdmin, async (req, res, next) => {
+  try {
+    const days = parseInt(req.query.days as string) || 30;
+
+    // Получаем все проекты
+    const allProjects = await projectStore.getByUserIdLightweight('', true);
+
+    // Для каждого проекта получаем подключения, статистику и KPI
+    const projectsData = await Promise.all(allProjects.map(async (project) => {
+      try {
+        const connections = await clickhouseService.getConnectionsByProjectId(project.id);
+
+        if (connections.length === 0) {
+          return null; // Пропускаем проекты без подключений
+        }
+
+        // Агрегируем статистику по всем подключениям проекта
+        let totalStats = {
+          impressions: 0,
+          clicks: 0,
+          cost: 0,
+          conversions: 0,
+          ctr: 0,
+          cpl: 0,
+        };
+
+        let kpiData: any = null;
+        const accountLogins: string[] = [];
+
+        for (const connection of connections) {
+          accountLogins.push(connection.login);
+
+          // Получаем статистику за период
+          const endDate = new Date();
+          const startDate = new Date();
+          startDate.setDate(startDate.getDate() - days);
+
+          const stats = await clickhouseService.query(`
+            SELECT
+              sum(impressions) as impressions,
+              sum(clicks) as clicks,
+              sum(cost) as cost
+            FROM campaign_performance
+            WHERE connection_id = {connectionId:String}
+              AND date >= {startDate:Date}
+              AND date <= {endDate:Date}
+          `.replace('{connectionId:String}', `'${connection.id}'`)
+           .replace('{startDate:Date}', `'${startDate.toISOString().split('T')[0]}'`)
+           .replace('{endDate:Date}', `'${endDate.toISOString().split('T')[0]}'`));
+
+          if (stats && stats.length > 0) {
+            totalStats.impressions += parseInt(stats[0].impressions) || 0;
+            totalStats.clicks += parseInt(stats[0].clicks) || 0;
+            totalStats.cost += parseFloat(stats[0].cost) || 0;
+          }
+
+          // Получаем конверсии
+          const convStats = await clickhouseService.query(`
+            SELECT sum(conversions) as conversions
+            FROM campaign_conversions
+            WHERE connection_id = {connectionId:String}
+              AND date >= {startDate:Date}
+              AND date <= {endDate:Date}
+          `.replace('{connectionId:String}', `'${connection.id}'`)
+           .replace('{startDate:Date}', `'${startDate.toISOString().split('T')[0]}'`)
+           .replace('{endDate:Date}', `'${endDate.toISOString().split('T')[0]}'`));
+
+          if (convStats && convStats.length > 0) {
+            totalStats.conversions += parseInt(convStats[0].conversions) || 0;
+          }
+
+          // Получаем KPI текущего месяца (берем первый попавшийся)
+          if (!kpiData) {
+            const now = new Date();
+            const month = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+            const kpi = await clickhouseService.getAccountKpi(connection.id, month);
+            if (kpi) {
+              const monthStats = await clickhouseService.getMonthStats(connection.id);
+              kpiData = {
+                targetCost: kpi.targetCost,
+                targetLeads: kpi.targetLeads,
+                targetCpl: kpi.targetCpl,
+                currentCost: monthStats.currentCost,
+                currentLeads: monthStats.currentLeads,
+                costProgress: kpi.targetCost > 0 ? Math.round((monthStats.currentCost / kpi.targetCost) * 100) : 0,
+                leadsProgress: kpi.targetLeads > 0 ? Math.round((monthStats.currentLeads / kpi.targetLeads) * 100) : 0,
+                dayProgress: Math.round(monthStats.dayProgress * 100),
+              };
+            }
+          }
+        }
+
+        // Рассчитываем CTR и CPL
+        totalStats.ctr = totalStats.impressions > 0
+          ? (totalStats.clicks / totalStats.impressions) * 100
+          : 0;
+        totalStats.cpl = totalStats.conversions > 0
+          ? totalStats.cost / totalStats.conversions
+          : 0;
+
+        return {
+          id: project.id,
+          name: project.name,
+          accounts: accountLogins,
+          stats: totalStats,
+          kpi: kpiData,
+        };
+      } catch (e) {
+        console.error(`Error processing project ${project.id}:`, e);
+        return null;
+      }
+    }));
+
+    // Фильтруем null значения
+    const filteredProjects = projectsData.filter(p => p !== null);
+
+    res.json({
+      period: days,
+      projects: filteredProjects,
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
 export default router;
