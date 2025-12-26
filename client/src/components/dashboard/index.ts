@@ -8,3 +8,6 @@ export { KpiWidget } from './KpiWidget';
 export { DashboardHeader } from './DashboardHeader';
 export { CampaignsTable } from './CampaignsTable';
 export { StatsChart } from './StatsChart';
+export { ReportsSection } from './ReportsSection';
+export { AIRecommendations } from './AIRecommendations';
+export { LandingPagesTable } from './LandingPagesTable';
