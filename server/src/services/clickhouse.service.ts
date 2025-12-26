@@ -979,8 +979,7 @@ export const clickhouseService = {
     let conversionParams: Record<string, any>;
 
     if (goalIds && goalIds.length > 0) {
-      // Фильтр по выбранным целям (IN clause)
-      const goalIdsString = goalIds.map(id => `'${id}'`).join(',');
+      // Фильтр по выбранным целям (параметризованный IN clause)
       conversionQuery = `
         SELECT
           campaign_id,
@@ -990,10 +989,10 @@ export const clickhouseService = {
         WHERE connection_id = {connectionId:String}
           AND date >= {startDate:Date}
           AND date <= {endDate:Date}
-          AND goal_id IN (${goalIdsString})
+          AND goal_id IN {goalIds:Array(String)}
         GROUP BY campaign_id
       `;
-      conversionParams = { connectionId, startDate: dateFrom, endDate: dateTo };
+      conversionParams = { connectionId, startDate: dateFrom, endDate: dateTo, goalIds };
     } else {
       // Без фильтра - все цели
       conversionQuery = `
@@ -1436,17 +1435,16 @@ export const clickhouseService = {
   async getAdTitlesFromDb(connectionId: string, adIds: string[]): Promise<Map<string, { title: string; title2?: string }>> {
     if (adIds.length === 0) return new Map();
 
-    const adIdsStr = adIds.map(id => `'${id}'`).join(',');
     const query = `
       SELECT ad_id, title, title2
       FROM ad_contents
       WHERE connection_id = {connectionId:String}
-        AND ad_id IN (${adIdsStr})
+        AND ad_id IN {adIds:Array(String)}
     `;
 
     const result = await client.query({
       query,
-      query_params: { connectionId },
+      query_params: { connectionId, adIds },
       format: 'JSONEachRow',
     });
 
@@ -1469,7 +1467,7 @@ export const clickhouseService = {
 
     // Определяем фильтр по целям
     const hasGoalFilter = goalIds && goalIds.length > 0;
-    const goalIdsString = hasGoalFilter ? goalIds!.map(id => `'${id}'`).join(',') : '';
+    const safeGoalIds = hasGoalFilter ? goalIds! : [];
 
     // Статистика по кампаниям
     const campaignQuery = `
@@ -1541,7 +1539,7 @@ export const clickhouseService = {
       WHERE connection_id = {connectionId:String}
         AND date >= {startDate:Date}
         AND date <= {endDate:Date}
-        AND goal_id IN (${goalIdsString})
+        AND goal_id IN {goalIds:Array(String)}
       GROUP BY campaign_id, ad_group_id
     ` : `
       SELECT
@@ -1568,7 +1566,7 @@ export const clickhouseService = {
       WHERE connection_id = {connectionId:String}
         AND date >= {startDate:Date}
         AND date <= {endDate:Date}
-        AND goal_id IN (${goalIdsString})
+        AND goal_id IN {goalIds:Array(String)}
       GROUP BY campaign_id, ad_group_id, ad_id
     ` : `
       SELECT
@@ -1584,12 +1582,17 @@ export const clickhouseService = {
       GROUP BY campaign_id, ad_group_id, ad_id
     `;
 
+    // Базовые параметры для всех запросов
+    const baseParams = { connectionId, startDate: dateFrom, endDate: dateTo };
+    // Параметры с goalIds для запросов конверсий (если есть фильтр)
+    const convParams = hasGoalFilter ? { ...baseParams, goalIds: safeGoalIds } : baseParams;
+
     const [campaignResult, adGroupResult, adResult, adGroupConvResult, adConvResult] = await Promise.all([
-      client.query({ query: campaignQuery, query_params: { connectionId, startDate: dateFrom, endDate: dateTo }, format: 'JSONEachRow' }),
-      client.query({ query: adGroupQuery, query_params: { connectionId, startDate: dateFrom, endDate: dateTo }, format: 'JSONEachRow' }),
-      client.query({ query: adQuery, query_params: { connectionId, startDate: dateFrom, endDate: dateTo }, format: 'JSONEachRow' }),
-      client.query({ query: adGroupConvQuery, query_params: { connectionId, startDate: dateFrom, endDate: dateTo }, format: 'JSONEachRow' }),
-      client.query({ query: adConvQuery, query_params: { connectionId, startDate: dateFrom, endDate: dateTo }, format: 'JSONEachRow' }),
+      client.query({ query: campaignQuery, query_params: baseParams, format: 'JSONEachRow' }),
+      client.query({ query: adGroupQuery, query_params: baseParams, format: 'JSONEachRow' }),
+      client.query({ query: adQuery, query_params: baseParams, format: 'JSONEachRow' }),
+      client.query({ query: adGroupConvQuery, query_params: convParams, format: 'JSONEachRow' }),
+      client.query({ query: adConvQuery, query_params: convParams, format: 'JSONEachRow' }),
     ]);
 
     const campaigns = await campaignResult.json<any>();
@@ -1873,7 +1876,7 @@ export const clickhouseService = {
 
     // Получаем статистику по объявлениям с группировкой по нормализованному href
     const hasGoalFilter = goalIds && goalIds.length > 0;
-    const goalIdsString = hasGoalFilter ? goalIds!.map(id => `'${id}'`).join(',') : '';
+    const safeGoalIds = hasGoalFilter ? goalIds! : [];
 
     // Функция нормализации URL - убираем query string (?...)
     // cutQueryString убирает всё после ? включительно
@@ -1912,7 +1915,7 @@ export const clickhouseService = {
       WHERE aconv.connection_id = {connectionId:String}
         AND aconv.date >= {dateFrom:Date}
         AND aconv.date <= {dateTo:Date}
-        AND aconv.goal_id IN (${goalIdsString})
+        AND aconv.goal_id IN {goalIds:Array(String)}
         AND ac.href IS NOT NULL
         AND ac.href != ''
       GROUP BY landing_page
@@ -1931,15 +1934,20 @@ export const clickhouseService = {
       GROUP BY landing_page
     `;
 
+    // Базовые параметры
+    const baseParams = { connectionId, dateFrom, dateTo };
+    // Параметры с goalIds для запроса конверсий (если есть фильтр)
+    const convParams = hasGoalFilter ? { ...baseParams, goalIds: safeGoalIds } : baseParams;
+
     const [perfResult, convResult] = await Promise.all([
       client.query({
         query: performanceQuery,
-        query_params: { connectionId, dateFrom, dateTo },
+        query_params: baseParams,
         format: 'JSONEachRow',
       }),
       client.query({
         query: conversionsQuery,
-        query_params: { connectionId, dateFrom, dateTo },
+        query_params: convParams,
         format: 'JSONEachRow',
       }),
     ]);

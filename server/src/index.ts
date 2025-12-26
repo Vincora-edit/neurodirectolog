@@ -3,6 +3,19 @@ import dotenv from 'dotenv';
 // ВАЖНО: Загружаем переменные окружения ПЕРВЫМ делом
 dotenv.config();
 
+// Валидация критических переменных окружения
+const JWT_SECRET = process.env.JWT_SECRET;
+if (!JWT_SECRET || JWT_SECRET.length < 32) {
+  console.error('❌ SECURITY ERROR: JWT_SECRET must be at least 32 characters');
+  console.error('   Generate one with: openssl rand -base64 32');
+  process.exit(1);
+}
+if (JWT_SECRET.includes('CHANGE_ME') || JWT_SECRET.includes('your-') || JWT_SECRET === 'test-secret-key-12345') {
+  console.error('❌ SECURITY ERROR: JWT_SECRET contains a placeholder value');
+  console.error('   Please set a secure random string in your .env file');
+  process.exit(1);
+}
+
 // Graceful error handling - предотвращает падение сервера
 process.on('uncaughtException', (error) => {
   console.error('❌ Uncaught Exception:', error);
