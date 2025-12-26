@@ -419,49 +419,52 @@ export function YandexDashboard() {
       {/* Метрики */}
       <MetricsCards totalStats={totalStats} budgetForecast={budgetForecastData} />
 
-      {/* Таблица кампаний */}
-      <CampaignsTable
-        campaigns={campaigns}
-        globalFilterCampaignId={globalFilterCampaignId}
-        globalFilterAdGroupId={globalFilterAdGroupId}
-        globalFilterAdId={globalFilterAdId}
-        onCampaignFilterChange={handleCampaignFilterChange}
-        onAdGroupFilterChange={handleAdGroupFilterChange}
-        onAdFilterChange={handleAdFilterChange}
-      />
-
-      {/* График динамики */}
-      {dailyStats.length > 0 && (
-        <StatsChart data={dailyStats} title="Динамика" />
-      )}
-
-      {/* Отчёты */}
-      {campaigns.length > 0 && (
-        <ReportsSection
-          activeProjectId={activeProjectId}
-          activeConnectionId={activeConnectionId}
-          dateRange={dateRange}
+      {/* Все сворачиваемые секции */}
+      <div className="space-y-4">
+        {/* Таблица кампаний */}
+        <CampaignsTable
+          campaigns={campaigns}
           globalFilterCampaignId={globalFilterCampaignId}
+          globalFilterAdGroupId={globalFilterAdGroupId}
+          globalFilterAdId={globalFilterAdId}
+          onCampaignFilterChange={handleCampaignFilterChange}
+          onAdGroupFilterChange={handleAdGroupFilterChange}
+          onAdFilterChange={handleAdFilterChange}
         />
-      )}
 
-      {/* Посадочные страницы */}
-      {campaigns.length > 0 && (
-        <LandingPagesTable
-          activeProjectId={activeProjectId}
-          activeConnectionId={activeConnectionId}
-          dateRange={dateRange}
-          selectedGoalIds={selectedGoalIds}
-          customDateMode={customDateMode}
-          customStartDate={customStartDate}
-          customEndDate={customEndDate}
-        />
-      )}
+        {/* График динамики */}
+        {dailyStats.length > 0 && (
+          <StatsChart data={dailyStats} title="Динамика" />
+        )}
 
-      {/* AI-рекомендации */}
-      {activeConnectionId && (
-        <AIRecommendations connectionId={activeConnectionId} />
-      )}
+        {/* Отчёты */}
+        {campaigns.length > 0 && (
+          <ReportsSection
+            activeProjectId={activeProjectId}
+            activeConnectionId={activeConnectionId}
+            dateRange={dateRange}
+            globalFilterCampaignId={globalFilterCampaignId}
+          />
+        )}
+
+        {/* Посадочные страницы */}
+        {campaigns.length > 0 && (
+          <LandingPagesTable
+            activeProjectId={activeProjectId}
+            activeConnectionId={activeConnectionId}
+            dateRange={dateRange}
+            selectedGoalIds={selectedGoalIds}
+            customDateMode={customDateMode}
+            customStartDate={customStartDate}
+            customEndDate={customEndDate}
+          />
+        )}
+
+        {/* AI-рекомендации */}
+        {activeConnectionId && (
+          <AIRecommendations connectionId={activeConnectionId} />
+        )}
+      </div>
     </div>
   );
 }

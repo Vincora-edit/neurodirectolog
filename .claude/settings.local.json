@@ -103,7 +103,8 @@
       "Bash(/Users/artemsubbotin/Desktop/Neurodirectolog/scripts/install-hooks.sh:*)",
       "Bash(/Users/artemsubbotin/Desktop/Neurodirectolog/scripts/status.sh:*)",
       "Bash(openssl rand:*)",
-      "Bash(wc:*)"
+      "Bash(wc:*)",
+      "Bash(scp:*)"
     ]
   }
 }

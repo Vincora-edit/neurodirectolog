@@ -2,7 +2,6 @@ import React, { useState, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { useQuery } from '@tanstack/react-query';
 import {
-  BarChart3,
   Users,
   FileText,
   Search,
@@ -595,11 +594,7 @@ export function ReportsSection({
   };
 
   return (
-    <div className="mb-8 space-y-4">
-      <div className="flex items-center gap-3">
-        <BarChart3 size={22} className="text-blue-600" />
-        <h2 className="text-xl font-bold text-gray-900">Отчёты</h2>
-      </div>
+    <div className="space-y-4">
 
       {/* Показатели аудитории */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">

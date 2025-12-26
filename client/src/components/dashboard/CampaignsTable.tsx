@@ -5,6 +5,7 @@ import {
   ChevronRight,
   ArrowUpDown,
   Filter,
+  LayoutGrid,
 } from 'lucide-react';
 
 interface Ad {
@@ -77,6 +78,7 @@ export function CampaignsTable({
   onAdGroupFilterChange,
   onAdFilterChange,
 }: CampaignsTableProps) {
+  const [isOpen, setIsOpen] = useState(true);
   const [expandedCampaigns, setExpandedCampaigns] = useState<Set<string>>(new Set());
   const [expandedAdGroups, setExpandedAdGroups] = useState<Set<string>>(new Set());
   const [sortColumn, setSortColumn] = useState<SortColumn>('totalCost');
@@ -193,14 +195,26 @@ export function CampaignsTable({
   const totalCpl = totals.conversions > 0 ? totals.cost / totals.conversions : 0;
 
   return (
-    <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden mb-8">
-      <div className="px-6 py-4 border-b border-gray-200">
-        <h2 className="text-xl font-bold text-gray-900">Кампании</h2>
-        <p className="text-sm text-gray-500 mt-1">
-          Нажмите на строку для раскрытия групп и объявлений
-        </p>
-      </div>
-      <div className="overflow-x-auto">
+    <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+      <button
+        onClick={() => setIsOpen(!isOpen)}
+        className="w-full px-5 py-4 flex items-center justify-between hover:bg-gray-50 transition-colors"
+      >
+        <div className="flex items-center gap-3">
+          <LayoutGrid size={20} className="text-blue-600" />
+          <span className="font-semibold text-gray-900">Кампании</span>
+          {campaigns.length > 0 && (
+            <span className="text-xs text-gray-400">{campaigns.length} кампаний</span>
+          )}
+        </div>
+        {isOpen ? (
+          <ChevronUp size={20} className="text-gray-400" />
+        ) : (
+          <ChevronDown size={20} className="text-gray-400" />
+        )}
+      </button>
+      {isOpen && (
+      <div className="border-t border-gray-200 overflow-x-auto">
         <table className="w-full">
           <thead className="bg-gray-50 border-b border-gray-200">
             <tr>
@@ -503,8 +517,8 @@ export function CampaignsTable({
                                         }}
                                         className={`p-1 rounded transition-colors ${
                                           globalFilterAdId === ad.adId
-                                            ? 'bg-green-100 text-green-600'
-                                            : 'text-gray-400 hover:text-green-600 hover:bg-green-50'
+                                            ? 'bg-orange-100 text-orange-600'
+                                            : 'text-orange-400 hover:text-orange-600 hover:bg-orange-50'
                                         }`}
                                         title={
                                           globalFilterAdId === ad.adId
@@ -605,6 +619,7 @@ export function CampaignsTable({
           </tbody>
         </table>
       </div>
+      )}
     </div>
   );
 }

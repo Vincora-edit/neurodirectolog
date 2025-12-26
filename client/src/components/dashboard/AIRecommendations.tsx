@@ -7,6 +7,7 @@ import {
   CheckCircle,
   Loader2,
   ChevronDown,
+  ChevronUp,
   ArrowRight,
 } from 'lucide-react';
 import { dashboardService } from '../../hooks/useDashboardData';
@@ -16,7 +17,7 @@ interface AIRecommendationsProps {
 }
 
 export function AIRecommendations({ connectionId }: AIRecommendationsProps) {
-  const [isOpen, setIsOpen] = useState(true);
+  const [isOpen, setIsOpen] = useState(false);
 
   const { data: recommendations, isLoading } = useQuery({
     queryKey: ['yandex-recommendations', connectionId],
@@ -54,29 +55,32 @@ export function AIRecommendations({ connectionId }: AIRecommendationsProps) {
   const hasCritical = Array.isArray(recommendations) && recommendations.some((r: any) => r.type === 'critical');
 
   return (
-    <div className="bg-white rounded-xl shadow-sm border border-gray-200 mb-6 overflow-hidden">
-      <div
-        className="flex items-center justify-between p-4 cursor-pointer hover:bg-gray-50 transition-colors"
+    <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+      <button
         onClick={() => setIsOpen(!isOpen)}
+        className="w-full px-5 py-4 flex items-center justify-between hover:bg-gray-50 transition-colors"
       >
         <div className="flex items-center gap-3">
-          <ChevronDown
-            size={20}
-            className={`text-gray-400 transition-transform ${!isOpen ? '-rotate-90' : ''}`}
-          />
           <Sparkles size={20} className="text-purple-600" />
-          <h3 className="text-lg font-semibold text-gray-900">AI-рекомендации</h3>
+          <span className="font-semibold text-gray-900">AI-рекомендации</span>
         </div>
-        {hasCritical && (
-          <div className="flex items-center gap-2 px-3 py-1 bg-red-100 text-red-700 rounded-full text-sm font-medium">
-            <AlertTriangle size={14} />
-            Требует внимания
-          </div>
-        )}
-      </div>
+        <div className="flex items-center gap-3">
+          {hasCritical && (
+            <div className="flex items-center gap-2 px-3 py-1 bg-red-100 text-red-700 rounded-full text-sm font-medium">
+              <AlertTriangle size={14} />
+              Требует внимания
+            </div>
+          )}
+          {isOpen ? (
+            <ChevronUp size={20} className="text-gray-400" />
+          ) : (
+            <ChevronDown size={20} className="text-gray-400" />
+          )}
+        </div>
+      </button>
 
       {isOpen && (
-        <div className="px-6 pb-6 pt-2">
+        <div className="border-t border-gray-200 px-5 py-4">
           {isLoading ? (
             <div className="text-center py-6 text-gray-500">
               <Loader2 size={32} className="mx-auto mb-3 animate-spin text-gray-300" />
