@@ -84,11 +84,20 @@ const syncQueue: Queue<SyncJobData> = new Bull<SyncJobData>('yandex-sync', {
 // Promise для ожидания готовности очереди
 queueReadyPromise = new Promise((resolve) => {
   // Таймаут на случай если Redis не отвечает
-  const timeout = setTimeout(() => {
-    if (!isQueueAvailable) {
+  const timeout = setTimeout(async () => {
+    // Проверяем реальное состояние через ping
+    try {
+      const client = await syncQueue.client;
+      if (client && client.status === 'ready') {
+        console.log('✅ Bull Queue подключена (проверено через ping)');
+        isQueueAvailable = true;
+      } else {
+        console.warn('⚠️ Bull Queue: таймаут подключения');
+      }
+    } catch {
       console.warn('⚠️ Bull Queue: таймаут подключения');
-      resolve();
     }
+    resolve();
   }, 5000);
 
   syncQueue.once('ready', () => {
