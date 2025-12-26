@@ -1894,7 +1894,7 @@ export const clickhouseService = {
         avg(ap.bounce_rate) as avg_bounce_rate,
         count(DISTINCT ap.ad_id) as ads_count
       FROM ad_performance ap
-      JOIN ad_contents FINAL ac ON ap.connection_id = ac.connection_id AND ap.ad_id = ac.ad_id
+      JOIN (SELECT * FROM ad_contents FINAL) ac ON ap.connection_id = ac.connection_id AND ap.ad_id = ac.ad_id
       WHERE ap.connection_id = {connectionId:String}
         AND ap.date >= {dateFrom:Date}
         AND ap.date <= {dateTo:Date}
@@ -1911,7 +1911,7 @@ export const clickhouseService = {
         sum(aconv.conversions) as total_conversions,
         sum(aconv.revenue) as total_revenue
       FROM ad_conversions aconv
-      JOIN ad_contents FINAL ac ON aconv.connection_id = ac.connection_id AND aconv.ad_id = ac.ad_id
+      JOIN (SELECT * FROM ad_contents FINAL) ac ON aconv.connection_id = ac.connection_id AND aconv.ad_id = ac.ad_id
       WHERE aconv.connection_id = {connectionId:String}
         AND aconv.date >= {dateFrom:Date}
         AND aconv.date <= {dateTo:Date}
@@ -1925,7 +1925,7 @@ export const clickhouseService = {
         sum(ap.conversions) as total_conversions,
         sum(ap.revenue) as total_revenue
       FROM ad_performance ap
-      JOIN ad_contents FINAL ac ON ap.connection_id = ac.connection_id AND ap.ad_id = ac.ad_id
+      JOIN (SELECT * FROM ad_contents FINAL) ac ON ap.connection_id = ac.connection_id AND ap.ad_id = ac.ad_id
       WHERE ap.connection_id = {connectionId:String}
         AND ap.date >= {dateFrom:Date}
         AND ap.date <= {dateTo:Date}
@@ -2269,7 +2269,7 @@ export const clickhouseService = {
           SUM(ap.conversions) as conversions,
           COUNT(DISTINCT ap.ad_id) as ad_count
         FROM ad_performance ap
-        LEFT JOIN ad_contents FINAL ac ON ap.ad_id = ac.ad_id AND ap.connection_id = ac.connection_id
+        LEFT JOIN (SELECT * FROM ad_contents FINAL) ac ON ap.ad_id = ac.ad_id AND ap.connection_id = ac.connection_id
         WHERE ${whereClause}
         GROUP BY ac.title, ac.title2, ac.text
         ORDER BY cost DESC
