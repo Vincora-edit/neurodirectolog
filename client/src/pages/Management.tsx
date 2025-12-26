@@ -43,7 +43,7 @@ interface ManagementResponse {
   projects: ProjectData[];
 }
 
-type SortColumn = 'name' | 'impressions' | 'clicks' | 'cost' | 'conversions' | 'cpl' | 'costProgress' | 'leadsProgress';
+type SortColumn = 'name' | 'impressions' | 'clicks' | 'cost' | 'conversions' | 'cpl';
 type SortDirection = 'asc' | 'desc';
 
 export default function Management() {
@@ -87,8 +87,6 @@ export default function Management() {
       case 'cost': return project.stats.cost;
       case 'conversions': return project.stats.conversions;
       case 'cpl': return project.stats.cpl;
-      case 'costProgress': return project.kpi?.costProgress || 0;
-      case 'leadsProgress': return project.kpi?.leadsProgress || 0;
       default: return 0;
     }
   };
@@ -122,29 +120,6 @@ export default function Management() {
       </div>
     </th>
   );
-
-  // Индикатор прогресса KPI
-  const KpiIndicator = ({ progress, dayProgress }: { progress: number; dayProgress: number }) => {
-    const isAhead = progress >= dayProgress;
-    const diff = progress - dayProgress;
-
-    return (
-      <div className="flex items-center gap-2">
-        <div className="w-16 h-2 bg-gray-200 rounded-full overflow-hidden">
-          <div
-            className={`h-full rounded-full ${isAhead ? 'bg-green-500' : 'bg-amber-500'}`}
-            style={{ width: `${Math.min(progress, 100)}%` }}
-          />
-        </div>
-        <span className={`text-xs font-medium ${isAhead ? 'text-green-600' : 'text-amber-600'}`}>
-          {progress}%
-        </span>
-        <span className={`text-xs ${diff >= 0 ? 'text-green-500' : 'text-red-500'}`}>
-          ({diff >= 0 ? '+' : ''}{diff}%)
-        </span>
-      </div>
-    );
-  };
 
   if (isLoading) {
     return (
@@ -274,8 +249,6 @@ export default function Management() {
                 <SortHeader column="cost" label="Расход" />
                 <SortHeader column="conversions" label="Лиды" />
                 <SortHeader column="cpl" label="CPL" />
-                <SortHeader column="costProgress" label="KPI Расход" />
-                <SortHeader column="leadsProgress" label="KPI Лиды" />
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200">
@@ -299,13 +272,41 @@ export default function Management() {
                   <td className="px-3 py-3 text-right text-gray-900">
                     {formatNumber(project.stats.clicks)}
                   </td>
-                  <td className="px-3 py-3 text-right font-semibold text-gray-900">
-                    {formatCurrency(project.stats.cost)}
+                  <td className="px-3 py-3 text-right">
+                    <div className="flex flex-col items-end">
+                      <span className={`font-semibold ${
+                        project.kpi?.targetCost && project.kpi.costProgress > project.kpi.dayProgress + 10
+                          ? 'text-red-600'
+                          : project.kpi?.targetCost && project.kpi.costProgress >= project.kpi.dayProgress - 5
+                          ? 'text-green-600'
+                          : 'text-gray-900'
+                      }`}>
+                        {formatCurrency(project.stats.cost)}
+                      </span>
+                      {project.kpi?.targetCost ? (
+                        <span className="text-xs text-gray-400">
+                          {project.kpi.costProgress}% из {formatCurrency(project.kpi.targetCost)}
+                        </span>
+                      ) : null}
+                    </div>
                   </td>
                   <td className="px-3 py-3 text-right">
-                    <span className={`font-medium ${project.stats.conversions > 0 ? 'text-green-600' : 'text-gray-400'}`}>
-                      {formatNumber(project.stats.conversions)}
-                    </span>
+                    <div className="flex flex-col items-end">
+                      <span className={`font-medium ${
+                        project.kpi?.targetLeads && project.kpi.leadsProgress >= project.kpi.dayProgress
+                          ? 'text-green-600'
+                          : project.kpi?.targetLeads && project.kpi.leadsProgress < project.kpi.dayProgress - 10
+                          ? 'text-red-600'
+                          : project.stats.conversions > 0 ? 'text-amber-600' : 'text-gray-400'
+                      }`}>
+                        {formatNumber(project.stats.conversions)}
+                      </span>
+                      {project.kpi?.targetLeads ? (
+                        <span className="text-xs text-gray-400">
+                          {project.kpi.leadsProgress}% из {project.kpi.targetLeads}
+                        </span>
+                      ) : null}
+                    </div>
                   </td>
                   <td className="px-3 py-3 text-right">
                     {project.stats.cpl > 0 ? (
@@ -327,20 +328,6 @@ export default function Management() {
                       </div>
                     ) : '—'}
                   </td>
-                  <td className="px-3 py-3">
-                    {project.kpi ? (
-                      <KpiIndicator progress={project.kpi.costProgress} dayProgress={project.kpi.dayProgress} />
-                    ) : (
-                      <span className="text-xs text-gray-400">Не настроен</span>
-                    )}
-                  </td>
-                  <td className="px-3 py-3">
-                    {project.kpi ? (
-                      <KpiIndicator progress={project.kpi.leadsProgress} dayProgress={project.kpi.dayProgress} />
-                    ) : (
-                      <span className="text-xs text-gray-400">Не настроен</span>
-                    )}
-                  </td>
                 </tr>
               ))}
 
@@ -354,8 +341,6 @@ export default function Management() {
                   <td className="px-3 py-3 text-right text-gray-900">{formatCurrency(totals.cost)}</td>
                   <td className="px-3 py-3 text-right text-gray-900">{formatNumber(totals.conversions)}</td>
                   <td className="px-3 py-3 text-right text-gray-900">{totalCpl > 0 ? formatCurrency(totalCpl) : '—'}</td>
-                  <td className="px-3 py-3"></td>
-                  <td className="px-3 py-3"></td>
                 </tr>
               )}
             </tbody>
