@@ -29,6 +29,7 @@ services:
     volumes:
       - clickhouse_data:/var/lib/clickhouse
       - ./clickhouse/migrations:/docker-entrypoint-initdb.d
+      - ./clickhouse/users-override.xml:/etc/clickhouse-server/users.d/users-override.xml:ro
     ports:
       - "8124:8123"
       - "9001:9000"
