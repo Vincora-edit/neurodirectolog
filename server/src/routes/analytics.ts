@@ -26,11 +26,11 @@ router.post('/target-audience', authenticate, async (req, res, next) => {
     // Если указан projectId, сохраняем анализ в проект
     if (projectId) {
       const userId = (req as AuthRequest).userId;
-      const project = projectStore.getById(projectId);
+      const project = await projectStore.getById(projectId);
 
       if (project && project.userId === userId) {
         const existingAnalytics = project.analytics || {};
-        projectStore.saveAnalytics(projectId, {
+        await projectStore.saveAnalytics(projectId, {
           ...existingAnalytics,
           targetAudienceAnalysis: analysis,
         });
@@ -66,11 +66,11 @@ router.post('/landing-page', authenticate, async (req, res, next) => {
     // Если указан projectId, сохраняем анализ в проект
     if (projectId) {
       const userId = (req as AuthRequest).userId;
-      const project = projectStore.getById(projectId);
+      const project = await projectStore.getById(projectId);
 
       if (project && project.userId === userId) {
         const existingAnalytics = project.analytics || {};
-        projectStore.saveAnalytics(projectId, {
+        await projectStore.saveAnalytics(projectId, {
           ...existingAnalytics,
           landingPageAnalysis: analysis,
         });
@@ -109,11 +109,11 @@ router.post('/media-plan', authenticate, async (req, res, next) => {
     // Если указан projectId, сохраняем медиаплан в проект
     if (projectId) {
       const userId = (req as AuthRequest).userId;
-      const project = projectStore.getById(projectId);
+      const project = await projectStore.getById(projectId);
 
       if (project && project.userId === userId) {
         const existingAnalytics = project.analytics || {};
-        projectStore.saveAnalytics(projectId, {
+        await projectStore.saveAnalytics(projectId, {
           ...existingAnalytics,
           mediaPlan: mediaPlan,
         });
@@ -156,11 +156,11 @@ router.post('/full-analysis', authenticate, async (req, res, next) => {
     // Если указан projectId, сохраняем полный анализ в проект
     if (projectId) {
       const userId = (req as AuthRequest).userId;
-      const project = projectStore.getById(projectId);
+      const project = await projectStore.getById(projectId);
 
       if (project && project.userId === userId) {
         const existingAnalytics = project.analytics || {};
-        projectStore.saveAnalytics(projectId, {
+        await projectStore.saveAnalytics(projectId, {
           ...existingAnalytics,
           ...fullAnalysis,
         });

@@ -22,7 +22,7 @@ router.post('/create', authenticate, async (req, res, next) => {
       throw createError('Business name, niche and description are required in brief', 400);
     }
 
-    const project = projectStore.create(userId, name, brief as ProjectBrief);
+    const project = await projectStore.create(userId!, name, brief as ProjectBrief);
 
     res.json({
       success: true,
@@ -42,7 +42,7 @@ router.get('/list', authenticate, async (req, res, next) => {
     const userId = authReq.userId;
     const isAdmin = authReq.isAdmin || false;
     // Возвращаем проекты пользователя (админы видят все)
-    const projects = projectStore.getByUserIdLightweight(userId!, isAdmin);
+    const projects = await projectStore.getByUserIdLightweight(userId!, isAdmin);
 
     res.json({
       success: true,
@@ -61,7 +61,7 @@ router.get('/:projectId', authenticate, async (req, res, next) => {
     const { projectId } = req.params;
     const userId = (req as AuthRequest).userId;
 
-    const project = projectStore.getById(projectId);
+    const project = await projectStore.getById(projectId);
 
     if (!project) {
       throw createError('Project not found', 404);
@@ -89,7 +89,7 @@ router.put('/:projectId', authenticate, async (req, res, next) => {
     const userId = (req as AuthRequest).userId;
     const updates = req.body;
 
-    const project = projectStore.getById(projectId);
+    const project = await projectStore.getById(projectId);
 
     if (!project) {
       throw createError('Project not found', 404);
@@ -99,7 +99,7 @@ router.put('/:projectId', authenticate, async (req, res, next) => {
       throw createError('Access denied', 403);
     }
 
-    const updatedProject = projectStore.update(projectId, updates);
+    const updatedProject = await projectStore.update(projectId, updates);
 
     res.json({
       success: true,
@@ -119,7 +119,7 @@ router.delete('/:projectId', authenticate, async (req, res, next) => {
     const userId = (req as AuthRequest).userId;
     const isAdmin = (req as AuthRequest).isAdmin;
 
-    const project = projectStore.getById(projectId);
+    const project = await projectStore.getById(projectId);
 
     if (!project) {
       throw createError('Project not found', 404);
@@ -130,7 +130,7 @@ router.delete('/:projectId', authenticate, async (req, res, next) => {
       throw createError('Access denied', 403);
     }
 
-    const deleted = projectStore.delete(projectId);
+    const deleted = await projectStore.delete(projectId);
 
     if (!deleted) {
       throw createError('Project not found', 404);
@@ -153,7 +153,7 @@ router.get('/:projectId/:module', authenticate, async (req, res, next) => {
     const { projectId, module } = req.params;
     const userId = (req as AuthRequest).userId;
 
-    const project = projectStore.getById(projectId);
+    const project = await projectStore.getById(projectId);
 
     if (!project) {
       throw createError('Project not found', 404);

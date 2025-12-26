@@ -2294,4 +2294,481 @@ export const clickhouseService = {
       adCount: parseInt(row.ad_count) || 1, // Количество объявлений с таким текстом
     }));
   },
+
+  // ===========================================
+  // Users CRUD
+  // ===========================================
+
+  async createUser(user: {
+    id: string;
+    email: string;
+    passwordHash: string;
+    name: string;
+    isAdmin?: boolean;
+  }): Promise<void> {
+    await client.insert({
+      table: 'users',
+      values: [{
+        id: user.id,
+        email: user.email,
+        password_hash: user.passwordHash,
+        name: user.name,
+        is_admin: user.isAdmin ? 1 : 0,
+        created_at: formatDate(new Date()),
+        updated_at: formatDate(new Date()),
+      }],
+      format: 'JSONEachRow',
+    });
+  },
+
+  async getUserById(id: string): Promise<{
+    id: string;
+    email: string;
+    passwordHash: string;
+    name: string;
+    isAdmin: boolean;
+    createdAt: Date;
+  } | null> {
+    const result = await client.query({
+      query: `
+        SELECT id, email, password_hash, name, is_admin, created_at
+        FROM users FINAL
+        WHERE id = {id:String}
+        LIMIT 1
+      `,
+      query_params: { id },
+      format: 'JSONEachRow',
+    });
+
+    const rows = await result.json<any>();
+    if (rows.length === 0) return null;
+
+    const row = rows[0];
+    return {
+      id: row.id,
+      email: row.email,
+      passwordHash: row.password_hash,
+      name: row.name,
+      isAdmin: row.is_admin === 1,
+      createdAt: new Date(row.created_at),
+    };
+  },
+
+  async getUserByEmail(email: string): Promise<{
+    id: string;
+    email: string;
+    passwordHash: string;
+    name: string;
+    isAdmin: boolean;
+    createdAt: Date;
+  } | null> {
+    const result = await client.query({
+      query: `
+        SELECT id, email, password_hash, name, is_admin, created_at
+        FROM users FINAL
+        WHERE email = {email:String}
+        LIMIT 1
+      `,
+      query_params: { email },
+      format: 'JSONEachRow',
+    });
+
+    const rows = await result.json<any>();
+    if (rows.length === 0) return null;
+
+    const row = rows[0];
+    return {
+      id: row.id,
+      email: row.email,
+      passwordHash: row.password_hash,
+      name: row.name,
+      isAdmin: row.is_admin === 1,
+      createdAt: new Date(row.created_at),
+    };
+  },
+
+  async getAllUsers(): Promise<Array<{
+    id: string;
+    email: string;
+    name: string;
+    isAdmin: boolean;
+    createdAt: Date;
+  }>> {
+    const result = await client.query({
+      query: `
+        SELECT id, email, name, is_admin, created_at
+        FROM users FINAL
+        ORDER BY created_at DESC
+      `,
+      format: 'JSONEachRow',
+    });
+
+    const rows = await result.json<any>();
+    return rows.map((row: any) => ({
+      id: row.id,
+      email: row.email,
+      name: row.name,
+      isAdmin: row.is_admin === 1,
+      createdAt: new Date(row.created_at),
+    }));
+  },
+
+  async updateUser(id: string, updates: {
+    email?: string;
+    passwordHash?: string;
+    name?: string;
+    isAdmin?: boolean;
+  }): Promise<void> {
+    // ClickHouse ReplacingMergeTree - вставляем новую версию записи
+    const current = await this.getUserById(id);
+    if (!current) return;
+
+    await client.insert({
+      table: 'users',
+      values: [{
+        id,
+        email: updates.email ?? current.email,
+        password_hash: updates.passwordHash ?? current.passwordHash,
+        name: updates.name ?? current.name,
+        is_admin: updates.isAdmin !== undefined ? (updates.isAdmin ? 1 : 0) : (current.isAdmin ? 1 : 0),
+        created_at: formatDate(current.createdAt),
+        updated_at: formatDate(new Date()),
+      }],
+      format: 'JSONEachRow',
+    });
+  },
+
+  async deleteUser(id: string): Promise<void> {
+    // В ClickHouse используем ALTER TABLE DELETE для удаления
+    await client.command({
+      query: `ALTER TABLE users DELETE WHERE id = {id:String}`,
+      query_params: { id },
+    });
+  },
+
+  async countUsers(): Promise<number> {
+    const result = await client.query({
+      query: `SELECT count() as cnt FROM users FINAL`,
+      format: 'JSONEachRow',
+    });
+    const rows = await result.json<any>();
+    return parseInt(rows[0]?.cnt) || 0;
+  },
+
+  // ===========================================
+  // Projects CRUD
+  // ===========================================
+
+  async createProject(project: {
+    id: string;
+    userId: string;
+    name: string;
+    brief: any;
+  }): Promise<void> {
+    await client.insert({
+      table: 'projects',
+      values: [{
+        id: project.id,
+        user_id: project.userId,
+        name: project.name,
+        brief: JSON.stringify(project.brief),
+        semantics: '',
+        creatives: '',
+        ads: '',
+        complete_ads: '',
+        minus_words: '',
+        keyword_analysis: '',
+        campaigns: '',
+        strategy: '',
+        analytics: '',
+        created_at: formatDate(new Date()),
+        updated_at: formatDate(new Date()),
+      }],
+      format: 'JSONEachRow',
+    });
+  },
+
+  async getProjectById(id: string): Promise<any | null> {
+    const result = await client.query({
+      query: `
+        SELECT *
+        FROM projects FINAL
+        WHERE id = {id:String}
+        LIMIT 1
+      `,
+      query_params: { id },
+      format: 'JSONEachRow',
+    });
+
+    const rows = await result.json<any>();
+    if (rows.length === 0) return null;
+
+    return this.parseProjectRow(rows[0]);
+  },
+
+  async getProjectsByUserId(userId: string, isAdmin: boolean = false): Promise<any[]> {
+    // Админы видят все проекты, обычные пользователи - только свои
+    const query = isAdmin
+      ? `SELECT * FROM projects FINAL ORDER BY created_at DESC`
+      : `SELECT * FROM projects FINAL WHERE user_id = {userId:String} ORDER BY created_at DESC`;
+
+    const result = await client.query({
+      query,
+      query_params: isAdmin ? {} : { userId },
+      format: 'JSONEachRow',
+    });
+
+    const rows = await result.json<any>();
+    return rows.map((row: any) => this.parseProjectRow(row));
+  },
+
+  async getProjectsLightweight(userId: string, isAdmin: boolean = false): Promise<Array<{
+    id: string;
+    userId: string;
+    name: string;
+    brief: any;
+    hasSemantics: boolean;
+    hasCreatives: boolean;
+    hasAds: boolean;
+    hasCompleteAds: boolean;
+    hasMinusWords: boolean;
+    hasKeywordAnalysis: boolean;
+    hasCampaigns: boolean;
+    hasStrategy: boolean;
+    hasAnalytics: boolean;
+    createdAt: Date;
+    updatedAt: Date;
+  }>> {
+    const query = isAdmin
+      ? `SELECT id, user_id, name, brief,
+           length(semantics) > 2 as has_semantics,
+           length(creatives) > 2 as has_creatives,
+           length(ads) > 2 as has_ads,
+           length(complete_ads) > 2 as has_complete_ads,
+           length(minus_words) > 2 as has_minus_words,
+           length(keyword_analysis) > 2 as has_keyword_analysis,
+           length(campaigns) > 2 as has_campaigns,
+           length(strategy) > 2 as has_strategy,
+           length(analytics) > 2 as has_analytics,
+           created_at, updated_at
+         FROM projects FINAL
+         ORDER BY created_at DESC`
+      : `SELECT id, user_id, name, brief,
+           length(semantics) > 2 as has_semantics,
+           length(creatives) > 2 as has_creatives,
+           length(ads) > 2 as has_ads,
+           length(complete_ads) > 2 as has_complete_ads,
+           length(minus_words) > 2 as has_minus_words,
+           length(keyword_analysis) > 2 as has_keyword_analysis,
+           length(campaigns) > 2 as has_campaigns,
+           length(strategy) > 2 as has_strategy,
+           length(analytics) > 2 as has_analytics,
+           created_at, updated_at
+         FROM projects FINAL
+         WHERE user_id = {userId:String}
+         ORDER BY created_at DESC`;
+
+    const result = await client.query({
+      query,
+      query_params: isAdmin ? {} : { userId },
+      format: 'JSONEachRow',
+    });
+
+    const rows = await result.json<any>();
+    return rows.map((row: any) => ({
+      id: row.id,
+      userId: row.user_id,
+      name: row.name,
+      brief: row.brief ? JSON.parse(row.brief) : {},
+      hasSemantics: row.has_semantics === 1,
+      hasCreatives: row.has_creatives === 1,
+      hasAds: row.has_ads === 1,
+      hasCompleteAds: row.has_complete_ads === 1,
+      hasMinusWords: row.has_minus_words === 1,
+      hasKeywordAnalysis: row.has_keyword_analysis === 1,
+      hasCampaigns: row.has_campaigns === 1,
+      hasStrategy: row.has_strategy === 1,
+      hasAnalytics: row.has_analytics === 1,
+      createdAt: new Date(row.created_at),
+      updatedAt: new Date(row.updated_at),
+    }));
+  },
+
+  async updateProject(id: string, updates: Partial<{
+    name: string;
+    brief: any;
+    semantics: any;
+    creatives: any;
+    ads: any;
+    completeAds: any;
+    minusWords: any;
+    keywordAnalysis: any;
+    campaigns: any;
+    strategy: any;
+    analytics: any;
+  }>): Promise<void> {
+    const current = await this.getProjectById(id);
+    if (!current) return;
+
+    const row: Record<string, any> = {
+      id,
+      user_id: current.userId,
+      name: updates.name ?? current.name,
+      brief: JSON.stringify(updates.brief ?? current.brief ?? {}),
+      semantics: JSON.stringify(updates.semantics ?? current.semantics ?? ''),
+      creatives: JSON.stringify(updates.creatives ?? current.creatives ?? ''),
+      ads: JSON.stringify(updates.ads ?? current.ads ?? ''),
+      complete_ads: JSON.stringify(updates.completeAds ?? current.completeAds ?? ''),
+      minus_words: JSON.stringify(updates.minusWords ?? current.minusWords ?? ''),
+      keyword_analysis: JSON.stringify(updates.keywordAnalysis ?? current.keywordAnalysis ?? ''),
+      campaigns: JSON.stringify(updates.campaigns ?? current.campaigns ?? ''),
+      strategy: JSON.stringify(updates.strategy ?? current.strategy ?? ''),
+      analytics: JSON.stringify(updates.analytics ?? current.analytics ?? ''),
+      created_at: formatDate(current.createdAt),
+      updated_at: formatDate(new Date()),
+    };
+
+    await client.insert({
+      table: 'projects',
+      values: [row],
+      format: 'JSONEachRow',
+    });
+  },
+
+  async deleteProject(id: string): Promise<void> {
+    await client.command({
+      query: `ALTER TABLE projects DELETE WHERE id = {id:String}`,
+      query_params: { id },
+    });
+  },
+
+  // Helper для парсинга строки проекта из ClickHouse
+  parseProjectRow(row: any): any {
+    const parseJson = (str: string) => {
+      if (!str || str === '' || str === '""') return undefined;
+      try {
+        return JSON.parse(str);
+      } catch {
+        return undefined;
+      }
+    };
+
+    return {
+      id: row.id,
+      userId: row.user_id,
+      name: row.name,
+      brief: parseJson(row.brief) || {},
+      semantics: parseJson(row.semantics),
+      creatives: parseJson(row.creatives),
+      ads: parseJson(row.ads),
+      completeAds: parseJson(row.complete_ads),
+      minusWords: parseJson(row.minus_words),
+      keywordAnalysis: parseJson(row.keyword_analysis),
+      campaigns: parseJson(row.campaigns),
+      strategy: parseJson(row.strategy),
+      analytics: parseJson(row.analytics),
+      createdAt: new Date(row.created_at),
+      updatedAt: new Date(row.updated_at),
+    };
+  },
+
+  // Методы для сохранения отдельных модулей проекта
+  async saveProjectSemantics(projectId: string, keywords: string[]): Promise<void> {
+    await this.updateProject(projectId, {
+      semantics: { keywords, generatedAt: new Date() },
+    });
+  },
+
+  async saveProjectCreatives(projectId: string, ideas: any[]): Promise<void> {
+    await this.updateProject(projectId, {
+      creatives: { ideas, generatedAt: new Date() },
+    });
+  },
+
+  async saveProjectAds(projectId: string, headlines: string[], texts: string[]): Promise<void> {
+    await this.updateProject(projectId, {
+      ads: { headlines, texts, generatedAt: new Date() },
+    });
+  },
+
+  async saveProjectMinusWords(projectId: string, words: string[], analysis?: any): Promise<void> {
+    await this.updateProject(projectId, {
+      minusWords: { words, analysis, generatedAt: new Date() },
+    });
+  },
+
+  async saveProjectCompleteAds(projectId: string, completeAds: any): Promise<void> {
+    await this.updateProject(projectId, { completeAds });
+  },
+
+  async saveProjectKeywordAnalysis(projectId: string, analysis: any): Promise<void> {
+    await this.updateProject(projectId, {
+      keywordAnalysis: { ...analysis, generatedAt: new Date() },
+    });
+  },
+
+  async saveProjectCampaigns(projectId: string, structure: any): Promise<void> {
+    await this.updateProject(projectId, {
+      campaigns: { structure, generatedAt: new Date() },
+    });
+  },
+
+  async saveProjectStrategy(projectId: string, plan: any): Promise<void> {
+    await this.updateProject(projectId, {
+      strategy: { plan, generatedAt: new Date() },
+    });
+  },
+
+  async saveProjectAnalytics(projectId: string, analytics: any): Promise<void> {
+    await this.updateProject(projectId, {
+      analytics: { ...analytics, generatedAt: new Date() },
+    });
+  },
+
+  // Инициализация таблиц users/projects (выполняется при старте)
+  async initializeUserProjectsTables(): Promise<void> {
+    // Создаем таблицу users
+    await client.command({
+      query: `
+        CREATE TABLE IF NOT EXISTS users (
+          id String,
+          email String,
+          password_hash String,
+          name String,
+          is_admin UInt8 DEFAULT 0,
+          created_at DateTime DEFAULT now(),
+          updated_at DateTime DEFAULT now()
+        ) ENGINE = ReplacingMergeTree(updated_at)
+        ORDER BY (id)
+        SETTINGS index_granularity = 8192
+      `,
+    });
+
+    // Создаем таблицу projects
+    await client.command({
+      query: `
+        CREATE TABLE IF NOT EXISTS projects (
+          id String,
+          user_id String,
+          name String,
+          brief String,
+          semantics String,
+          creatives String,
+          ads String,
+          complete_ads String,
+          minus_words String,
+          keyword_analysis String,
+          campaigns String,
+          strategy String,
+          analytics String,
+          created_at DateTime DEFAULT now(),
+          updated_at DateTime DEFAULT now()
+        ) ENGINE = ReplacingMergeTree(updated_at)
+        ORDER BY (id)
+        SETTINGS index_granularity = 8192
+      `,
+    });
+
+    console.log('✅ ClickHouse tables users/projects initialized');
+  },
 };

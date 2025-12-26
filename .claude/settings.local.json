@@ -101,7 +101,8 @@
       "Bash(git fetch:*)",
       "Bash(git checkout:*)",
       "Bash(/Users/artemsubbotin/Desktop/Neurodirectolog/scripts/install-hooks.sh:*)",
-      "Bash(/Users/artemsubbotin/Desktop/Neurodirectolog/scripts/status.sh:*)"
+      "Bash(/Users/artemsubbotin/Desktop/Neurodirectolog/scripts/status.sh:*)",
+      "Bash(openssl rand:*)"
     ]
   }
 }

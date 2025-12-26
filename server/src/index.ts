@@ -45,6 +45,7 @@ import keywordsRouter from './routes/keywords';
 import yandexRouter from './routes/yandex';
 import adminRouter from './routes/admin';
 import { startSyncJob } from './jobs/sync.job';
+import { redisService } from './services/redis.service';
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -132,11 +133,26 @@ app.use('/api/admin', apiLimiter, adminRouter);
 // Error handling
 app.use(errorHandler);
 
-app.listen(PORT, () => {
+app.listen(PORT, async () => {
   console.log(`🚀 Server is running on http://localhost:${PORT}`);
   console.log(`📊 Environment: ${process.env.NODE_ENV || 'development'}`);
+
+  // Подключаемся к Redis (graceful degradation если недоступен)
+  const redisConnected = await redisService.connect();
+  if (redisConnected) {
+    console.log('📦 Redis кеширование включено');
+  } else {
+    console.log('⚠️  Redis недоступен, работаем без кеша');
+  }
 
   // Start the cron job for Yandex.Direct sync
   startSyncJob();
   console.log(`⏰ Yandex.Direct sync job started`);
+});
+
+// Graceful shutdown
+process.on('SIGTERM', async () => {
+  console.log('🛑 Получен SIGTERM, завершаем работу...');
+  await redisService.disconnect();
+  process.exit(0);
 });

@@ -1,6 +1,24 @@
 version: '3.8'
 
 services:
+  redis:
+    image: redis:7-alpine
+    container_name: neurodirectolog-redis
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    volumes:
+      - redis_data:/data
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    restart: unless-stopped
+    networks:
+      - neurodirectolog-network
+
   clickhouse:
     image: clickhouse/clickhouse-server:latest
     container_name: neurodirectolog-clickhouse
@@ -42,12 +60,16 @@ services:
       JWT_SECRET: ${JWT_SECRET}
       CORS_ORIGIN: ${CORS_ORIGIN}
       PRODUCTION_URL: ${PRODUCTION_URL}
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
     volumes:
       - server_data:/app/data
     ports:
       - "3001:3001"
     depends_on:
       clickhouse:
+        condition: service_healthy
+      redis:
         condition: service_healthy
     healthcheck:
       test: ["CMD", "wget", "--spider", "-q", "http://localhost:3001/health"]
@@ -82,6 +104,8 @@ services:
       - neurodirectolog-network
 
 volumes:
+  redis_data:
+    driver: local
   clickhouse_data:
     driver: local
   server_data:

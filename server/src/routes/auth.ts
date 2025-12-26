@@ -1,10 +1,9 @@
 import { Router } from 'express';
 import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
-import fs from 'fs';
-import path from 'path';
 import Joi from 'joi';
 import { createError } from '../middleware/errorHandler';
+import { clickhouseService } from '../services/clickhouse.service';
 
 const router = Router();
 
@@ -15,51 +14,33 @@ if (!JWT_SECRET) {
   throw new Error('FATAL: JWT_SECRET environment variable must be set');
 }
 
-// Файловое хранилище пользователей
-const USERS_FILE = path.join(process.cwd(), 'data', 'users.json');
-
-// Загрузка пользователей из файла
-function loadUsers(): any[] {
+// Инициализация: создаем таблицы и админа при первом запуске
+async function initializeAuth() {
   try {
-    if (fs.existsSync(USERS_FILE)) {
-      const data = fs.readFileSync(USERS_FILE, 'utf-8');
-      return JSON.parse(data);
+    // Создаем таблицы если не существуют
+    await clickhouseService.initializeUserProjectsTables();
+
+    // Проверяем, есть ли пользователи
+    const userCount = await clickhouseService.countUsers();
+    if (userCount === 0) {
+      // Создаем админа при первом запуске
+      const adminPassword = await bcrypt.hash('admin123', 10);
+      await clickhouseService.createUser({
+        id: 'admin-1',
+        email: 'admin@neurodirectolog.ru',
+        passwordHash: adminPassword,
+        name: 'Администратор',
+        isAdmin: true,
+      });
+      console.log('✅ Admin user created: admin@neurodirectolog.ru / admin123');
     }
   } catch (error) {
-    console.error('Error loading users:', error);
-  }
-  return [];
-}
-
-// Сохранение пользователей в файл
-function saveUsers(users: any[]): void {
-  try {
-    const dir = path.dirname(USERS_FILE);
-    if (!fs.existsSync(dir)) {
-      fs.mkdirSync(dir, { recursive: true });
-    }
-    fs.writeFileSync(USERS_FILE, JSON.stringify(users, null, 2), 'utf-8');
-  } catch (error) {
-    console.error('Error saving users:', error);
+    console.error('Error initializing auth:', error);
   }
 }
 
-// Инициализация с админским пользователем
-let users = loadUsers();
-if (users.length === 0) {
-  // Создаем админа при первом запуске
-  const adminPassword = bcrypt.hashSync('admin123', 10);
-  users.push({
-    id: 'admin-1',
-    email: 'admin@neurodirectolog.ru',
-    password: adminPassword,
-    name: 'Администратор',
-    isAdmin: true,
-    createdAt: new Date()
-  });
-  saveUsers(users);
-  console.log('✅ Admin user created: admin@neurodirectolog.ru / admin123');
-}
+// Запускаем инициализацию асинхронно
+initializeAuth();
 
 // Validation schemas
 const registerSchema = Joi.object({
@@ -85,25 +66,25 @@ router.post('/register', async (req, res, next) => {
 
     const { email, password, name } = value;
 
-    const existingUser = users.find(u => u.email === email);
+    // Проверяем существование пользователя
+    const existingUser = await clickhouseService.getUserByEmail(email);
     if (existingUser) {
       throw createError('User already exists', 400);
     }
 
     const hashedPassword = await bcrypt.hash(password, 10);
-    const user = {
-      id: Date.now().toString(),
-      email,
-      password: hashedPassword,
-      name,
-      createdAt: new Date()
-    };
+    const userId = Date.now().toString();
 
-    users.push(user);
-    saveUsers(users);
+    await clickhouseService.createUser({
+      id: userId,
+      email,
+      passwordHash: hashedPassword,
+      name,
+      isAdmin: false,
+    });
 
     const token = jwt.sign(
-      { userId: user.id },
+      { userId },
       JWT_SECRET,
       { expiresIn: '7d' }
     );
@@ -112,12 +93,12 @@ router.post('/register', async (req, res, next) => {
       success: true,
       data: {
         user: {
-          id: user.id,
-          email: user.email,
-          name: user.name
+          id: userId,
+          email,
+          name,
         },
-        token
-      }
+        token,
+      },
     });
   } catch (error) {
     next(error);
@@ -136,18 +117,18 @@ router.post('/login', async (req, res, next) => {
 
     const { email, password } = value;
 
-    const user = users.find(u => u.email === email);
+    const user = await clickhouseService.getUserByEmail(email);
     if (!user) {
       throw createError('Invalid credentials', 401);
     }
 
-    const isPasswordValid = await bcrypt.compare(password, user.password);
+    const isPasswordValid = await bcrypt.compare(password, user.passwordHash);
     if (!isPasswordValid) {
       throw createError('Invalid credentials', 401);
     }
 
     const token = jwt.sign(
-      { userId: user.id, isAdmin: user.isAdmin || false },
+      { userId: user.id, isAdmin: user.isAdmin },
       JWT_SECRET,
       { expiresIn: '7d' }
     );
@@ -159,10 +140,10 @@ router.post('/login', async (req, res, next) => {
           id: user.id,
           email: user.email,
           name: user.name,
-          isAdmin: user.isAdmin || false
+          isAdmin: user.isAdmin,
         },
-        token
-      }
+        token,
+      },
     });
   } catch (error) {
     next(error);

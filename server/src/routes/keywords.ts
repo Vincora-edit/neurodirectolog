@@ -42,10 +42,10 @@ router.post('/analyze', authenticate, async (req, res, next) => {
 
     // Если указан projectId, сохраняем результат
     if (projectId) {
-      const project = projectStore.getById(projectId);
+      const project = await projectStore.getById(projectId);
 
       if (project && project.userId === userId) {
-        projectStore.saveKeywordAnalysis(projectId, analysis);
+        await projectStore.saveKeywordAnalysis(projectId, analysis);
       }
     }
 

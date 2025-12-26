@@ -26,11 +26,11 @@ router.post('/generate/headlines', authenticate, async (req, res, next) => {
     // Если указан projectId, сохраняем заголовки в проект
     if (projectId) {
       const userId = (req as AuthRequest).userId;
-      const project = projectStore.getById(projectId);
+      const project = await projectStore.getById(projectId);
 
       if (project && project.userId === userId) {
         const existingAds = project.ads || { headlines: [], texts: [] };
-        projectStore.saveAds(projectId, headlines, existingAds.texts || []);
+        await projectStore.saveAds(projectId, headlines, existingAds.texts || []);
       }
     }
 
@@ -66,11 +66,11 @@ router.post('/generate/texts', authenticate, async (req, res, next) => {
     // Если указан projectId, сохраняем тексты в проект
     if (projectId) {
       const userId = (req as AuthRequest).userId;
-      const project = projectStore.getById(projectId);
+      const project = await projectStore.getById(projectId);
 
       if (project && project.userId === userId) {
         const existingAds = project.ads || { headlines: [], texts: [] };
-        projectStore.saveAds(projectId, existingAds.headlines || [], texts);
+        await projectStore.saveAds(projectId, existingAds.headlines || [], texts);
       }
     }
 
@@ -130,7 +130,7 @@ router.post('/generate-complete', authenticate, async (req, res, next) => {
     }
 
     // Получаем проект
-    const project = projectStore.getById(projectId);
+    const project = await projectStore.getById(projectId);
 
     if (!project) {
       throw createError('Project not found', 404);
@@ -158,7 +158,7 @@ router.post('/generate-complete', authenticate, async (req, res, next) => {
 
     // Сохраняем сгенерированные объявления в проект
     if (adsData && adsData.ads) {
-      projectStore.saveCompleteAds(projectId, {
+      await projectStore.saveCompleteAds(projectId, {
         campaignType,
         generatedAt: new Date().toISOString(),
         ads: adsData.ads

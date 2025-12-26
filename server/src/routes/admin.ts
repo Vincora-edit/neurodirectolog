@@ -1,6 +1,4 @@
 import { Router, Response, NextFunction } from 'express';
-import fs from 'fs';
-import path from 'path';
 import { AuthRequest, authenticate } from '../middleware/auth';
 import { createError } from '../middleware/errorHandler';
 import { projectStore } from '../models/project.model';
@@ -8,8 +6,6 @@ import { clickhouseService } from '../services/clickhouse.service';
 import { usageService } from '../services/usage.service';
 
 const router = Router();
-
-const USERS_FILE = path.join(process.cwd(), 'data', 'users.json');
 
 // Middleware для проверки админских прав
 const requireAdmin = (req: AuthRequest, res: Response, next: NextFunction) => {
@@ -19,43 +15,17 @@ const requireAdmin = (req: AuthRequest, res: Response, next: NextFunction) => {
   next();
 };
 
-// Загрузка пользователей
-function loadUsers(): any[] {
-  try {
-    if (fs.existsSync(USERS_FILE)) {
-      const data = fs.readFileSync(USERS_FILE, 'utf-8');
-      return JSON.parse(data);
-    }
-  } catch (error) {
-    console.error('Error loading users:', error);
-  }
-  return [];
-}
-
-// Сохранение пользователей
-function saveUsers(users: any[]): void {
-  try {
-    const dir = path.dirname(USERS_FILE);
-    if (!fs.existsSync(dir)) {
-      fs.mkdirSync(dir, { recursive: true });
-    }
-    fs.writeFileSync(USERS_FILE, JSON.stringify(users, null, 2), 'utf-8');
-  } catch (error) {
-    console.error('Error saving users:', error);
-  }
-}
-
 /**
  * Получить список всех пользователей
  */
 router.get('/users', authenticate, requireAdmin, async (req, res, next) => {
   try {
-    const users = loadUsers();
+    const users = await clickhouseService.getAllUsers();
 
     // Получаем проекты и подключения для каждого пользователя
     const usersWithStats = await Promise.all(users.map(async (user) => {
       // Получаем проекты пользователя
-      const projects = projectStore.getByUserIdLightweight(user.id, false);
+      const projects = await projectStore.getByUserIdLightweight(user.id, false);
       const userProjects = projects.filter(p => p.userId === user.id);
 
       // Получаем подключения для всех проектов пользователя
@@ -73,7 +43,7 @@ router.get('/users', authenticate, requireAdmin, async (req, res, next) => {
         id: user.id,
         email: user.email,
         name: user.name,
-        isAdmin: user.isAdmin || false,
+        isAdmin: user.isAdmin,
         createdAt: user.createdAt,
         projectsCount: userProjects.length,
         connectionsCount,
@@ -92,15 +62,14 @@ router.get('/users', authenticate, requireAdmin, async (req, res, next) => {
 router.get('/users/:userId', authenticate, requireAdmin, async (req, res, next) => {
   try {
     const { userId } = req.params;
-    const users = loadUsers();
-    const user = users.find(u => u.id === userId);
+    const user = await clickhouseService.getUserById(userId);
 
     if (!user) {
       throw createError('User not found', 404);
     }
 
     // Получаем проекты пользователя
-    const projects = projectStore.getByUserIdLightweight(userId, false);
+    const projects = await projectStore.getByUserIdLightweight(userId, false);
     const userProjects = projects.filter(p => p.userId === userId);
 
     // Получаем подключения для каждого проекта
@@ -127,7 +96,7 @@ router.get('/users/:userId', authenticate, requireAdmin, async (req, res, next) 
       id: user.id,
       email: user.email,
       name: user.name,
-      isAdmin: user.isAdmin || false,
+      isAdmin: user.isAdmin,
       createdAt: user.createdAt,
       projects: projectsWithConnections,
     });
@@ -148,16 +117,12 @@ router.delete('/users/:userId', authenticate, requireAdmin, async (req, res, nex
       throw createError('Cannot delete yourself', 400);
     }
 
-    const users = loadUsers();
-    const userIndex = users.findIndex(u => u.id === userId);
-
-    if (userIndex === -1) {
+    const user = await clickhouseService.getUserById(userId);
+    if (!user) {
       throw createError('User not found', 404);
     }
 
-    // Удаляем пользователя
-    users.splice(userIndex, 1);
-    saveUsers(users);
+    await clickhouseService.deleteUser(userId);
 
     res.json({ success: true, message: 'User deleted' });
   } catch (error) {
@@ -178,15 +143,12 @@ router.put('/users/:userId/admin', authenticate, requireAdmin, async (req, res, 
       throw createError('Cannot remove admin from yourself', 400);
     }
 
-    const users = loadUsers();
-    const user = users.find(u => u.id === userId);
-
+    const user = await clickhouseService.getUserById(userId);
     if (!user) {
       throw createError('User not found', 404);
     }
 
-    user.isAdmin = isAdmin;
-    saveUsers(users);
+    await clickhouseService.updateUser(userId, { isAdmin });
 
     res.json({ success: true, message: `Admin status ${isAdmin ? 'granted' : 'revoked'}` });
   } catch (error) {
@@ -199,10 +161,10 @@ router.put('/users/:userId/admin', authenticate, requireAdmin, async (req, res, 
  */
 router.get('/stats', authenticate, requireAdmin, async (req, res, next) => {
   try {
-    const users = loadUsers();
+    const users = await clickhouseService.getAllUsers();
 
     // Получаем все проекты
-    const allProjects = projectStore.getByUserIdLightweight('', true);
+    const allProjects = await projectStore.getByUserIdLightweight('', true);
 
     // Получаем размер данных из ClickHouse
     let clickhouseStats = {
@@ -240,20 +202,6 @@ router.get('/stats', authenticate, requireAdmin, async (req, res, next) => {
       console.error('Error getting ClickHouse stats:', e);
     }
 
-    // Получаем размер файлов данных
-    let dataFilesSize = 0;
-    const dataDir = path.join(process.cwd(), 'data');
-    if (fs.existsSync(dataDir)) {
-      const files = fs.readdirSync(dataDir);
-      for (const file of files) {
-        const filePath = path.join(dataDir, file);
-        const stat = fs.statSync(filePath);
-        if (stat.isFile()) {
-          dataFilesSize += stat.size;
-        }
-      }
-    }
-
     // Считаем подключения
     let totalConnections = 0;
     let activeConnections = 0;
@@ -286,9 +234,6 @@ router.get('/stats', authenticate, requireAdmin, async (req, res, next) => {
           totalRows: clickhouseStats.totalRows,
           diskUsageMB: Math.round(clickhouseStats.diskUsageMB * 100) / 100,
           tables: clickhouseStats.tables,
-        },
-        dataFiles: {
-          sizeMB: Math.round(dataFilesSize / 1024 / 1024 * 100) / 100,
         },
       },
       server: {
@@ -326,7 +271,7 @@ router.get('/connections', authenticate, requireAdmin, async (req, res, next) =>
 router.get('/usage', authenticate, requireAdmin, async (req, res, next) => {
   try {
     const days = parseInt(req.query.days as string) || 30;
-    const users = loadUsers().map(u => ({
+    const users = (await clickhouseService.getAllUsers()).map(u => ({
       id: u.id,
       name: u.name,
       email: u.email,
@@ -353,8 +298,7 @@ router.get('/usage/:userId', authenticate, requireAdmin, async (req, res, next) 
     const { userId } = req.params;
     const days = parseInt(req.query.days as string) || 30;
 
-    const users = loadUsers();
-    const user = users.find(u => u.id === userId);
+    const user = await clickhouseService.getUserById(userId);
     if (!user) {
       return next(createError('User not found', 404));
     }

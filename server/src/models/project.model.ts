@@ -1,15 +1,11 @@
 /**
  * Модель проекта и брифа
  * Все данные о проекте хранятся здесь и используются всеми модулями
+ *
+ * МИГРАЦИЯ: теперь использует ClickHouse вместо JSON-файла
  */
 
-import fs from 'fs';
-import path from 'path';
-
-const DATA_FILE = path.join(process.cwd(), 'data', 'projects.json');
-
-// ID дефолтного проекта, который нельзя удалить
-const DEFAULT_PROJECT_ID = 'default_bfl_finon';
+import { clickhouseService } from '../services/clickhouse.service';
 
 export interface ProjectBrief {
   // Основная информация
@@ -120,81 +116,16 @@ export interface Project {
   updatedAt: Date;
 }
 
-// In-memory хранилище проектов с автосохранением в JSON
+/**
+ * Асинхронное хранилище проектов на ClickHouse
+ * Обеспечивает масштабируемость и отказоустойчивость
+ */
 class ProjectStore {
-  private projects: Map<string, Project> = new Map();
-
-  constructor() {
-    this.loadFromFile();
-    // Больше не создаём дефолтный проект автоматически
-    // this.ensureDefaultProject();
+  private generateId(): string {
+    return `proj_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
   }
 
-  private loadFromFile(): void {
-    try {
-      if (fs.existsSync(DATA_FILE)) {
-        const data = fs.readFileSync(DATA_FILE, 'utf-8');
-        const projects = JSON.parse(data);
-        this.projects = new Map(Object.entries(projects));
-        console.log(`✅ Loaded ${this.projects.size} projects from storage`);
-      } else {
-        // Создаем директорию и файл если не существует
-        const dir = path.dirname(DATA_FILE);
-        if (!fs.existsSync(dir)) {
-          fs.mkdirSync(dir, { recursive: true });
-        }
-        this.saveToFile();
-      }
-    } catch (error) {
-      console.error('Error loading projects:', error);
-    }
-  }
-
-  private saveToFile(): void {
-    try {
-      const dir = path.dirname(DATA_FILE);
-      if (!fs.existsSync(dir)) {
-        fs.mkdirSync(dir, { recursive: true });
-      }
-      const data = Object.fromEntries(this.projects);
-      fs.writeFileSync(DATA_FILE, JSON.stringify(data, null, 2), 'utf-8');
-    } catch (error) {
-      console.error('Error saving projects:', error);
-    }
-  }
-
-  private ensureDefaultProject(): void {
-    if (!this.projects.has(DEFAULT_PROJECT_ID)) {
-      const defaultProject: Project = {
-        id: DEFAULT_PROJECT_ID,
-        userId: 'system',
-        name: 'БФЛ Финон',
-        brief: {
-          businessName: 'БФЛ Финон',
-          niche: 'Финансовые услуги',
-          businessDescription: 'Тестовый проект для отладки и демонстрации возможностей платформы',
-          website: 'https://example.com',
-          geo: 'Россия',
-          advantages: ['Удобный интерфейс', 'Быстрая обработка заявок', 'Прозрачные условия'],
-          budget: {
-            total: 100000,
-            period: 'месяц',
-          },
-          goals: 'Увеличение количества заявок',
-          desires: 'Максимальная конверсия при минимальной стоимости лида',
-          targetCPA: 500,
-        },
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      };
-
-      this.projects.set(DEFAULT_PROJECT_ID, defaultProject);
-      this.saveToFile();
-      console.log('✅ Created default project "БФЛ Финон"');
-    }
-  }
-
-  create(userId: string, name: string, brief: ProjectBrief): Project {
+  async create(userId: string, name: string, brief: ProjectBrief): Promise<Project> {
     const project: Project = {
       id: this.generateId(),
       userId,
@@ -204,27 +135,30 @@ class ProjectStore {
       updatedAt: new Date(),
     };
 
-    this.projects.set(project.id, project);
-    this.saveToFile();
+    await clickhouseService.createProject({
+      id: project.id,
+      userId: project.userId,
+      name: project.name,
+      brief: project.brief,
+    });
+
     return project;
   }
 
-  getById(id: string): Project | undefined {
-    return this.projects.get(id);
+  async getById(id: string): Promise<Project | undefined> {
+    const project = await clickhouseService.getProjectById(id);
+    return project || undefined;
   }
 
-  getByUserId(userId: string): Project[] {
-    // Возвращаем проекты пользователя + дефолтный проект для всех
-    return Array.from(this.projects.values()).filter(
-      p => p.userId === userId || p.id === DEFAULT_PROJECT_ID
-    );
+  async getByUserId(userId: string, isAdmin: boolean = false): Promise<Project[]> {
+    return await clickhouseService.getProjectsByUserId(userId, isAdmin);
   }
 
   /**
    * Получить краткую информацию о проектах (без тяжелых данных модулей)
    * Используется для списка проектов, чтобы избежать передачи больших объемов данных
    */
-  getByUserIdLightweight(userId: string, isAdmin: boolean = false): Array<{
+  async getByUserIdLightweight(userId: string, isAdmin: boolean = false): Promise<Array<{
     id: string;
     userId: string;
     name: string;
@@ -240,162 +174,67 @@ class ProjectStore {
     hasAnalytics: boolean;
     createdAt: Date;
     updatedAt: Date;
-  }> {
-    // Админы видят все проекты, обычные пользователи - только свои
-    const projects = Array.from(this.projects.values()).filter(
-      p => isAdmin || p.userId === userId || p.id === DEFAULT_PROJECT_ID
-    );
-
-    return projects.map(p => ({
-      id: p.id,
-      userId: p.userId,
-      name: p.name,
-      brief: p.brief,
-      hasSemantics: !!p.semantics,
-      hasCreatives: !!p.creatives,
-      hasAds: !!p.ads,
-      hasCompleteAds: !!p.completeAds,
-      hasMinusWords: !!p.minusWords,
-      hasKeywordAnalysis: !!p.keywordAnalysis,
-      hasCampaigns: !!p.campaigns,
-      hasStrategy: !!p.strategy,
-      hasAnalytics: !!p.analytics,
-      createdAt: p.createdAt,
-      updatedAt: p.updatedAt,
-    }));
+  }>> {
+    return await clickhouseService.getProjectsLightweight(userId, isAdmin);
   }
 
-  update(id: string, updates: Partial<Project>): Project | undefined {
-    const project = this.projects.get(id);
-    if (!project) return undefined;
+  async update(id: string, updates: Partial<Project>): Promise<Project | undefined> {
+    const current = await this.getById(id);
+    if (!current) return undefined;
 
-    const updated = {
-      ...project,
+    await clickhouseService.updateProject(id, updates);
+
+    return {
+      ...current,
       ...updates,
       updatedAt: new Date(),
     };
-
-    this.projects.set(id, updated);
-    this.saveToFile();
-    return updated;
   }
 
-  delete(id: string): boolean {
-    const result = this.projects.delete(id);
-    if (result) this.saveToFile();
-    return result;
+  async delete(id: string): Promise<boolean> {
+    try {
+      await clickhouseService.deleteProject(id);
+      return true;
+    } catch {
+      return false;
+    }
   }
 
   // Методы для сохранения результатов модулей
-  saveSemantics(projectId: string, keywords: string[]): void {
-    const project = this.projects.get(projectId);
-    if (!project) return;
-
-    project.semantics = {
-      keywords,
-      generatedAt: new Date(),
-    };
-    project.updatedAt = new Date();
-    this.saveToFile();
+  async saveSemantics(projectId: string, keywords: string[]): Promise<void> {
+    await clickhouseService.saveProjectSemantics(projectId, keywords);
   }
 
-  saveCreatives(projectId: string, ideas: any[]): void {
-    const project = this.projects.get(projectId);
-    if (!project) return;
-
-    project.creatives = {
-      ideas,
-      generatedAt: new Date(),
-    };
-    project.updatedAt = new Date();
-    this.saveToFile();
+  async saveCreatives(projectId: string, ideas: any[]): Promise<void> {
+    await clickhouseService.saveProjectCreatives(projectId, ideas);
   }
 
-  saveAds(projectId: string, headlines: string[], texts: string[]): void {
-    const project = this.projects.get(projectId);
-    if (!project) return;
-
-    project.ads = {
-      headlines,
-      texts,
-      generatedAt: new Date(),
-    };
-    project.updatedAt = new Date();
-    this.saveToFile();
+  async saveAds(projectId: string, headlines: string[], texts: string[]): Promise<void> {
+    await clickhouseService.saveProjectAds(projectId, headlines, texts);
   }
 
-  saveMinusWords(projectId: string, words: string[], analysis?: any): void {
-    const project = this.projects.get(projectId);
-    if (!project) return;
-
-    project.minusWords = {
-      words,
-      analysis,
-      generatedAt: new Date(),
-    };
-    project.updatedAt = new Date();
-    this.saveToFile();
+  async saveMinusWords(projectId: string, words: string[], analysis?: any): Promise<void> {
+    await clickhouseService.saveProjectMinusWords(projectId, words, analysis);
   }
 
-  saveCampaigns(projectId: string, structure: any): void {
-    const project = this.projects.get(projectId);
-    if (!project) return;
-
-    project.campaigns = {
-      structure,
-      generatedAt: new Date(),
-    };
-    project.updatedAt = new Date();
-    this.saveToFile();
+  async saveCampaigns(projectId: string, structure: any): Promise<void> {
+    await clickhouseService.saveProjectCampaigns(projectId, structure);
   }
 
-  saveStrategy(projectId: string, plan: any): void {
-    const project = this.projects.get(projectId);
-    if (!project) return;
-
-    project.strategy = {
-      plan,
-      generatedAt: new Date(),
-    };
-    project.updatedAt = new Date();
-    this.saveToFile();
+  async saveStrategy(projectId: string, plan: any): Promise<void> {
+    await clickhouseService.saveProjectStrategy(projectId, plan);
   }
 
-  saveAnalytics(projectId: string, analytics: any): void {
-    const project = this.projects.get(projectId);
-    if (!project) return;
-
-    project.analytics = {
-      ...analytics,
-      generatedAt: new Date(),
-    };
-    project.updatedAt = new Date();
-    this.saveToFile();
+  async saveAnalytics(projectId: string, analytics: any): Promise<void> {
+    await clickhouseService.saveProjectAnalytics(projectId, analytics);
   }
 
-  saveCompleteAds(projectId: string, completeAds: any): void {
-    const project = this.projects.get(projectId);
-    if (!project) return;
-
-    project.completeAds = completeAds;
-    project.updatedAt = new Date();
-    this.saveToFile();
+  async saveCompleteAds(projectId: string, completeAds: any): Promise<void> {
+    await clickhouseService.saveProjectCompleteAds(projectId, completeAds);
   }
 
-  saveKeywordAnalysis(projectId: string, analysis: any): void {
-    const project = this.projects.get(projectId);
-    if (!project) return;
-
-    project.keywordAnalysis = {
-      ...analysis,
-      generatedAt: new Date(),
-    };
-    project.updatedAt = new Date();
-    this.saveToFile();
-  }
-
-  private generateId(): string {
-    return `proj_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+  async saveKeywordAnalysis(projectId: string, analysis: any): Promise<void> {
+    await clickhouseService.saveProjectKeywordAnalysis(projectId, analysis);
   }
 }
 

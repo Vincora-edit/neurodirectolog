@@ -26,11 +26,11 @@ router.post('/generate', authenticate, trackAiRequest(2000), async (req, res, ne
 
     // Если указан projectId, сохраняем результат в проект
     if (projectId) {
-      const userId = (req as any).user.userId;
-      const project = projectStore.getById(projectId);
+      const userId = (req as any).user?.userId || (req as any).userId;
+      const project = await projectStore.getById(projectId);
 
       if (project && project.userId === userId) {
-        projectStore.saveSemantics(projectId, keywords);
+        await projectStore.saveSemantics(projectId, keywords);
       }
     }
 
