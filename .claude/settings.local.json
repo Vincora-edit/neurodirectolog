@@ -125,7 +125,8 @@
       "Bash(sshpass -p 'c9R+eLvxtQJ-,x' ssh -o StrictHostKeyChecking=no root@91.222.239.217 \"echo ''CLIENT_URL=https://dashboard.vincora.ru'' >> /root/neurodirectolog/.env && docker restart neurodirectolog-server && sleep 3 && docker logs neurodirectolog-server --tail 5\")",
       "Bash(sshpass -p 'c9R+eLvxtQJ-,x' ssh -o StrictHostKeyChecking=no root@91.222.239.217 \"docker exec neurodirectolog-server printenv | grep CLIENT\")",
       "Bash(sshpass -p 'c9R+eLvxtQJ-,x' ssh -o StrictHostKeyChecking=no root@91.222.239.217 \"grep CLIENT_URL /root/neurodirectolog/.env\")",
-      "Bash(sshpass -p 'c9R+eLvxtQJ-,x' ssh -o StrictHostKeyChecking=no root@91.222.239.217 \"docker stop neurodirectolog-server && docker rm neurodirectolog-server && docker run -d --name neurodirectolog-server --network neurodirectolog_neurodirectolog-network -p 3001:3001 --env-file /root/neurodirectolog/.env neurodirectolog_server:latest && sleep 3 && docker exec neurodirectolog-server printenv | grep CLIENT_URL\")"
+      "Bash(sshpass -p 'c9R+eLvxtQJ-,x' ssh -o StrictHostKeyChecking=no root@91.222.239.217 \"docker stop neurodirectolog-server && docker rm neurodirectolog-server && docker run -d --name neurodirectolog-server --network neurodirectolog_neurodirectolog-network -p 3001:3001 --env-file /root/neurodirectolog/.env neurodirectolog_server:latest && sleep 3 && docker exec neurodirectolog-server printenv | grep CLIENT_URL\")",
+      "Bash(sshpass -p 'c9R+eLvxtQJ-,x' ssh -o StrictHostKeyChecking=no root@91.222.239.217 \"cd /root/neurodirectolog && git pull && docker-compose -f docker-compose.prod.yml build client && docker stop neurodirectolog-client 2>/dev/null; docker rm neurodirectolog-client 2>/dev/null; docker run -d --name neurodirectolog-client --network neurodirectolog_neurodirectolog-network -p 3000:80 neurodirectolog_client:latest\")"
     ]
   }
 }

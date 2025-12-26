@@ -59,10 +59,10 @@ router.get('/:token', async (req: Request, res: Response, next: NextFunction) =>
     };
 
     hierarchicalStats.forEach((campaign: any) => {
-      totals.impressions += campaign.impressions || 0;
-      totals.clicks += campaign.clicks || 0;
-      totals.cost += campaign.cost || 0;
-      totals.conversions += campaign.conversions || 0;
+      totals.impressions += campaign.totalImpressions || 0;
+      totals.clicks += campaign.totalClicks || 0;
+      totals.cost += campaign.totalCost || 0;
+      totals.conversions += campaign.totalConversions || 0;
     });
 
     if (totals.impressions > 0) {
@@ -89,13 +89,13 @@ router.get('/:token', async (req: Request, res: Response, next: NextFunction) =>
         id: c.campaignId,
         name: c.campaignName,
         status: c.status,
-        impressions: c.impressions,
-        clicks: c.clicks,
-        cost: c.cost,
-        conversions: c.conversions,
-        ctr: c.ctr,
-        cpc: c.cpc,
-        cpl: c.conversions > 0 ? c.cost / c.conversions : 0,
+        impressions: c.totalImpressions || 0,
+        clicks: c.totalClicks || 0,
+        cost: c.totalCost || 0,
+        conversions: c.totalConversions || 0,
+        ctr: c.avgCtr || 0,
+        cpc: c.avgCpc || 0,
+        cpl: (c.totalConversions || 0) > 0 ? (c.totalCost || 0) / c.totalConversions : 0,
       })),
       dailyStats: dailyStats.map((d: any) => ({
         date: d.date,
