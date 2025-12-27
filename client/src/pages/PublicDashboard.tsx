@@ -1,17 +1,57 @@
 import { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
-import { Target, AlertCircle, Gauge, Calendar, ChevronDown } from 'lucide-react';
+import { Target, AlertCircle, Calendar, ChevronDown, Clock } from 'lucide-react';
 import { DATE_RANGES } from '../constants';
 import {
   KpiContent,
+  MetricsCards,
+  CampaignsTable,
   StatsChart,
-  PublicCampaignsTable,
   DailyStatsTable
 } from '../components/dashboard';
+import type { KpiAnalysis } from '../components/dashboard';
 
 interface Goal {
   id: string;
   name: string;
+}
+
+interface Ad {
+  adId: string;
+  adTitle?: string;
+  totalImpressions: number;
+  totalClicks: number;
+  totalCost: number;
+  totalConversions: number;
+  avgCpc: number;
+  avgCtr: number;
+  avgBounceRate?: number;
+}
+
+interface AdGroup {
+  adGroupId: string;
+  adGroupName: string;
+  totalImpressions: number;
+  totalClicks: number;
+  totalCost: number;
+  totalConversions: number;
+  avgCpc: number;
+  avgCtr: number;
+  avgBounceRate?: number;
+  ads?: Ad[];
+}
+
+interface Campaign {
+  campaignId: string;
+  campaignName: string;
+  totalImpressions: number;
+  totalClicks: number;
+  totalCost: number;
+  totalConversions: number;
+  avgCpc: number;
+  avgCtr: number;
+  avgBounceRate?: number;
+  adGroups?: AdGroup[];
 }
 
 interface DashboardData {
@@ -53,47 +93,9 @@ interface DashboardData {
     leadsDayProgress: number;
     cplStatus: 'good' | 'warning' | 'bad';
   };
-  kpiAnalysis?: {
-    cost: {
-      avgDaily7d: number;
-      projectedMonthly: number;
-      remainingDays: number;
-      remainingBudget: number;
-      requiredDailyBudget: number;
-      trend: 'on_track' | 'overspending' | 'underspending';
-      recommendation: string | null;
-    };
-    leads: {
-      avgDaily7d: number;
-      projectedMonthly: number;
-      remainingLeads: number;
-      requiredDailyLeads: number;
-      trend: 'on_track' | 'behind' | 'ahead';
-      recommendation: string | null;
-    };
-    cpl: {
-      current: number;
-      target: number;
-      avgDaily7d: number;
-      trend: 'good' | 'warning' | 'bad';
-      recommendation: string | null;
-    };
-    diagnosis: string | null;
-  } | null;
+  kpiAnalysis?: KpiAnalysis | null;
   month?: string;
-  campaigns: Array<{
-    id: string;
-    name: string;
-    status: string;
-    impressions: number;
-    clicks: number;
-    cost: number;
-    conversions: number;
-    ctr: number;
-    cpc: number;
-    cpl: number;
-    bounceRate?: number | null;
-  }>;
+  campaigns: Campaign[];
   dailyStats: Array<{
     date: string;
     impressions: number;
@@ -123,6 +125,11 @@ export default function PublicDashboard() {
   // Goals
   const [selectedGoalIds, setSelectedGoalIds] = useState<string[]>([]);
   const [goalsDropdownOpen, setGoalsDropdownOpen] = useState(false);
+
+  // Campaign filters (for hierarchical table)
+  const [globalFilterCampaignId, setGlobalFilterCampaignId] = useState<string | null>(null);
+  const [globalFilterAdGroupId, setGlobalFilterAdGroupId] = useState<string | null>(null);
+  const [globalFilterAdId, setGlobalFilterAdId] = useState<string | null>(null);
 
   const fetchData = async (days: number, startDate?: string, endDate?: string, goalIds?: string[]) => {
     setIsLoading(true);
@@ -171,15 +178,27 @@ export default function PublicDashboard() {
     }).format(value || 0);
   };
 
-  const formatNumber = (value: number | undefined | null) => {
-    return new Intl.NumberFormat('ru-RU').format(value || 0);
-  };
-
   const formatDate = (dateStr: string) => {
     return new Date(dateStr).toLocaleDateString('ru-RU', {
       day: 'numeric',
       month: 'short',
     });
+  };
+
+  // Filter handlers
+  const handleCampaignFilterChange = (campaignId: string | null) => {
+    setGlobalFilterCampaignId(campaignId);
+    setGlobalFilterAdGroupId(null);
+    setGlobalFilterAdId(null);
+  };
+
+  const handleAdGroupFilterChange = (adGroupId: string | null) => {
+    setGlobalFilterAdGroupId(adGroupId);
+    setGlobalFilterAdId(null);
+  };
+
+  const handleAdFilterChange = (adId: string | null) => {
+    setGlobalFilterAdId(adId);
   };
 
   if (isLoading) {
@@ -211,23 +230,33 @@ export default function PublicDashboard() {
     cr: item.clicks > 0 ? (item.conversions / item.clicks) * 100 : 0,
   }));
 
+  // Prepare total stats for MetricsCards
+  const totalStats = {
+    cost: data.totals.cost,
+    conversions: data.totals.conversions,
+    clicks: data.totals.clicks,
+    impressions: data.totals.impressions,
+  };
+
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* Header */}
-      <header className="bg-white border-b border-gray-200">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
-          <div className="flex items-center justify-between flex-wrap gap-4">
+      {/* Header - similar to main dashboard */}
+      <header className="bg-white border-b border-gray-200 sticky top-0 z-40">
+        <div className="px-4 sm:px-6 lg:px-8 py-4">
+          {/* Title row */}
+          <div className="flex items-center justify-between flex-wrap gap-4 mb-4">
             <div>
               <h1 className="text-xl font-bold text-gray-900">Статистика Yandex.Direct</h1>
               <p className="text-sm text-gray-500">Аккаунт: {data.accountLogin}</p>
             </div>
-            <div className="text-right text-sm text-gray-500">
-              Обновлено: {new Date(data.lastUpdated).toLocaleString('ru-RU')}
+            <div className="flex items-center gap-2 text-sm text-gray-500">
+              <Clock size={14} />
+              <span>Обновлено: {new Date(data.lastUpdated).toLocaleString('ru-RU')}</span>
             </div>
           </div>
 
-          {/* Controls: Date Range + Goals */}
-          <div className="mt-4 flex items-center gap-2 flex-wrap">
+          {/* Controls row - Date Range + Goals */}
+          <div className="flex items-center gap-3 flex-wrap">
             {/* Date Range Selector */}
             <div className="flex items-center gap-1 bg-gray-100 rounded-lg p-1">
               {DATE_RANGES.map((range) => (
@@ -278,13 +307,13 @@ export default function PublicDashboard() {
               </div>
             )}
 
-            <span className="text-sm text-gray-500 ml-2">
+            <span className="text-sm text-gray-500">
               {formatDate(data.period.startDate)} — {formatDate(data.period.endDate)}
             </span>
 
             {/* Goal Selector */}
             {data.availableGoals && data.availableGoals.length > 0 && (
-              <div className="relative ml-4">
+              <div className="relative ml-auto">
                 <button
                   onClick={() => setGoalsDropdownOpen(!goalsDropdownOpen)}
                   className={`flex items-center gap-2 px-3 py-1.5 text-sm font-medium rounded-lg transition-colors ${
@@ -299,7 +328,7 @@ export default function PublicDashboard() {
                 </button>
 
                 {goalsDropdownOpen && (
-                  <div className="absolute top-full left-0 mt-1 bg-white rounded-lg shadow-lg border border-gray-200 py-2 z-50 min-w-[250px]">
+                  <div className="absolute top-full right-0 mt-1 bg-white rounded-lg shadow-lg border border-gray-200 py-2 z-50 min-w-[250px]">
                     <button
                       onClick={() => {
                         setSelectedGoalIds([]);
@@ -348,36 +377,16 @@ export default function PublicDashboard() {
         </div>
       </header>
 
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
-        {/* Summary Cards - simplified version */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-5">
-            <p className="text-sm text-gray-500">Расход</p>
-            <p className="text-xl font-bold text-gray-900">{formatCurrency(data.totals.cost)}</p>
-          </div>
-          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-5">
-            <p className="text-sm text-gray-500">Клики</p>
-            <p className="text-xl font-bold text-gray-900">{formatNumber(data.totals.clicks)}</p>
-          </div>
-          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-5">
-            <p className="text-sm text-gray-500">Конверсии</p>
-            <p className="text-xl font-bold text-gray-900">{formatNumber(data.totals.conversions)}</p>
-          </div>
-          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-5">
-            <p className="text-sm text-gray-500">CPL</p>
-            <p className="text-xl font-bold text-gray-900">
-              {(data.totals.cpl || 0) > 0 ? formatCurrency(data.totals.cpl) : '—'}
-            </p>
-          </div>
-        </div>
-
-        {/* KPI Widget */}
+      <main className="px-4 sm:px-6 lg:px-8 py-6">
+        {/* KPI Widget - same as main dashboard */}
         {data.kpi && (data.kpi.targetCost > 0 || data.kpi.targetLeads > 0) && (
-          <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+          <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden mb-6">
             <div className="px-5 py-4 border-b border-gray-200">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
-                  <Gauge size={20} className="text-blue-600" />
+                  <div className="bg-gradient-to-br from-blue-500 to-indigo-600 p-2 rounded-lg">
+                    <Target size={20} className="text-white" />
+                  </div>
                   <span className="font-semibold text-gray-900">
                     KPI {data.month ? new Date(data.month + '-01').toLocaleString('ru-RU', { month: 'long', year: 'numeric' }) : ''}
                   </span>
@@ -408,42 +417,40 @@ export default function PublicDashboard() {
           </div>
         )}
 
-        {/* Chart - reusing StatsChart component */}
-        <StatsChart data={chartData} />
-
-        {/* Campaigns Table - using new simplified component */}
-        <PublicCampaignsTable
-          campaigns={data.campaigns}
-          targetCpl={data.kpi?.targetCpl}
+        {/* Metrics Cards - same component as main dashboard */}
+        <MetricsCards
+          totalStats={totalStats}
           currency={currencyCode}
         />
 
-        {/* CPL Legend */}
-        {data.kpi?.targetCpl && data.kpi.targetCpl > 0 && data.campaigns.length > 0 && (
-          <div className="flex items-center gap-6 text-sm text-gray-600 px-1">
-            <span className="font-medium">Подсветка по CPL:</span>
-            <div className="flex items-center gap-2">
-              <div className="w-4 h-4 bg-green-100 rounded border border-green-200"></div>
-              <span>В плане или ниже</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <div className="w-4 h-4 bg-amber-100 rounded border border-amber-200"></div>
-              <span>Выше до 10%</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <div className="w-4 h-4 bg-red-100 rounded border border-red-200"></div>
-              <span>Выше 10%</span>
-            </div>
-          </div>
-        )}
+        {/* All collapsible sections */}
+        <div className="space-y-4">
+          {/* Campaigns Table - full hierarchical table with filters */}
+          <CampaignsTable
+            campaigns={data.campaigns}
+            globalFilterCampaignId={globalFilterCampaignId}
+            globalFilterAdGroupId={globalFilterAdGroupId}
+            globalFilterAdId={globalFilterAdId}
+            onCampaignFilterChange={handleCampaignFilterChange}
+            onAdGroupFilterChange={handleAdGroupFilterChange}
+            onAdFilterChange={handleAdFilterChange}
+            targetCpl={data.kpi?.targetCpl || 0}
+            currency={currencyCode}
+          />
 
-        {/* Daily Stats Table - using new component */}
-        <DailyStatsTable data={data.dailyStats} currency={currencyCode} />
+          {/* Chart - same component */}
+          {chartData.length > 0 && (
+            <StatsChart data={chartData} title="Динамика" />
+          )}
+
+          {/* Daily Stats Table */}
+          <DailyStatsTable data={data.dailyStats} currency={currencyCode} />
+        </div>
       </main>
 
       {/* Footer */}
       <footer className="bg-white border-t border-gray-200 mt-8">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 text-center text-sm text-gray-500">
+        <div className="px-4 sm:px-6 lg:px-8 py-4 text-center text-sm text-gray-500">
           Powered by Neurodirectolog
         </div>
       </footer>
