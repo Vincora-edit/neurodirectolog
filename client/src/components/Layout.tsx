@@ -31,8 +31,8 @@ export default function Layout() {
   const navigation = [
     { name: 'Аналитика кампаний', href: '/yandex-dashboard', icon: BarChart3, available: true },
     { name: 'Управление', href: '/management', icon: LayoutGrid, available: true },
-    { name: 'Dashboard', href: '/', icon: LayoutDashboard, available: isAdmin },
-    { name: 'Проекты', href: '/projects', icon: FolderOpen, available: isAdmin },
+    { name: 'Dashboard', href: '/', icon: LayoutDashboard, available: true },
+    { name: 'Проекты', href: '/projects', icon: FolderOpen, available: true },
     { name: 'Аналитика', href: '/analytics', icon: TrendingUp, available: isAdmin },
     { name: 'Семантика', href: '/semantics', icon: FileText, available: isAdmin },
     { name: 'Кампании', href: '/campaign', icon: Megaphone, available: isAdmin },
