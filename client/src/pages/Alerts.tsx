@@ -15,6 +15,10 @@ import {
   DollarSign,
   Eye,
   ChevronRight,
+  Send,
+  Link,
+  Loader2,
+  ExternalLink,
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { ru } from 'date-fns/locale';
@@ -117,10 +121,52 @@ const updateSettings = async (settings: Partial<AlertSettings>): Promise<void> =
   });
 };
 
+interface TelegramStatus {
+  isConfigured: boolean;
+  isConnected: boolean;
+  username?: string;
+  firstName?: string;
+}
+
+const fetchTelegramStatus = async (): Promise<TelegramStatus> => {
+  const token = localStorage.getItem('token');
+  const response = await fetch(`${API_BASE_URL}/api/telegram/status`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  const data = await response.json();
+  return data.data;
+};
+
+const fetchTelegramLink = async (): Promise<string> => {
+  const token = localStorage.getItem('token');
+  const response = await fetch(`${API_BASE_URL}/api/telegram/connect-link`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  const data = await response.json();
+  return data.data.link;
+};
+
+const disconnectTelegram = async (): Promise<void> => {
+  const token = localStorage.getItem('token');
+  await fetch(`${API_BASE_URL}/api/telegram/disconnect`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}` },
+  });
+};
+
+const sendTestMessage = async (): Promise<void> => {
+  const token = localStorage.getItem('token');
+  await fetch(`${API_BASE_URL}/api/telegram/test`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}` },
+  });
+};
+
 export default function Alerts() {
   const queryClient = useQueryClient();
   const [showSettings, setShowSettings] = useState(false);
   const [filter, setFilter] = useState<'all' | 'unread' | 'critical'>('all');
+  const [telegramLink, setTelegramLink] = useState<string | null>(null);
 
   const { data: alerts = [], isLoading, refetch } = useQuery({
     queryKey: ['alerts'],
@@ -130,6 +176,11 @@ export default function Alerts() {
   const { data: settings } = useQuery({
     queryKey: ['alertSettings'],
     queryFn: fetchSettings,
+  });
+
+  const { data: telegramStatus, refetch: refetchTelegram } = useQuery({
+    queryKey: ['telegramStatus'],
+    queryFn: fetchTelegramStatus,
   });
 
   const markAsReadMutation = useMutation({
@@ -151,6 +202,28 @@ export default function Alerts() {
     mutationFn: updateSettings,
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['alertSettings'] }),
   });
+
+  const disconnectTelegramMutation = useMutation({
+    mutationFn: disconnectTelegram,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['telegramStatus'] });
+      setTelegramLink(null);
+    },
+  });
+
+  const testMessageMutation = useMutation({
+    mutationFn: sendTestMessage,
+  });
+
+  const handleGetTelegramLink = async () => {
+    try {
+      const link = await fetchTelegramLink();
+      setTelegramLink(link);
+      window.open(link, '_blank');
+    } catch (error) {
+      console.error('Failed to get Telegram link:', error);
+    }
+  };
 
   const filteredAlerts = alerts.filter(alert => {
     if (filter === 'unread') return !alert.isRead;
@@ -335,6 +408,96 @@ export default function Alerts() {
                 </div>
               </div>
             </div>
+          </div>
+
+          {/* Telegram Section */}
+          <div className="mt-6 pt-6 border-t border-gray-200">
+            <h3 className="text-sm font-medium text-gray-700 mb-4 flex items-center gap-2">
+              <Send size={16} />
+              Telegram
+            </h3>
+
+            {telegramStatus?.isConfigured ? (
+              telegramStatus.isConnected ? (
+                <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-green-800 font-medium flex items-center gap-2">
+                        <Check size={16} />
+                        Telegram подключён
+                      </p>
+                      <p className="text-green-600 text-sm mt-1">
+                        {telegramStatus.firstName && `${telegramStatus.firstName} `}
+                        {telegramStatus.username && `@${telegramStatus.username}`}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => testMessageMutation.mutate()}
+                        disabled={testMessageMutation.isPending}
+                        className="px-3 py-1.5 text-sm bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:bg-green-300 flex items-center gap-1"
+                      >
+                        {testMessageMutation.isPending ? (
+                          <Loader2 size={14} className="animate-spin" />
+                        ) : (
+                          <Send size={14} />
+                        )}
+                        Тест
+                      </button>
+                      <button
+                        onClick={() => disconnectTelegramMutation.mutate()}
+                        disabled={disconnectTelegramMutation.isPending}
+                        className="px-3 py-1.5 text-sm text-red-600 border border-red-300 rounded-lg hover:bg-red-50"
+                      >
+                        Отключить
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                  <p className="text-blue-800 mb-3">
+                    Подключите Telegram для получения уведомлений о важных событиях в реальном времени.
+                  </p>
+                  <div className="flex items-center gap-3">
+                    <button
+                      onClick={handleGetTelegramLink}
+                      className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center gap-2"
+                    >
+                      <Link size={16} />
+                      Подключить Telegram
+                    </button>
+                    {telegramLink && (
+                      <a
+                        href={telegramLink}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-blue-600 hover:text-blue-800 text-sm flex items-center gap-1"
+                      >
+                        Открыть ссылку
+                        <ExternalLink size={14} />
+                      </a>
+                    )}
+                  </div>
+                  <p className="text-blue-600 text-sm mt-3">
+                    После перехода по ссылке нажмите Start в боте и обновите эту страницу.
+                  </p>
+                  <button
+                    onClick={() => refetchTelegram()}
+                    className="mt-2 text-sm text-blue-600 hover:text-blue-800 flex items-center gap-1"
+                  >
+                    <RefreshCw size={14} />
+                    Проверить подключение
+                  </button>
+                </div>
+              )
+            ) : (
+              <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
+                <p className="text-gray-600">
+                  Telegram-бот не настроен. Обратитесь к администратору.
+                </p>
+              </div>
+            )}
           </div>
         </div>
       )}
