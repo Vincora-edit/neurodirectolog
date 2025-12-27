@@ -1,5 +1,6 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import { clickhouseService } from '../services/clickhouse.service';
+import { yandexDirectService } from '../services/yandex-direct.service';
 
 const router = Router();
 
@@ -10,6 +11,13 @@ router.get('/:token', async (req: Request, res: Response, next: NextFunction) =>
     const days = parseInt(req.query.days as string) || 30;
     const customStartDate = req.query.startDate as string | undefined;
     const customEndDate = req.query.endDate as string | undefined;
+
+    // Парсим goalIds из query параметра
+    let selectedGoalIds: string[] | undefined;
+    const goalIdsParam = req.query.goalIds as string | undefined;
+    if (goalIdsParam) {
+      selectedGoalIds = goalIdsParam.split(',').filter(id => id.trim());
+    }
 
     // Проверяем валидность ссылки
     const { valid, share } = await clickhouseService.isPublicShareValid(token);
@@ -24,6 +32,23 @@ router.get('/:token', async (req: Request, res: Response, next: NextFunction) =>
     if (!connection) {
       return res.status(404).json({ error: 'Connection not found' });
     }
+
+    // Получаем валюту аккаунта
+    let currency = 'RUB';
+    try {
+      const balance = await yandexDirectService.getAccountBalance(
+        connection.accessToken,
+        connection.login
+      );
+      if (balance?.currency) {
+        currency = balance.currency;
+      }
+    } catch (e) {
+      console.log('[PublicDashboard] Could not get currency, using RUB');
+    }
+
+    // Получаем доступные цели для селектора
+    const availableGoals = await clickhouseService.getAvailableGoals(connectionId);
 
     // Получаем KPI для текущего месяца
     const now = new Date();
@@ -217,11 +242,12 @@ router.get('/:token', async (req: Request, res: Response, next: NextFunction) =>
     const endDateStr = endDate.toISOString().split('T')[0];
 
     // Получаем иерархические данные (кампании)
+    // Если выбраны цели - фильтруем по ним, иначе без фильтра
     const hierarchicalStats = await clickhouseService.getHierarchicalStats(
       connectionId,
       startDate,
       endDate,
-      undefined // без фильтра по целям
+      selectedGoalIds
     );
 
     // Получаем дневную статистику для графика
@@ -229,7 +255,7 @@ router.get('/:token', async (req: Request, res: Response, next: NextFunction) =>
       connectionId,
       startDate,
       endDate,
-      undefined // без фильтра по целям
+      selectedGoalIds
     );
 
     // Вычисляем суммарные метрики
@@ -264,6 +290,11 @@ router.get('/:token', async (req: Request, res: Response, next: NextFunction) =>
     res.json({
       shareName: share.name,
       accountLogin: connection.login,
+      currency,
+      availableGoals: availableGoals.map(g => ({
+        id: g.goalId,
+        name: g.goalName || g.goalId,
+      })),
       period: {
         startDate: startDateStr,
         endDate: endDateStr,

@@ -15,9 +15,16 @@ import { DATE_RANGES } from '../constants';
 import { KpiContent } from '../components/dashboard';
 import { getCplDeviation, getCplStatus, getCplRowBgColor, getDeviationColor, formatDeviation } from '../utils/cpl';
 
+interface Goal {
+  id: string;
+  name: string;
+}
+
 interface DashboardData {
   shareName: string;
   accountLogin: string;
+  currency?: string;
+  availableGoals?: Goal[];
   period: {
     startDate: string;
     endDate: string;
@@ -133,12 +140,19 @@ export default function PublicDashboard() {
   // Состояние для таблицы по дням
   const [dailyTableOpen, setDailyTableOpen] = useState(true);
 
-  const fetchData = async (days: number, startDate?: string, endDate?: string) => {
+  // Состояние для выбора целей
+  const [selectedGoalIds, setSelectedGoalIds] = useState<string[]>([]);
+  const [goalsDropdownOpen, setGoalsDropdownOpen] = useState(false);
+
+  const fetchData = async (days: number, startDate?: string, endDate?: string, goalIds?: string[]) => {
     setIsLoading(true);
     try {
       let url = `${API_URL}/public/dashboard/${token}?days=${days}`;
       if (startDate && endDate) {
         url = `${API_URL}/public/dashboard/${token}?startDate=${startDate}&endDate=${endDate}`;
+      }
+      if (goalIds && goalIds.length > 0) {
+        url += `&goalIds=${goalIds.join(',')}`;
       }
       const response = await fetch(url);
       if (!response.ok) {
@@ -159,21 +173,41 @@ export default function PublicDashboard() {
   useEffect(() => {
     if (token) {
       if (customDateMode && customStartDate && customEndDate) {
-        fetchData(dateRange, customStartDate, customEndDate);
+        fetchData(dateRange, customStartDate, customEndDate, selectedGoalIds);
       } else {
-        fetchData(dateRange);
+        fetchData(dateRange, undefined, undefined, selectedGoalIds);
       }
     }
-  }, [token, dateRange, customDateMode, customStartDate, customEndDate]);
+  }, [token, dateRange, customDateMode, customStartDate, customEndDate, selectedGoalIds]);
+
+  // Используем валюту из данных API
+  const currencyCode = data?.currency || 'RUB';
 
   const formatCurrency = (value: number | undefined | null) => {
     return new Intl.NumberFormat('ru-RU', {
       style: 'currency',
-      currency: 'RUB',
+      currency: currencyCode,
       minimumFractionDigits: 0,
       maximumFractionDigits: 0,
     }).format(value || 0);
   };
+
+  // Символ валюты для отображения
+  const getCurrencySymbol = (currency: string) => {
+    const symbols: Record<string, string> = {
+      RUB: '₽',
+      USD: '$',
+      EUR: '€',
+      BYN: 'Br',
+      KZT: '₸',
+      UAH: '₴',
+      TRY: '₺',
+      GBP: '£',
+      CHF: 'CHF',
+    };
+    return symbols[currency] || currency;
+  };
+  const currencySymbol = getCurrencySymbol(currencyCode);
 
   const formatNumber = (value: number | undefined | null) => {
     return new Intl.NumberFormat('ru-RU').format(value || 0);
@@ -388,6 +422,71 @@ export default function PublicDashboard() {
             <span className="text-sm text-gray-500 ml-2">
               {formatDate(data.period.startDate)} — {formatDate(data.period.endDate)}
             </span>
+
+            {/* Goal Selector */}
+            {data.availableGoals && data.availableGoals.length > 0 && (
+              <div className="relative ml-4">
+                <button
+                  onClick={() => setGoalsDropdownOpen(!goalsDropdownOpen)}
+                  className={`flex items-center gap-2 px-3 py-1.5 text-sm font-medium rounded-lg transition-colors ${
+                    selectedGoalIds.length > 0
+                      ? 'bg-green-100 text-green-700 border border-green-300'
+                      : 'bg-gray-100 text-gray-600 hover:bg-gray-200 border border-transparent'
+                  }`}
+                >
+                  <Target className="w-4 h-4" />
+                  {selectedGoalIds.length > 0
+                    ? `Цели (${selectedGoalIds.length})`
+                    : 'Все цели'}
+                  <ChevronDown className={`w-4 h-4 transition-transform ${goalsDropdownOpen ? 'rotate-180' : ''}`} />
+                </button>
+
+                {goalsDropdownOpen && (
+                  <div className="absolute top-full left-0 mt-1 bg-white rounded-lg shadow-lg border border-gray-200 py-2 z-50 min-w-[250px]">
+                    <button
+                      onClick={() => {
+                        setSelectedGoalIds([]);
+                        setGoalsDropdownOpen(false);
+                      }}
+                      className={`w-full px-4 py-2 text-left text-sm hover:bg-gray-50 ${
+                        selectedGoalIds.length === 0 ? 'text-green-600 font-medium' : 'text-gray-700'
+                      }`}
+                    >
+                      Все цели
+                    </button>
+                    <div className="border-t border-gray-100 my-1"></div>
+                    {data.availableGoals.map((goal) => (
+                      <button
+                        key={goal.id}
+                        onClick={() => {
+                          setSelectedGoalIds(prev =>
+                            prev.includes(goal.id)
+                              ? prev.filter(id => id !== goal.id)
+                              : [...prev, goal.id]
+                          );
+                        }}
+                        className={`w-full px-4 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-2 ${
+                          selectedGoalIds.includes(goal.id) ? 'text-green-600 font-medium' : 'text-gray-700'
+                        }`}
+                      >
+                        <span className={`w-4 h-4 rounded border flex items-center justify-center ${
+                          selectedGoalIds.includes(goal.id)
+                            ? 'bg-green-500 border-green-500 text-white'
+                            : 'border-gray-300'
+                        }`}>
+                          {selectedGoalIds.includes(goal.id) && (
+                            <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                            </svg>
+                          )}
+                        </span>
+                        <span className="truncate">{goal.name}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         </div>
       </header>
@@ -667,7 +766,7 @@ export default function PublicDashboard() {
                           {formatCurrency(campaign.cost)}
                         </td>
                         <td className="px-4 py-3 text-right text-gray-900">
-                          {(campaign.cpc || 0).toFixed(2)} ₽
+                          {(campaign.cpc || 0).toFixed(2)} {currencySymbol}
                         </td>
                         <td className="px-4 py-3 text-right">
                           <span className={`font-medium ${
@@ -726,7 +825,7 @@ export default function PublicDashboard() {
                         {formatCurrency(campaignTotals.cost)}
                       </td>
                       <td className="px-4 py-3 text-right text-gray-900">
-                        {totalCpc.toFixed(2)} ₽
+                        {totalCpc.toFixed(2)} {currencySymbol}
                       </td>
                       <td className="px-4 py-3 text-right text-gray-900">
                         {totalCtr.toFixed(2)}%
@@ -851,7 +950,7 @@ export default function PublicDashboard() {
                           {formatCurrency(day.cost)}
                         </td>
                         <td className="px-4 py-3 text-right text-gray-900">
-                          {(day.cpc || 0).toFixed(2)} ₽
+                          {(day.cpc || 0).toFixed(2)} {currencySymbol}
                         </td>
                         <td className="px-4 py-3 text-right">
                           <span className={`font-medium ${
