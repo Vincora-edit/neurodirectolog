@@ -1596,18 +1596,45 @@ export const clickhouseService = {
       ORDER BY total_cost DESC
     `;
 
+    // Конверсии по кампаниям (с фильтрацией по целям если указаны)
+    // Используем campaign_conversions - единственную таблицу с goal_id
+    const campaignConvQuery = hasGoalFilter ? `
+      SELECT
+        campaign_id,
+        sum(conversions) as total_conversions,
+        sum(revenue) as total_revenue
+      FROM campaign_conversions
+      WHERE connection_id = {connectionId:String}
+        AND date >= {startDate:Date}
+        AND date <= {endDate:Date}
+        AND goal_id IN {goalIds:Array(String)}
+      GROUP BY campaign_id
+    ` : `
+      SELECT
+        campaign_id,
+        sum(conversions) as total_conversions,
+        sum(revenue) as total_revenue
+      FROM campaign_performance
+      WHERE connection_id = {connectionId:String}
+        AND date >= {startDate:Date}
+        AND date <= {endDate:Date}
+      GROUP BY campaign_id
+    `;
+
     // Конверсии по группам объявлений (с фильтрацией по целям если указаны)
+    // Используем campaign_conversions с группировкой по ad_group_id
     const adGroupConvQuery = hasGoalFilter ? `
       SELECT
         campaign_id,
         ad_group_id,
         sum(conversions) as total_conversions,
         sum(revenue) as total_revenue
-      FROM ad_group_conversions
+      FROM campaign_conversions
       WHERE connection_id = {connectionId:String}
         AND date >= {startDate:Date}
         AND date <= {endDate:Date}
         AND goal_id IN {goalIds:Array(String)}
+        AND ad_group_id IS NOT NULL
       GROUP BY campaign_id, ad_group_id
     ` : `
       SELECT
@@ -1623,6 +1650,7 @@ export const clickhouseService = {
     `;
 
     // Конверсии по объявлениям (с фильтрацией по целям если указаны)
+    // Используем campaign_conversions с группировкой по ad_id
     const adConvQuery = hasGoalFilter ? `
       SELECT
         campaign_id,
@@ -1630,11 +1658,12 @@ export const clickhouseService = {
         ad_id,
         sum(conversions) as total_conversions,
         sum(revenue) as total_revenue
-      FROM ad_conversions
+      FROM campaign_conversions
       WHERE connection_id = {connectionId:String}
         AND date >= {startDate:Date}
         AND date <= {endDate:Date}
         AND goal_id IN {goalIds:Array(String)}
+        AND ad_id IS NOT NULL
       GROUP BY campaign_id, ad_group_id, ad_id
     ` : `
       SELECT
@@ -1655,10 +1684,11 @@ export const clickhouseService = {
     // Параметры с goalIds для запросов конверсий (если есть фильтр)
     const convParams = hasGoalFilter ? { ...baseParams, goalIds: safeGoalIds } : baseParams;
 
-    const [campaignResult, adGroupResult, adResult, adGroupConvResult, adConvResult] = await Promise.all([
+    const [campaignResult, adGroupResult, adResult, campaignConvResult, adGroupConvResult, adConvResult] = await Promise.all([
       client.query({ query: campaignQuery, query_params: baseParams, format: 'JSONEachRow' }),
       client.query({ query: adGroupQuery, query_params: baseParams, format: 'JSONEachRow' }),
       client.query({ query: adQuery, query_params: baseParams, format: 'JSONEachRow' }),
+      client.query({ query: campaignConvQuery, query_params: convParams, format: 'JSONEachRow' }),
       client.query({ query: adGroupConvQuery, query_params: convParams, format: 'JSONEachRow' }),
       client.query({ query: adConvQuery, query_params: convParams, format: 'JSONEachRow' }),
     ]);
@@ -1666,8 +1696,18 @@ export const clickhouseService = {
     const campaigns = await campaignResult.json<any>();
     const adGroups = await adGroupResult.json<any>();
     const ads = await adResult.json<any>();
+    const campaignConversions = await campaignConvResult.json<any>();
     const adGroupConversions = await adGroupConvResult.json<any>();
     const adConversions = await adConvResult.json<any>();
+
+    // Создаём карту конверсий по кампаниям: campaign_id -> { conversions, revenue }
+    const campaignConvMap = new Map<string, { conversions: number; revenue: number }>();
+    campaignConversions.forEach((c: any) => {
+      campaignConvMap.set(c.campaign_id, {
+        conversions: parseInt(c.total_conversions) || 0,
+        revenue: parseFloat(c.total_revenue) || 0,
+      });
+    });
 
     // Создаём карту конверсий по группам: campaign_id_ad_group_id -> { conversions, revenue }
     const adGroupConvMap = new Map<string, { conversions: number; revenue: number }>();
@@ -1747,13 +1787,12 @@ export const clickhouseService = {
     });
 
     // Формируем итоговую структуру
-    // Конверсии кампании = сумма конверсий её групп (для точного совпадения данных)
+    // Конверсии кампании берём напрямую из campaignConvMap (более точно при фильтре по целям)
     return campaigns.map((c: any) => {
       const campaignAdGroups = adGroupsMap.get(c.campaign_id) || [];
 
-      // Суммируем конверсии из групп для точного соответствия
-      const campaignConversions = campaignAdGroups.reduce((sum: number, ag: any) => sum + (ag.totalConversions || 0), 0);
-      const campaignRevenue = campaignAdGroups.reduce((sum: number, ag: any) => sum + (ag.totalRevenue || 0), 0);
+      // Берём конверсии из карты конверсий по кампаниям
+      const campaignConv = campaignConvMap.get(c.campaign_id) || { conversions: 0, revenue: 0 };
 
       return {
         campaignId: c.campaign_id,
@@ -1764,8 +1803,8 @@ export const clickhouseService = {
         avgCtr: parseFloat(c.avg_ctr) || 0,
         avgCpc: parseFloat(c.avg_cpc) || 0,
         avgBounceRate: parseFloat(c.avg_bounce_rate) || 0,
-        totalConversions: campaignConversions,
-        totalRevenue: campaignRevenue,
+        totalConversions: campaignConv.conversions,
+        totalRevenue: campaignConv.revenue,
         adGroups: campaignAdGroups,
       };
     });
@@ -1976,17 +2015,19 @@ export const clickhouseService = {
     `;
 
     // Конверсии с группировкой по нормализованной посадочной
+    // Используем campaign_conversions вместо ad_conversions (таблица не существует)
     const conversionsQuery = hasGoalFilter ? `
       SELECT
         ${normalizeUrl} as landing_page,
         sum(aconv.conversions) as total_conversions,
         sum(aconv.revenue) as total_revenue
-      FROM ad_conversions aconv
+      FROM campaign_conversions aconv
       JOIN (SELECT * FROM ad_contents FINAL) ac ON aconv.connection_id = ac.connection_id AND aconv.ad_id = ac.ad_id
       WHERE aconv.connection_id = {connectionId:String}
         AND aconv.date >= {dateFrom:Date}
         AND aconv.date <= {dateTo:Date}
         AND aconv.goal_id IN {goalIds:Array(String)}
+        AND aconv.ad_id IS NOT NULL
         AND ac.href IS NOT NULL
         AND ac.href != ''
       GROUP BY landing_page

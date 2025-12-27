@@ -167,7 +167,9 @@
       "Bash(npm run build:server:*)",
       "Bash(/Users/artemsubbotin/Desktop/Neurodirectolog/scripts/health-check.sh:*)",
       "Bash(/Users/artemsubbotin/Desktop/Neurodirectolog/scripts/deploy.sh:*)",
-      "Bash(./scripts/deploy.sh:*)"
+      "Bash(./scripts/deploy.sh:*)",
+      "Skill(db-query)",
+      "Skill(db-query:*)"
     ]
   }
 }
