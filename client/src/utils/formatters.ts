@@ -1,12 +1,43 @@
 // Утилиты для форматирования данных
 
+// Символы валют
+const CURRENCY_SYMBOLS: Record<string, string> = {
+  RUB: '₽',
+  USD: '$',
+  EUR: '€',
+  BYN: 'Br',
+  KZT: '₸',
+  UAH: '₴',
+  CHF: 'CHF',
+  TRY: '₺',
+  GBP: '£',
+};
+
 /**
- * Форматирует число как денежную сумму (рубли)
+ * Возвращает символ валюты
  */
-export function formatCurrency(value: number, decimals: number = 0): string {
+export function getCurrencySymbol(currency: string = 'RUB'): string {
+  return CURRENCY_SYMBOLS[currency.toUpperCase()] || currency;
+}
+
+/**
+ * Форматирует число как денежную сумму
+ */
+export function formatCurrency(value: number, decimals: number = 0, currency: string = 'RUB'): string {
+  const formatted = new Intl.NumberFormat('ru-RU', {
+    minimumFractionDigits: decimals,
+    maximumFractionDigits: decimals,
+  }).format(value);
+  return `${formatted} ${getCurrencySymbol(currency)}`;
+}
+
+/**
+ * Форматирует число как денежную сумму с полным форматом Intl
+ */
+export function formatCurrencyFull(value: number, decimals: number = 0, currency: string = 'RUB'): string {
   return new Intl.NumberFormat('ru-RU', {
     style: 'currency',
-    currency: 'RUB',
+    currency: currency,
     minimumFractionDigits: decimals,
     maximumFractionDigits: decimals,
   }).format(value);

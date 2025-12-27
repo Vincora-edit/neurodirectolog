@@ -20,8 +20,18 @@ import {
   Settings,
   Trash2,
   ArrowRight,
+  Save,
 } from 'lucide-react';
 import { API_BASE_URL } from '../../services/api';
+
+// Helper function to get auth headers
+const getAuthHeaders = () => {
+  const token = localStorage.getItem('token');
+  return {
+    'Content-Type': 'application/json',
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+  };
+};
 
 interface Connection {
   id: string;
@@ -146,8 +156,71 @@ export function DashboardHeader({
   const navigate = useNavigate();
   const [showGoalsDropdown, setShowGoalsDropdown] = useState(false);
   const [showAccountMenu, setShowAccountMenu] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editGoals, setEditGoals] = useState('');
+  const [editMetrikaCounterId, setEditMetrikaCounterId] = useState('');
+  const [editMetrikaToken, setEditMetrikaToken] = useState('');
+  const [isSaving, setIsSaving] = useState(false);
 
   const activeConnection = connections.find((c) => c.id === activeConnectionId);
+
+  // Открытие модалки редактирования
+  const openEditModal = () => {
+    if (activeConnection) {
+      // Парсим текущие цели из connection
+      let goals: string[] = [];
+      if (activeConnection.conversionGoals) {
+        try {
+          goals = JSON.parse(activeConnection.conversionGoals);
+        } catch {
+          goals = [];
+        }
+      }
+      setEditGoals(goals.join(', '));
+      setEditMetrikaCounterId((activeConnection as any).metrikaCounterId || '');
+      setEditMetrikaToken((activeConnection as any).metrikaToken || '');
+    }
+    setShowAccountMenu(false);
+    setShowEditModal(true);
+  };
+
+  // Сохранение изменений подключения
+  const handleSaveConnection = async () => {
+    if (!activeConnection) return;
+
+    setIsSaving(true);
+    try {
+      const goals = editGoals
+        .split(/[,\s\n]+/)
+        .map((g) => g.trim())
+        .filter((g) => g.length > 0);
+
+      const response = await fetch(
+        `${API_BASE_URL}/api/yandex/connection/${activeConnection.id}`,
+        {
+          method: 'PUT',
+          headers: getAuthHeaders(),
+          body: JSON.stringify({
+            conversionGoals: goals,
+            metrikaCounterId: editMetrikaCounterId || undefined,
+            metrikaToken: editMetrikaToken || undefined,
+          }),
+        }
+      );
+
+      if (response.ok) {
+        setShowEditModal(false);
+        window.location.reload(); // Перезагружаем для обновления данных
+      } else {
+        const error = await response.json();
+        alert(`Ошибка: ${error.error || 'Не удалось сохранить'}`);
+      }
+    } catch (error) {
+      alert('Ошибка при сохранении');
+    } finally {
+      setIsSaving(false);
+    }
+  };
 
   // Форматирование времени синхронизации
   const formatLastSync = (date: any) => {
@@ -270,7 +343,7 @@ export function DashboardHeader({
                               Добавить аккаунт
                             </button>
                             <button
-                              onClick={() => setShowAccountMenu(false)}
+                              onClick={openEditModal}
                               className="w-full px-4 py-2.5 text-left text-sm hover:bg-gray-50 flex items-center gap-2 text-gray-700"
                             >
                               <Edit3 size={16} className="text-blue-600" />
@@ -614,6 +687,108 @@ export function DashboardHeader({
               </span>
             )}
           </button>
+        </div>
+      )}
+
+      {/* Модальное окно редактирования подключения */}
+      {showEditModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div
+            className="absolute inset-0 bg-black/50"
+            onClick={() => setShowEditModal(false)}
+          />
+          <div className="relative bg-white rounded-xl shadow-xl max-w-lg w-full mx-4 p-6">
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-xl font-bold text-gray-900">
+                Редактировать подключение
+              </h2>
+              <button
+                onClick={() => setShowEditModal(false)}
+                className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              {/* Аккаунт */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Аккаунт
+                </label>
+                <div className="px-3 py-2 bg-gray-100 rounded-lg text-gray-700 font-medium">
+                  {activeConnection?.login}
+                </div>
+              </div>
+
+              {/* ID целей */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  ID целей для отслеживания конверсий
+                </label>
+                <textarea
+                  value={editGoals}
+                  onChange={(e) => setEditGoals(e.target.value)}
+                  rows={3}
+                  placeholder="252254424, 293622736, 293622699"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm font-mono"
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  Введите ID целей через запятую или с новой строки
+                </p>
+              </div>
+
+              {/* ID счетчика Метрики */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  ID счетчика Яндекс.Метрики (опционально)
+                </label>
+                <input
+                  type="text"
+                  value={editMetrikaCounterId}
+                  onChange={(e) => setEditMetrikaCounterId(e.target.value)}
+                  placeholder="12345678"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+                />
+              </div>
+
+              {/* Токен Метрики */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  OAuth токен Яндекс.Метрики (опционально)
+                </label>
+                <input
+                  type="text"
+                  value={editMetrikaToken}
+                  onChange={(e) => setEditMetrikaToken(e.target.value)}
+                  placeholder="y0_AgA..."
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm font-mono"
+                />
+              </div>
+            </div>
+
+            {/* Кнопки */}
+            <div className="flex gap-3 mt-6">
+              <button
+                onClick={() => setShowEditModal(false)}
+                className="flex-1 px-4 py-2.5 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors font-medium"
+              >
+                Отмена
+              </button>
+              <button
+                onClick={handleSaveConnection}
+                disabled={isSaving}
+                className="flex-1 px-4 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+              >
+                {isSaving ? (
+                  <Loader2 className="animate-spin" size={18} />
+                ) : (
+                  <Save size={18} />
+                )}
+                {isSaving ? 'Сохранение...' : 'Сохранить'}
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </>

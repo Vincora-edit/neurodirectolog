@@ -1,4 +1,5 @@
 import { Wallet, DollarSign, TrendingUp, TrendingDown, Target } from 'lucide-react';
+import { getCurrencySymbol } from '../../utils/formatters';
 
 interface MetricsCardsProps {
   totalStats: {
@@ -8,12 +9,16 @@ interface MetricsCardsProps {
     impressions: number;
   };
   budgetForecast?: {
-    balance?: { amount: number };
+    balance?: { amount: number; currency?: string };
     forecast?: { daysRemaining: number };
   };
+  currency?: string;
 }
 
-export function MetricsCards({ totalStats, budgetForecast }: MetricsCardsProps) {
+export function MetricsCards({ totalStats, budgetForecast, currency }: MetricsCardsProps) {
+  // Определяем валюту из прогноза бюджета или из переданного параметра
+  const currencyCode = budgetForecast?.balance?.currency || currency || 'RUB';
+  const currencySymbol = getCurrencySymbol(currencyCode);
   const cr = totalStats.clicks > 0 ? (totalStats.conversions / totalStats.clicks) * 100 : 0;
   const cpl = totalStats.conversions > 0 ? totalStats.cost / totalStats.conversions : 0;
 
@@ -47,7 +52,7 @@ export function MetricsCards({ totalStats, budgetForecast }: MetricsCardsProps) 
               {budgetForecast?.balance?.amount
                 ? budgetForecast.balance.amount.toLocaleString('ru-RU')
                 : '—'}{' '}
-              ₽
+              {currencySymbol}
             </p>
             {daysRemaining !== null && daysRemaining !== undefined && (
               <p className={`${budgetColors.text} text-xs`}>
@@ -66,7 +71,7 @@ export function MetricsCards({ totalStats, budgetForecast }: MetricsCardsProps) 
           </div>
           <div className="min-w-0">
             <p className="text-xs text-orange-100">Расход</p>
-            <p className="text-xl font-bold truncate leading-tight">{totalStats.cost.toLocaleString('ru-RU')} ₽</p>
+            <p className="text-xl font-bold truncate leading-tight">{totalStats.cost.toLocaleString('ru-RU')} {currencySymbol}</p>
           </div>
         </div>
       </div>
@@ -93,7 +98,7 @@ export function MetricsCards({ totalStats, budgetForecast }: MetricsCardsProps) 
           <div className="min-w-0">
             <p className="text-xs text-gray-100">CPL</p>
             <p className="text-xl font-bold truncate leading-tight">
-              {cpl > 0 ? Math.round(cpl).toLocaleString('ru-RU') : '—'} ₽
+              {cpl > 0 ? Math.round(cpl).toLocaleString('ru-RU') : '—'} {currencySymbol}
             </p>
           </div>
         </div>
