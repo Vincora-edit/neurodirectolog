@@ -6,6 +6,8 @@
 import express from 'express';
 import { clickhouseService } from '../../services/clickhouse.service';
 import { yandexDirectService } from '../../services/yandex-direct.service';
+import { authenticate, AuthRequest } from '../../middleware/auth';
+import { requireProjectAccess } from '../../middleware/projectAccess';
 
 const router = express.Router();
 
@@ -51,7 +53,7 @@ function parseGoalIds(connection: any): string[] {
  * GET /api/yandex/search-queries/:projectId
  * Получить статистику по поисковым запросам
  */
-router.get('/search-queries/:projectId', async (req, res) => {
+router.get('/search-queries/:projectId', authenticate, requireProjectAccess, async (req: AuthRequest, res) => {
   try {
     const { projectId } = req.params;
     const { days, startDate: startDateParam, endDate: endDateParam, connectionId, campaignId } = req.query;
@@ -99,7 +101,7 @@ router.get('/search-queries/:projectId', async (req, res) => {
  * GET /api/yandex/demographics/:projectId
  * Получить статистику по полу и возрасту
  */
-router.get('/demographics/:projectId', async (req, res) => {
+router.get('/demographics/:projectId', authenticate, requireProjectAccess, async (req: AuthRequest, res) => {
   try {
     const { projectId } = req.params;
     const { days, startDate: startDateParam, endDate: endDateParam, connectionId, campaignId } = req.query;
@@ -147,7 +149,7 @@ router.get('/demographics/:projectId', async (req, res) => {
  * GET /api/yandex/geo-stats/:projectId
  * Получить статистику по регионам (устаревший эндпоинт)
  */
-router.get('/geo-stats/:projectId', async (req, res) => {
+router.get('/geo-stats/:projectId', authenticate, requireProjectAccess, async (req: AuthRequest, res) => {
   try {
     const { projectId } = req.params;
     const { days, startDate: startDateParam, endDate: endDateParam, connectionId } = req.query;
@@ -228,7 +230,7 @@ router.get('/geo-stats/:projectId', async (req, res) => {
  * GET /api/yandex/geo-report/:projectId
  * Получить статистику по регионам (новый эндпоинт)
  */
-router.get('/geo-report/:projectId', async (req, res) => {
+router.get('/geo-report/:projectId', authenticate, requireProjectAccess, async (req: AuthRequest, res) => {
   try {
     const { projectId } = req.params;
     const { days, startDate: startDateParam, endDate: endDateParam, connectionId, campaignId } = req.query;
@@ -286,7 +288,7 @@ router.get('/geo-report/:projectId', async (req, res) => {
  * GET /api/yandex/device-stats/:projectId
  * Получить статистику по устройствам
  */
-router.get('/device-stats/:projectId', async (req, res) => {
+router.get('/device-stats/:projectId', authenticate, requireProjectAccess, async (req: AuthRequest, res) => {
   try {
     const { projectId } = req.params;
     const { days, startDate: startDateParam, endDate: endDateParam, connectionId, campaignId } = req.query;
@@ -382,7 +384,7 @@ router.get('/device-stats/:projectId', async (req, res) => {
  * GET /api/yandex/placements/:projectId
  * Получить статистику по площадкам
  */
-router.get('/placements/:projectId', async (req, res) => {
+router.get('/placements/:projectId', authenticate, requireProjectAccess, async (req: AuthRequest, res) => {
   try {
     const { projectId } = req.params;
     const { days, startDate: startDateParam, endDate: endDateParam, connectionId, campaignId } = req.query;
@@ -430,7 +432,7 @@ router.get('/placements/:projectId', async (req, res) => {
  * GET /api/yandex/income/:projectId
  * Получить статистику по платёжеспособности
  */
-router.get('/income/:projectId', async (req, res) => {
+router.get('/income/:projectId', authenticate, requireProjectAccess, async (req: AuthRequest, res) => {
   try {
     const { projectId } = req.params;
     const { days, startDate: startDateParam, endDate: endDateParam, connectionId, campaignId } = req.query;
@@ -478,7 +480,7 @@ router.get('/income/:projectId', async (req, res) => {
  * GET /api/yandex/targeting-categories/:projectId
  * Получить статистику по категориям таргетинга
  */
-router.get('/targeting-categories/:projectId', async (req, res) => {
+router.get('/targeting-categories/:projectId', authenticate, requireProjectAccess, async (req: AuthRequest, res) => {
   try {
     const { projectId } = req.params;
     const { days, startDate: startDateParam, endDate: endDateParam, connectionId, campaignId } = req.query;
@@ -526,7 +528,7 @@ router.get('/targeting-categories/:projectId', async (req, res) => {
  * GET /api/yandex/criteria/:projectId
  * Получить статистику по условиям показа (ключевым словам)
  */
-router.get('/criteria/:projectId', async (req, res) => {
+router.get('/criteria/:projectId', authenticate, requireProjectAccess, async (req: AuthRequest, res) => {
   try {
     const { projectId } = req.params;
     const { days, startDate: startDateParam, endDate: endDateParam, connectionId, campaignId } = req.query;
@@ -574,7 +576,7 @@ router.get('/criteria/:projectId', async (req, res) => {
  * GET /api/yandex/ad-texts/:projectId
  * Получить статистику по текстам объявлений
  */
-router.get('/ad-texts/:projectId', async (req, res) => {
+router.get('/ad-texts/:projectId', authenticate, requireProjectAccess, async (req: AuthRequest, res) => {
   try {
     const { projectId } = req.params;
     const { days, startDate: startDateParam, endDate: endDateParam, connectionId, campaignId } = req.query;

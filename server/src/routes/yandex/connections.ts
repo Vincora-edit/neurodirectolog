@@ -5,6 +5,8 @@
 
 import express from 'express';
 import { clickhouseService } from '../../services/clickhouse.service';
+import { authenticate, AuthRequest } from '../../middleware/auth';
+import { requireProjectAccess, requireConnectionAccess } from '../../middleware/projectAccess';
 
 const router = express.Router();
 
@@ -12,7 +14,7 @@ const router = express.Router();
  * GET /api/yandex/connections/:projectId
  * Получить все подключения для проекта (мультиаккаунтность)
  */
-router.get('/connections/:projectId', async (req, res) => {
+router.get('/connections/:projectId', authenticate, requireProjectAccess, async (req: AuthRequest, res) => {
   try {
     const { projectId } = req.params;
     const connections = await clickhouseService.getConnectionsByProjectId(projectId);
@@ -34,7 +36,7 @@ router.get('/connections/:projectId', async (req, res) => {
  * GET /api/yandex/connection/:projectId
  * Получить информацию о подключении для проекта (первое найденное)
  */
-router.get('/connection/:projectId', async (req, res) => {
+router.get('/connection/:projectId', authenticate, requireProjectAccess, async (req: AuthRequest, res) => {
   try {
     const { projectId } = req.params;
     const connection = await clickhouseService.getConnectionByProjectId(projectId);
@@ -57,7 +59,7 @@ router.get('/connection/:projectId', async (req, res) => {
  * DELETE /api/yandex/connection/:connectionId
  * Удалить подключение
  */
-router.delete('/connection/:connectionId', async (req, res) => {
+router.delete('/connection/:connectionId', authenticate, requireConnectionAccess, async (req: AuthRequest, res) => {
   try {
     const { connectionId } = req.params;
 
@@ -74,7 +76,7 @@ router.delete('/connection/:connectionId', async (req, res) => {
  * PUT /api/yandex/connection/:connectionId
  * Обновить подключение (токен, цели и т.д.)
  */
-router.put('/connection/:connectionId', async (req, res) => {
+router.put('/connection/:connectionId', authenticate, requireConnectionAccess, async (req: AuthRequest, res) => {
   try {
     const { connectionId } = req.params;
     const { accessToken, refreshToken, conversionGoals, metrikaCounterId, metrikaToken } = req.body;
@@ -105,7 +107,7 @@ router.put('/connection/:connectionId', async (req, res) => {
  * GET /api/yandex/campaigns/:projectId
  * Получить список кампаний для проекта
  */
-router.get('/campaigns/:projectId', async (req, res) => {
+router.get('/campaigns/:projectId', authenticate, requireProjectAccess, async (req: AuthRequest, res) => {
   try {
     const { projectId } = req.params;
     const connection = await clickhouseService.getConnectionByProjectId(projectId);

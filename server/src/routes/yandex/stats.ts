@@ -5,6 +5,8 @@
 
 import express from 'express';
 import { clickhouseService } from '../../services/clickhouse.service';
+import { authenticate, AuthRequest } from '../../middleware/auth';
+import { requireProjectAccess } from '../../middleware/projectAccess';
 
 const router = express.Router();
 
@@ -12,7 +14,7 @@ const router = express.Router();
  * GET /api/yandex/stats/:projectId
  * Получить агрегированную статистику для проекта
  */
-router.get('/stats/:projectId', async (req, res) => {
+router.get('/stats/:projectId', authenticate, requireProjectAccess, async (req: AuthRequest, res) => {
   try {
     const { projectId } = req.params;
     const { days = '30' } = req.query;
@@ -43,7 +45,7 @@ router.get('/stats/:projectId', async (req, res) => {
  * GET /api/yandex/campaign-stats/:campaignId
  * Получить детальную статистику по кампании
  */
-router.get('/campaign-stats/:campaignId', async (req, res) => {
+router.get('/campaign-stats/:campaignId', authenticate, async (req: AuthRequest, res) => {
   try {
     const { campaignId } = req.params;
     const { days = '30' } = req.query;
@@ -70,7 +72,7 @@ router.get('/campaign-stats/:campaignId', async (req, res) => {
  * Получить детальную статистику с фильтром по целям
  * Поддерживает параметр connectionId для мультиаккаунтности
  */
-router.get('/detailed-stats/:projectId', async (req, res) => {
+router.get('/detailed-stats/:projectId', authenticate, requireProjectAccess, async (req: AuthRequest, res) => {
   try {
     const { projectId } = req.params;
     const { days, goalId, goalIds, startDate: startDateParam, endDate: endDateParam, connectionId } = req.query;
@@ -124,7 +126,7 @@ router.get('/detailed-stats/:projectId', async (req, res) => {
  * GET /api/yandex/hierarchical-stats/:projectId
  * Получить иерархическую статистику: Кампании → Группы → Объявления
  */
-router.get('/hierarchical-stats/:projectId', async (req, res) => {
+router.get('/hierarchical-stats/:projectId', authenticate, requireProjectAccess, async (req: AuthRequest, res) => {
   try {
     const { projectId } = req.params;
     const { days, goalIds, startDate: startDateParam, endDate: endDateParam, connectionId } = req.query;
@@ -176,7 +178,7 @@ router.get('/hierarchical-stats/:projectId', async (req, res) => {
  * Получить статистику по дням для графиков и таблицы
  * Поддерживает фильтрацию по campaignId, adGroupId, adId
  */
-router.get('/daily-stats/:projectId', async (req, res) => {
+router.get('/daily-stats/:projectId', authenticate, requireProjectAccess, async (req: AuthRequest, res) => {
   try {
     const { projectId } = req.params;
     const { days, goalIds, startDate: startDateParam, endDate: endDateParam, connectionId, campaignId, adGroupId, adId } = req.query;

@@ -8,6 +8,8 @@ import { clickhouseService } from '../../services/clickhouse.service';
 import { runManualSync } from '../../jobs/sync.job';
 import { syncService } from '../../services/sync.service';
 import { queueService } from '../../services/queue.service';
+import { authenticate, AuthRequest } from '../../middleware/auth';
+import { requireProjectAccess } from '../../middleware/projectAccess';
 
 const router = express.Router();
 
@@ -15,7 +17,7 @@ const router = express.Router();
  * POST /api/yandex/sync/:projectId
  * Запустить синхронизацию вручную
  */
-router.post('/sync/:projectId', async (req, res) => {
+router.post('/sync/:projectId', authenticate, requireProjectAccess, async (req: AuthRequest, res) => {
   try {
     const { projectId } = req.params;
     const connection = await clickhouseService.getConnectionByProjectId(projectId);
@@ -55,9 +57,13 @@ router.post('/sync/:projectId', async (req, res) => {
 
 /**
  * POST /api/yandex/sync-all
- * Запустить синхронизацию всех подключений вручную
+ * Запустить синхронизацию всех подключений вручную (только для админа)
  */
-router.post('/sync-all', async (_req, res) => {
+router.post('/sync-all', authenticate, async (req: AuthRequest, res) => {
+  // Только админ может синхронизировать все подключения
+  if (!req.isAdmin) {
+    return res.status(403).json({ error: 'Admin access required' });
+  }
   try {
     // Если очередь доступна - используем bulk добавление
     if (queueService.isAvailable()) {
@@ -95,7 +101,7 @@ router.post('/sync-all', async (_req, res) => {
  * GET /api/yandex/sync/queue/stats
  * Получить статистику очереди
  */
-router.get('/queue/stats', async (_req, res) => {
+router.get('/queue/stats', authenticate, async (_req: AuthRequest, res) => {
   try {
     if (!queueService.isAvailable()) {
       return res.json({
@@ -120,7 +126,7 @@ router.get('/queue/stats', async (_req, res) => {
  * GET /api/yandex/sync/queue/jobs
  * Получить список задач в очереди
  */
-router.get('/queue/jobs', async (req, res) => {
+router.get('/queue/jobs', authenticate, async (req: AuthRequest, res) => {
   try {
     const { connectionId } = req.query;
 
@@ -144,7 +150,7 @@ router.get('/queue/jobs', async (req, res) => {
  * GET /api/yandex/sync/queue/job/:jobId
  * Получить статус конкретной задачи
  */
-router.get('/queue/job/:jobId', async (req, res) => {
+router.get('/queue/job/:jobId', authenticate, async (req: AuthRequest, res) => {
   try {
     const { jobId } = req.params;
 
@@ -169,7 +175,7 @@ router.get('/queue/job/:jobId', async (req, res) => {
  * DELETE /api/yandex/sync/queue/job/:jobId
  * Отменить задачу
  */
-router.delete('/queue/job/:jobId', async (req, res) => {
+router.delete('/queue/job/:jobId', authenticate, async (req: AuthRequest, res) => {
   try {
     const { jobId } = req.params;
 
@@ -194,7 +200,7 @@ router.delete('/queue/job/:jobId', async (req, res) => {
  * POST /api/yandex/sync/queue/job/:jobId/retry
  * Повторить неудавшуюся задачу
  */
-router.post('/queue/job/:jobId/retry', async (req, res) => {
+router.post('/queue/job/:jobId/retry', authenticate, async (req: AuthRequest, res) => {
   try {
     const { jobId } = req.params;
 

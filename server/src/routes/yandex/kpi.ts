@@ -7,6 +7,8 @@ import express from 'express';
 import { clickhouseService } from '../../services/clickhouse.service';
 import { yandexDirectService } from '../../services/yandex-direct.service';
 import { aiAnalysisService } from '../../services/ai-analysis.service';
+import { authenticate, AuthRequest } from '../../middleware/auth';
+import { requireProjectAccess, requireConnectionAccess } from '../../middleware/projectAccess';
 
 const router = express.Router();
 
@@ -14,7 +16,7 @@ const router = express.Router();
  * GET /api/yandex/kpi/:connectionId
  * Получить KPI для аккаунта на текущий месяц + статистику прогресса
  */
-router.get('/kpi/:connectionId', async (req, res) => {
+router.get('/kpi/:connectionId', authenticate, requireConnectionAccess, async (req: AuthRequest, res) => {
   try {
     const { connectionId } = req.params;
 
@@ -229,7 +231,7 @@ router.get('/kpi/:connectionId', async (req, res) => {
  * POST /api/yandex/kpi/:connectionId
  * Сохранить KPI для аккаунта
  */
-router.post('/kpi/:connectionId', async (req, res) => {
+router.post('/kpi/:connectionId', authenticate, requireConnectionAccess, async (req: AuthRequest, res) => {
   try {
     const { connectionId } = req.params;
     const { targetCost, targetCpl, targetLeads, goalIds, month } = req.body;
@@ -258,7 +260,7 @@ router.post('/kpi/:connectionId', async (req, res) => {
  * GET /api/yandex/landing-pages/:projectId
  * Получить статистику по посадочным страницам
  */
-router.get('/landing-pages/:projectId', async (req, res) => {
+router.get('/landing-pages/:projectId', authenticate, requireProjectAccess, async (req: AuthRequest, res) => {
   try {
     const { projectId } = req.params;
     const { days, goalIds, startDate: startDateParam, endDate: endDateParam, connectionId } = req.query;
@@ -309,7 +311,7 @@ router.get('/landing-pages/:projectId', async (req, res) => {
  * GET /api/yandex/budget-forecast/:connectionId
  * Получить прогноз бюджета
  */
-router.get('/budget-forecast/:connectionId', async (req, res) => {
+router.get('/budget-forecast/:connectionId', authenticate, requireConnectionAccess, async (req: AuthRequest, res) => {
   try {
     const { connectionId } = req.params;
 
@@ -397,7 +399,7 @@ router.get('/budget-forecast/:connectionId', async (req, res) => {
  * GET /api/yandex/recommendations/:connectionId
  * Получить AI-рекомендации для дашборда
  */
-router.get('/recommendations/:connectionId', async (req, res) => {
+router.get('/recommendations/:connectionId', authenticate, requireConnectionAccess, async (req: AuthRequest, res) => {
   try {
     const { connectionId } = req.params;
 

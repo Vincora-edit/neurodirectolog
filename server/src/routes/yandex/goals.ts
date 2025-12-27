@@ -7,6 +7,8 @@ import express from 'express';
 import { clickhouseService } from '../../services/clickhouse.service';
 import { yandexDirectService } from '../../services/yandex-direct.service';
 import { yandexMetrikaService } from '../../services/yandex-metrika.service';
+import { authenticate, AuthRequest } from '../../middleware/auth';
+import { requireProjectAccess, requireConnectionAccess } from '../../middleware/projectAccess';
 
 const router = express.Router();
 
@@ -14,7 +16,7 @@ const router = express.Router();
  * GET /api/yandex/available-goals/:projectId
  * Получить список доступных целей для проекта
  */
-router.get('/available-goals/:projectId', async (req, res) => {
+router.get('/available-goals/:projectId', authenticate, requireProjectAccess, async (req: AuthRequest, res) => {
   try {
     const { projectId } = req.params;
     const { connectionId } = req.query;
@@ -79,7 +81,7 @@ router.get('/available-goals/:projectId', async (req, res) => {
  * POST /api/yandex/load-goals
  * Загрузить цели из кампаний Яндекс.Директ
  */
-router.post('/load-goals', async (req, res) => {
+router.post('/load-goals', authenticate, async (req: AuthRequest, res) => {
   try {
     const { accessToken, login } = req.body;
 
@@ -110,7 +112,7 @@ router.post('/load-goals', async (req, res) => {
  * GET /api/yandex/metrika/goals/:counterId
  * Получить список целей из счетчика Метрики
  */
-router.get('/metrika/goals/:counterId', async (req, res) => {
+router.get('/metrika/goals/:counterId', authenticate, async (req: AuthRequest, res) => {
   try {
     const { counterId } = req.params;
     const { token } = req.query;
@@ -135,7 +137,7 @@ router.get('/metrika/goals/:counterId', async (req, res) => {
  * GET /api/yandex/connection/:connectionId/goals
  * Получить все доступные цели из Яндекс.Метрики для подключения
  */
-router.get('/connection/:connectionId/goals', async (req, res) => {
+router.get('/connection/:connectionId/goals', authenticate, requireConnectionAccess, async (req: AuthRequest, res) => {
   try {
     const { connectionId } = req.params;
 
