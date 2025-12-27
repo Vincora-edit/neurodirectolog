@@ -19,17 +19,30 @@ import type {
   Recommendation,
 } from '../types/yandex';
 
+// Helper function to get auth headers
+const getAuthHeaders = () => {
+  const token = localStorage.getItem('token');
+  return {
+    'Content-Type': 'application/json',
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+  };
+};
+
 // Yandex Dashboard API Service
 export const yandexService = {
   // Connections
   async getConnection(projectId: string): Promise<YandexConnection | null> {
-    const response = await fetch(`${API_BASE_URL}/api/yandex/connection/${projectId}`);
+    const response = await fetch(`${API_BASE_URL}/api/yandex/connection/${projectId}`, {
+      headers: getAuthHeaders(),
+    });
     if (!response.ok) return null;
     return response.json();
   },
 
   async getConnections(projectId: string): Promise<YandexConnection[]> {
-    const response = await fetch(`${API_BASE_URL}/api/yandex/connections/${projectId}`);
+    const response = await fetch(`${API_BASE_URL}/api/yandex/connections/${projectId}`, {
+      headers: getAuthHeaders(),
+    });
     if (!response.ok) return [];
     return response.json();
   },
@@ -40,7 +53,7 @@ export const yandexService = {
   ): Promise<YandexConnection> {
     const response = await fetch(`${API_BASE_URL}/api/yandex/connection/${connectionId}`, {
       method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
+      headers: getAuthHeaders(),
       body: JSON.stringify(data),
     });
     return response.json();
@@ -49,12 +62,15 @@ export const yandexService = {
   async deleteConnection(connectionId: string): Promise<void> {
     await fetch(`${API_BASE_URL}/api/yandex/connection/${connectionId}`, {
       method: 'DELETE',
+      headers: getAuthHeaders(),
     });
   },
 
   // Campaigns
   async getCampaigns(projectId: string): Promise<Campaign[]> {
-    const response = await fetch(`${API_BASE_URL}/api/yandex/campaigns/${projectId}`);
+    const response = await fetch(`${API_BASE_URL}/api/yandex/campaigns/${projectId}`, {
+      headers: getAuthHeaders(),
+    });
     return response.json();
   },
 
@@ -88,7 +104,8 @@ export const yandexService = {
     }
 
     const response = await fetch(
-      `${API_BASE_URL}/api/yandex/detailed-stats/${projectId}?${params}`
+      `${API_BASE_URL}/api/yandex/detailed-stats/${projectId}?${params}`,
+      { headers: getAuthHeaders() }
     );
     return response.json();
   },
@@ -122,7 +139,8 @@ export const yandexService = {
     }
 
     const response = await fetch(
-      `${API_BASE_URL}/api/yandex/hierarchical-stats/${projectId}?${params}`
+      `${API_BASE_URL}/api/yandex/hierarchical-stats/${projectId}?${params}`,
+      { headers: getAuthHeaders() }
     );
     return response.json();
   },
@@ -169,7 +187,8 @@ export const yandexService = {
     if (adId) params.append('adId', adId);
 
     const response = await fetch(
-      `${API_BASE_URL}/api/yandex/daily-stats/${projectId}?${params}`
+      `${API_BASE_URL}/api/yandex/daily-stats/${projectId}?${params}`,
+      { headers: getAuthHeaders() }
     );
     return response.json();
   },
@@ -180,7 +199,7 @@ export const yandexService = {
     if (connectionId) {
       url += `?connectionId=${connectionId}`;
     }
-    const response = await fetch(url);
+    const response = await fetch(url, { headers: getAuthHeaders() });
     return response.json();
   },
 
@@ -188,6 +207,7 @@ export const yandexService = {
   async syncManual(projectId: string): Promise<{ success: boolean; message?: string }> {
     const response = await fetch(`${API_BASE_URL}/api/yandex/sync/${projectId}`, {
       method: 'POST',
+      headers: getAuthHeaders(),
     });
     return response.json();
   },
@@ -198,7 +218,7 @@ export const yandexService = {
     if (goalIds && goalIds.length > 0) {
       url += `?goalIds=${goalIds.join(',')}`;
     }
-    const response = await fetch(url);
+    const response = await fetch(url, { headers: getAuthHeaders() });
     return response.json();
   },
 
@@ -214,7 +234,7 @@ export const yandexService = {
   ): Promise<KpiData> {
     const response = await fetch(`${API_BASE_URL}/api/yandex/kpi/${connectionId}`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: getAuthHeaders(),
       body: JSON.stringify(kpi),
     });
     return response.json();
@@ -223,7 +243,8 @@ export const yandexService = {
   // Budget Forecast
   async getBudgetForecast(connectionId: string): Promise<BudgetForecast> {
     const response = await fetch(
-      `${API_BASE_URL}/api/yandex/budget-forecast/${connectionId}`
+      `${API_BASE_URL}/api/yandex/budget-forecast/${connectionId}`,
+      { headers: getAuthHeaders() }
     );
     return response.json();
   },
@@ -258,7 +279,8 @@ export const yandexService = {
     }
 
     const response = await fetch(
-      `${API_BASE_URL}/api/yandex/landing-pages/${projectId}?${params}`
+      `${API_BASE_URL}/api/yandex/landing-pages/${projectId}?${params}`,
+      { headers: getAuthHeaders() }
     );
     return response.json();
   },
@@ -288,7 +310,8 @@ export const yandexService = {
     }
 
     const response = await fetch(
-      `${API_BASE_URL}/api/yandex/device-stats/${projectId}?${params}`
+      `${API_BASE_URL}/api/yandex/device-stats/${projectId}?${params}`,
+      { headers: getAuthHeaders() }
     );
     return response.json();
   },
@@ -318,7 +341,8 @@ export const yandexService = {
     }
 
     const response = await fetch(
-      `${API_BASE_URL}/api/yandex/geo-stats/${projectId}?${params}`
+      `${API_BASE_URL}/api/yandex/geo-stats/${projectId}?${params}`,
+      { headers: getAuthHeaders() }
     );
     return response.json();
   },
@@ -348,7 +372,8 @@ export const yandexService = {
     }
 
     const response = await fetch(
-      `${API_BASE_URL}/api/yandex/geo-report/${projectId}?${params}`
+      `${API_BASE_URL}/api/yandex/geo-report/${projectId}?${params}`,
+      { headers: getAuthHeaders() }
     );
     return response.json();
   },
@@ -378,7 +403,8 @@ export const yandexService = {
     }
 
     const response = await fetch(
-      `${API_BASE_URL}/api/yandex/search-queries/${projectId}?${params}`
+      `${API_BASE_URL}/api/yandex/search-queries/${projectId}?${params}`,
+      { headers: getAuthHeaders() }
     );
     return response.json();
   },
@@ -408,7 +434,8 @@ export const yandexService = {
     }
 
     const response = await fetch(
-      `${API_BASE_URL}/api/yandex/demographics/${projectId}?${params}`
+      `${API_BASE_URL}/api/yandex/demographics/${projectId}?${params}`,
+      { headers: getAuthHeaders() }
     );
     return response.json();
   },
@@ -438,7 +465,8 @@ export const yandexService = {
     }
 
     const response = await fetch(
-      `${API_BASE_URL}/api/yandex/placements/${projectId}?${params}`
+      `${API_BASE_URL}/api/yandex/placements/${projectId}?${params}`,
+      { headers: getAuthHeaders() }
     );
     return response.json();
   },
@@ -468,7 +496,8 @@ export const yandexService = {
     }
 
     const response = await fetch(
-      `${API_BASE_URL}/api/yandex/income/${projectId}?${params}`
+      `${API_BASE_URL}/api/yandex/income/${projectId}?${params}`,
+      { headers: getAuthHeaders() }
     );
     return response.json();
   },
@@ -498,7 +527,8 @@ export const yandexService = {
     }
 
     const response = await fetch(
-      `${API_BASE_URL}/api/yandex/targeting-categories/${projectId}?${params}`
+      `${API_BASE_URL}/api/yandex/targeting-categories/${projectId}?${params}`,
+      { headers: getAuthHeaders() }
     );
     return response.json();
   },
@@ -528,7 +558,8 @@ export const yandexService = {
     }
 
     const response = await fetch(
-      `${API_BASE_URL}/api/yandex/criteria/${projectId}?${params}`
+      `${API_BASE_URL}/api/yandex/criteria/${projectId}?${params}`,
+      { headers: getAuthHeaders() }
     );
     return response.json();
   },
@@ -558,7 +589,8 @@ export const yandexService = {
     }
 
     const response = await fetch(
-      `${API_BASE_URL}/api/yandex/ad-texts/${projectId}?${params}`
+      `${API_BASE_URL}/api/yandex/ad-texts/${projectId}?${params}`,
+      { headers: getAuthHeaders() }
     );
     return response.json();
   },
@@ -566,7 +598,8 @@ export const yandexService = {
   // AI Recommendations
   async getRecommendations(connectionId: string): Promise<Recommendation[]> {
     const response = await fetch(
-      `${API_BASE_URL}/api/yandex/recommendations/${connectionId}`
+      `${API_BASE_URL}/api/yandex/recommendations/${connectionId}`,
+      { headers: getAuthHeaders() }
     );
     return response.json();
   },

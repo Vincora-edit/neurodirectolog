@@ -3,10 +3,21 @@ import { useQuery } from '@tanstack/react-query';
 import { useProjectStore } from '../store/projectStore';
 import { projectsService, API_BASE_URL } from '../services/api';
 
+// Helper function to get auth headers
+const getAuthHeaders = () => {
+  const token = localStorage.getItem('token');
+  return {
+    'Content-Type': 'application/json',
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+  };
+};
+
 // Dashboard API Service
 const dashboardService = {
   async getConnections(projectId: string) {
-    const response = await fetch(`${API_BASE_URL}/api/yandex/connections/${projectId}`);
+    const response = await fetch(`${API_BASE_URL}/api/yandex/connections/${projectId}`, {
+      headers: getAuthHeaders(),
+    });
     if (!response.ok) return [];
     return response.json();
   },
@@ -16,7 +27,7 @@ const dashboardService = {
     if (connectionId) {
       url += `?connectionId=${connectionId}`;
     }
-    const response = await fetch(url);
+    const response = await fetch(url, { headers: getAuthHeaders() });
     return response.json();
   },
 
@@ -40,7 +51,7 @@ const dashboardService = {
     if (connectionId) {
       url += `&connectionId=${connectionId}`;
     }
-    const response = await fetch(url);
+    const response = await fetch(url, { headers: getAuthHeaders() });
     return response.json();
   },
 
@@ -64,7 +75,7 @@ const dashboardService = {
     if (connectionId) {
       url += `&connectionId=${connectionId}`;
     }
-    const response = await fetch(url);
+    const response = await fetch(url, { headers: getAuthHeaders() });
     return response.json();
   },
 
@@ -92,12 +103,14 @@ const dashboardService = {
     if (campaignId) url += `&campaignId=${campaignId}`;
     if (adGroupId) url += `&adGroupId=${adGroupId}`;
     if (adId) url += `&adId=${adId}`;
-    const response = await fetch(url);
+    const response = await fetch(url, { headers: getAuthHeaders() });
     return response.json();
   },
 
   async getKpi(connectionId: string) {
-    const response = await fetch(`${API_BASE_URL}/api/yandex/kpi/${connectionId}`);
+    const response = await fetch(`${API_BASE_URL}/api/yandex/kpi/${connectionId}`, {
+      headers: getAuthHeaders(),
+    });
     return response.json();
   },
 
@@ -107,26 +120,31 @@ const dashboardService = {
   ) {
     const response = await fetch(`${API_BASE_URL}/api/yandex/kpi/${connectionId}`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: getAuthHeaders(),
       body: JSON.stringify(kpi),
     });
     return response.json();
   },
 
   async getBudgetForecast(connectionId: string) {
-    const response = await fetch(`${API_BASE_URL}/api/yandex/budget-forecast/${connectionId}`);
+    const response = await fetch(`${API_BASE_URL}/api/yandex/budget-forecast/${connectionId}`, {
+      headers: getAuthHeaders(),
+    });
     return response.json();
   },
 
   async syncManual(projectId: string) {
     const response = await fetch(`${API_BASE_URL}/api/yandex/sync/${projectId}`, {
       method: 'POST',
+      headers: getAuthHeaders(),
     });
     return response.json();
   },
 
   async getRecommendations(connectionId: string) {
-    const response = await fetch(`${API_BASE_URL}/api/yandex/recommendations/${connectionId}`);
+    const response = await fetch(`${API_BASE_URL}/api/yandex/recommendations/${connectionId}`, {
+      headers: getAuthHeaders(),
+    });
     return response.json();
   },
 
@@ -150,7 +168,7 @@ const dashboardService = {
     if (connectionId) {
       url += `&connectionId=${connectionId}`;
     }
-    const response = await fetch(url);
+    const response = await fetch(url, { headers: getAuthHeaders() });
     return response.json();
   },
 };

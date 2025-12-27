@@ -5,6 +5,15 @@ import { projectsService, API_BASE_URL } from '../services/api';
 import { useProjectStore } from '../store/projectStore';
 import { Sparkles, AlertCircle, CheckCircle2, Link as LinkIcon, Building2, User, Users } from 'lucide-react';
 
+// Helper function to get auth headers
+const getAuthHeaders = () => {
+  const token = localStorage.getItem('token');
+  return {
+    'Content-Type': 'application/json',
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+  };
+};
+
 // API Service для Yandex подключения
 const yandexService = {
   async getAuthUrl() {
@@ -15,7 +24,7 @@ const yandexService = {
   async exchangeCode(code: string) {
     const response = await fetch(`${API_BASE_URL}/api/yandex/exchange-code`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: getAuthHeaders(),
       body: JSON.stringify({ code }),
     });
 
@@ -36,7 +45,7 @@ const yandexService = {
   }) {
     const response = await fetch(`${API_BASE_URL}/api/yandex/connect`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: getAuthHeaders(),
       body: JSON.stringify(data),
     });
 
@@ -59,7 +68,7 @@ const yandexService = {
   }) {
     const response = await fetch(`${API_BASE_URL}/api/yandex/connect-agency-client`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: getAuthHeaders(),
       body: JSON.stringify(data),
     });
 
@@ -73,7 +82,8 @@ const yandexService = {
 
   async getMetrikaGoals(counterId: string, token: string) {
     const response = await fetch(
-      `${API_BASE_URL}/api/yandex/metrika/goals/${counterId}?token=${encodeURIComponent(token)}`
+      `${API_BASE_URL}/api/yandex/metrika/goals/${counterId}?token=${encodeURIComponent(token)}`,
+      { headers: getAuthHeaders() }
     );
     return response.json();
   },
