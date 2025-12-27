@@ -1140,7 +1140,7 @@ export const clickhouseService = {
   async deleteConnection(connectionId: string): Promise<void> {
     console.log('[deleteConnection] Deleting connection:', connectionId);
 
-    // Удаляем связанные данные
+    // Удаляем связанные данные статистики
     await client.command({
       query: 'DELETE FROM campaign_performance WHERE connection_id = {connectionId:String}',
       query_params: { connectionId },
@@ -1158,6 +1158,35 @@ export const clickhouseService = {
 
     await client.command({
       query: 'DELETE FROM ad_contents WHERE connection_id = {connectionId:String}',
+      query_params: { connectionId },
+    });
+
+    // Удаляем алерты и настройки алертов
+    await client.command({
+      query: 'DELETE FROM alerts WHERE connection_id = {connectionId:String}',
+      query_params: { connectionId },
+    });
+
+    await client.command({
+      query: 'DELETE FROM alert_settings WHERE connection_id = {connectionId:String}',
+      query_params: { connectionId },
+    });
+
+    // Удаляем анализы поисковых запросов
+    await client.command({
+      query: 'DELETE FROM search_query_analyses WHERE connection_id = {connectionId:String}',
+      query_params: { connectionId },
+    });
+
+    // Удаляем публичные ссылки
+    await client.command({
+      query: 'DELETE FROM public_shares WHERE connection_id = {connectionId:String}',
+      query_params: { connectionId },
+    });
+
+    // Удаляем KPI
+    await client.command({
+      query: 'DELETE FROM kpi WHERE connection_id = {connectionId:String}',
       query_params: { connectionId },
     });
 
