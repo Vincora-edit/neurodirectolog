@@ -8,9 +8,19 @@ import { yandexDirectService } from './yandex-direct.service';
 import OpenAI from 'openai';
 import { v4 as uuidv4 } from 'uuid';
 
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
+// Lazy initialization of OpenAI client to avoid crash when API key is not set
+let openaiClient: OpenAI | null = null;
+
+function getOpenAI(): OpenAI {
+  if (!openaiClient) {
+    const apiKey = process.env.OPENAI_API_KEY;
+    if (!apiKey) {
+      throw new Error('OPENAI_API_KEY environment variable is not set. AI analysis features are disabled.');
+    }
+    openaiClient = new OpenAI({ apiKey });
+  }
+  return openaiClient;
+}
 
 export interface SearchQuery {
   query: string;
@@ -187,7 +197,7 @@ ${JSON.stringify(queryData, null, 2)}
 }`;
 
     try {
-      const response = await openai.chat.completions.create({
+      const response = await getOpenAI().chat.completions.create({
         model: 'gpt-4o-mini',
         messages: [{ role: 'user', content: prompt }],
         temperature: 0.3,
