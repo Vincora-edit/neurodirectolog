@@ -23,7 +23,8 @@ import {
 import { format } from 'date-fns';
 import { ru } from 'date-fns/locale';
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+// API_BASE_URL уже содержит /api в конце
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001/api';
 
 interface Alert {
   id: string;
@@ -65,7 +66,7 @@ interface AlertSettings {
 
 const fetchAlerts = async (): Promise<Alert[]> => {
   const token = localStorage.getItem('token');
-  const response = await fetch(`${API_BASE_URL}/api/alerts`, {
+  const response = await fetch(`${API_BASE_URL}/alerts`, {
     headers: { Authorization: `Bearer ${token}` },
   });
   const data = await response.json();
@@ -74,7 +75,7 @@ const fetchAlerts = async (): Promise<Alert[]> => {
 
 const fetchSettings = async (): Promise<AlertSettings> => {
   const token = localStorage.getItem('token');
-  const response = await fetch(`${API_BASE_URL}/api/alerts/settings`, {
+  const response = await fetch(`${API_BASE_URL}/alerts/settings`, {
     headers: { Authorization: `Bearer ${token}` },
   });
   const data = await response.json();
@@ -83,7 +84,7 @@ const fetchSettings = async (): Promise<AlertSettings> => {
 
 const markAsRead = async (alertId: string): Promise<void> => {
   const token = localStorage.getItem('token');
-  await fetch(`${API_BASE_URL}/api/alerts/${alertId}/read`, {
+  await fetch(`${API_BASE_URL}/alerts/${alertId}/read`, {
     method: 'POST',
     headers: { Authorization: `Bearer ${token}` },
   });
@@ -91,7 +92,7 @@ const markAsRead = async (alertId: string): Promise<void> => {
 
 const dismissAlert = async (alertId: string): Promise<void> => {
   const token = localStorage.getItem('token');
-  await fetch(`${API_BASE_URL}/api/alerts/${alertId}/dismiss`, {
+  await fetch(`${API_BASE_URL}/alerts/${alertId}/dismiss`, {
     method: 'POST',
     headers: { Authorization: `Bearer ${token}` },
   });
@@ -99,7 +100,7 @@ const dismissAlert = async (alertId: string): Promise<void> => {
 
 const markAllAsRead = async (): Promise<void> => {
   const token = localStorage.getItem('token');
-  await fetch(`${API_BASE_URL}/api/alerts/read-all`, {
+  await fetch(`${API_BASE_URL}/alerts/read-all`, {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${token}`,
@@ -111,7 +112,7 @@ const markAllAsRead = async (): Promise<void> => {
 
 const updateSettings = async (settings: Partial<AlertSettings>): Promise<void> => {
   const token = localStorage.getItem('token');
-  await fetch(`${API_BASE_URL}/api/alerts/settings`, {
+  await fetch(`${API_BASE_URL}/alerts/settings`, {
     method: 'PUT',
     headers: {
       Authorization: `Bearer ${token}`,
@@ -130,7 +131,7 @@ interface TelegramStatus {
 
 const fetchTelegramStatus = async (): Promise<TelegramStatus> => {
   const token = localStorage.getItem('token');
-  const response = await fetch(`${API_BASE_URL}/api/telegram/status`, {
+  const response = await fetch(`${API_BASE_URL}/telegram/status`, {
     headers: { Authorization: `Bearer ${token}` },
   });
   const data = await response.json();
@@ -139,7 +140,7 @@ const fetchTelegramStatus = async (): Promise<TelegramStatus> => {
 
 const fetchTelegramLink = async (): Promise<string> => {
   const token = localStorage.getItem('token');
-  const response = await fetch(`${API_BASE_URL}/api/telegram/connect-link`, {
+  const response = await fetch(`${API_BASE_URL}/telegram/connect-link`, {
     headers: { Authorization: `Bearer ${token}` },
   });
   const data = await response.json();
@@ -148,7 +149,7 @@ const fetchTelegramLink = async (): Promise<string> => {
 
 const disconnectTelegram = async (): Promise<void> => {
   const token = localStorage.getItem('token');
-  await fetch(`${API_BASE_URL}/api/telegram/disconnect`, {
+  await fetch(`${API_BASE_URL}/telegram/disconnect`, {
     method: 'POST',
     headers: { Authorization: `Bearer ${token}` },
   });
@@ -156,7 +157,7 @@ const disconnectTelegram = async (): Promise<void> => {
 
 const sendTestMessage = async (): Promise<void> => {
   const token = localStorage.getItem('token');
-  await fetch(`${API_BASE_URL}/api/telegram/test`, {
+  await fetch(`${API_BASE_URL}/telegram/test`, {
     method: 'POST',
     headers: { Authorization: `Bearer ${token}` },
   });

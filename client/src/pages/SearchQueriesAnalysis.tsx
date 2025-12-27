@@ -19,7 +19,8 @@ import {
   TrendingDown,
 } from 'lucide-react';
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+// API_BASE_URL уже содержит /api в конце
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001/api';
 
 interface QueryAnalysis {
   query: string;
@@ -66,7 +67,7 @@ interface Connection {
 
 const fetchConnections = async (): Promise<Connection[]> => {
   const token = localStorage.getItem('token');
-  const response = await fetch(`${API_BASE_URL}/api/yandex/connections`, {
+  const response = await fetch(`${API_BASE_URL}/yandex/connections`, {
     headers: { Authorization: `Bearer ${token}` },
   });
   const data = await response.json();
@@ -105,7 +106,7 @@ export default function SearchQueriesAnalysis() {
 
       const token = localStorage.getItem('token');
       const response = await fetch(
-        `${API_BASE_URL}/api/search-queries/${activeConnectionId}/analyze`,
+        `${API_BASE_URL}/search-queries/${activeConnectionId}/analyze`,
         {
           method: 'POST',
           headers: {
