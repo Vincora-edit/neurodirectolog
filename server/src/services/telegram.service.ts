@@ -204,6 +204,12 @@ export const telegramService = {
    * Handle incoming webhook update
    */
   async handleUpdate(update: any): Promise<void> {
+    // Handle callback queries (inline button clicks)
+    if (update.callback_query) {
+      await this.handleCallbackQuery(update.callback_query);
+      return;
+    }
+
     if (!update.message) return;
 
     const chatId = update.message.chat.id.toString();
@@ -237,9 +243,15 @@ export const telegramService = {
       return;
     }
 
-    // Handle /stats command
+    // Handle /stats command - quick today stats
     if (text === '/stats' || text === '/статистика') {
-      await this.handleStatsCommand(chatId, userId);
+      await this.handleStatsCommand(chatId, 'today');
+      return;
+    }
+
+    // Handle /report command - show period selection
+    if (text === '/report' || text === '/отчет' || text === '/отчёт') {
+      await this.showReportPeriodSelection(chatId);
       return;
     }
 
@@ -252,7 +264,7 @@ export const telegramService = {
     // Handle /help command
     if (text === '/help' || text === '/помощь') {
       await this.sendMessage(chatId, {
-        text: '📋 <b>Доступные команды:</b>\n\n/stats - Статистика за сегодня\n/alerts - Последние алерты\n/help - Эта справка\n\n💡 Бот автоматически отправляет уведомления о важных событиях: падение конверсий, рост CPL, остановка кампаний и др.',
+        text: '📋 <b>Доступные команды:</b>\n\n/stats - Быстрая статистика за сегодня\n/report - Отчёт за выбранный период\n/alerts - Последние алерты\n/help - Эта справка\n\n💡 Бот автоматически отправляет уведомления о важных событиях: падение конверсий, рост CPL, остановка кампаний и др.',
         parse_mode: 'HTML',
       });
       return;
@@ -295,9 +307,76 @@ export const telegramService = {
   },
 
   /**
+   * Show period selection for report
+   */
+  async showReportPeriodSelection(chatId: string): Promise<void> {
+    await this.sendMessage(chatId, {
+      text: '📊 <b>Выберите период для отчёта:</b>',
+      parse_mode: 'HTML',
+      reply_markup: {
+        inline_keyboard: [
+          [
+            { text: '📅 Сегодня', callback_data: 'report_today' },
+            { text: '📅 Вчера', callback_data: 'report_yesterday' },
+          ],
+          [
+            { text: '📆 Последние 7 дней', callback_data: 'report_week' },
+            { text: '📆 Последние 30 дней', callback_data: 'report_month' },
+          ],
+          [
+            { text: '📆 Этот месяц', callback_data: 'report_this_month' },
+            { text: '📆 Прошлый месяц', callback_data: 'report_last_month' },
+          ],
+        ],
+      },
+    });
+  },
+
+  /**
+   * Handle callback query (inline button clicks)
+   */
+  async handleCallbackQuery(callbackQuery: any): Promise<void> {
+    const chatId = callbackQuery.message?.chat?.id?.toString();
+    const callbackId = callbackQuery.id;
+    const data = callbackQuery.data;
+
+    if (!chatId || !data) return;
+
+    // Answer callback to remove loading state
+    await this.answerCallbackQuery(callbackId);
+
+    // Handle report period selection
+    if (data.startsWith('report_')) {
+      const period = data.replace('report_', '');
+      await this.handleStatsCommand(chatId, period);
+    }
+  },
+
+  /**
+   * Answer callback query
+   */
+  async answerCallbackQuery(callbackQueryId: string, text?: string): Promise<void> {
+    const token = this.getBotToken();
+    if (!token) return;
+
+    try {
+      await fetch(`${TELEGRAM_API_BASE}${token}/answerCallbackQuery`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          callback_query_id: callbackQueryId,
+          text,
+        }),
+      });
+    } catch (error) {
+      console.error('[Telegram] Failed to answer callback query:', error);
+    }
+  },
+
+  /**
    * Handle /stats command
    */
-  async handleStatsCommand(chatId: string, _telegramUserId?: string): Promise<void> {
+  async handleStatsCommand(chatId: string, period: string = 'today'): Promise<void> {
     try {
       // Find app user by chat_id
       const users = await clickhouseService.query(`
@@ -332,8 +411,8 @@ export const telegramService = {
         return;
       }
 
-      // Get today's stats
-      const today = new Date().toISOString().split('T')[0];
+      // Calculate date range based on period
+      const { startDate, endDate, periodName } = this.getDateRange(period);
       const connectionIds = connections.map((c: any) => `'${c.id}'`).join(',');
 
       const stats = await clickhouseService.query(`
@@ -344,7 +423,8 @@ export const telegramService = {
           sum(conversions) as conversions
         FROM campaign_performance
         WHERE connection_id IN (${connectionIds})
-          AND date = '${today}'
+          AND date >= '${startDate}'
+          AND date <= '${endDate}'
       `);
 
       const s = stats[0] || {};
@@ -354,7 +434,7 @@ export const telegramService = {
       const conversions = parseInt(s.conversions) || 0;
 
       await this.sendQuickStats(chatId, {
-        period: 'сегодня',
+        period: periodName,
         impressions,
         clicks,
         cost,
@@ -367,6 +447,49 @@ export const telegramService = {
       await this.sendMessage(chatId, {
         text: '❌ Произошла ошибка при получении статистики.',
       });
+    }
+  },
+
+  /**
+   * Get date range for period
+   */
+  getDateRange(period: string): { startDate: string; endDate: string; periodName: string } {
+    const today = new Date();
+    const formatDate = (d: Date) => d.toISOString().split('T')[0];
+
+    switch (period) {
+      case 'today': {
+        const date = formatDate(today);
+        return { startDate: date, endDate: date, periodName: 'сегодня' };
+      }
+      case 'yesterday': {
+        const yesterday = new Date(today);
+        yesterday.setDate(yesterday.getDate() - 1);
+        const date = formatDate(yesterday);
+        return { startDate: date, endDate: date, periodName: 'вчера' };
+      }
+      case 'week': {
+        const weekAgo = new Date(today);
+        weekAgo.setDate(weekAgo.getDate() - 6);
+        return { startDate: formatDate(weekAgo), endDate: formatDate(today), periodName: 'последние 7 дней' };
+      }
+      case 'month': {
+        const monthAgo = new Date(today);
+        monthAgo.setDate(monthAgo.getDate() - 29);
+        return { startDate: formatDate(monthAgo), endDate: formatDate(today), periodName: 'последние 30 дней' };
+      }
+      case 'this_month': {
+        const firstDay = new Date(today.getFullYear(), today.getMonth(), 1);
+        return { startDate: formatDate(firstDay), endDate: formatDate(today), periodName: 'этот месяц' };
+      }
+      case 'last_month': {
+        const firstDayLastMonth = new Date(today.getFullYear(), today.getMonth() - 1, 1);
+        const lastDayLastMonth = new Date(today.getFullYear(), today.getMonth(), 0);
+        return { startDate: formatDate(firstDayLastMonth), endDate: formatDate(lastDayLastMonth), periodName: 'прошлый месяц' };
+      }
+      default:
+        const date = formatDate(today);
+        return { startDate: date, endDate: date, periodName: 'сегодня' };
     }
   },
 
