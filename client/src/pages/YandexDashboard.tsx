@@ -151,7 +151,6 @@ export function YandexDashboard() {
   // Проверяем, существует ли сохранённый проект в списке проектов
   const savedProjectExists = projects.some((p: any) => p.id === globalActiveProjectId);
   const activeProjectId = (savedProjectExists ? globalActiveProjectId : projects[0]?.id) || '';
-  const activeProject = projects.find((p: any) => p.id === activeProjectId);
 
   useEffect(() => {
     // Устанавливаем первый проект, если сохранённый не существует или отсутствует
@@ -370,7 +369,6 @@ export function YandexDashboard() {
     <div className="px-8 py-6">
       {/* Header с фильтрами */}
       <DashboardHeader
-        projectName={activeProject?.name}
         projects={projects}
         activeProjectId={activeProjectId}
         onProjectChange={setActiveProjectId}

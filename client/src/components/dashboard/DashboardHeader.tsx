@@ -110,7 +110,6 @@ interface DashboardHeaderProps {
 }
 
 export function DashboardHeader({
-  projectName,
   projects,
   activeProjectId,
   onProjectChange,
@@ -200,29 +199,134 @@ export function DashboardHeader({
         <div className={`bg-white rounded-xl shadow-sm border border-gray-200 transition-all duration-300 ease-in-out ${
           isCompact ? 'p-3' : 'p-4'
         }`}>
-          {/* Первая строка: Заголовок и кнопка обновления - плавно скрывается */}
-          <div
-            className={`flex items-start justify-between overflow-hidden transition-all duration-300 ease-in-out ${
-              isCompact ? 'max-h-0 opacity-0 mb-0' : 'max-h-[100px] opacity-100 mb-4'
-            }`}
-          >
-            <div>
-              <h1 className="text-3xl font-bold text-gray-900 mb-2">
-                {projectName || 'Аналитика Яндекс.Директ'}
-              </h1>
-              {activeConnection && (
-                <div className="flex items-center gap-4 text-sm text-gray-600">
-                  <div className="flex items-center gap-2">
-                    <Clock size={16} />
-                    <span>Синхронизация: {formatLastSync(lastSyncAt)}</span>
+          {/* Первая строка: Проект + Аккаунт + Синхронизация + Кнопка обновления */}
+          <div className="flex items-center justify-between gap-4 flex-wrap">
+            <div className="flex items-center gap-4 flex-wrap">
+              {/* Селектор проекта */}
+              {projects && projects.length > 0 && onProjectChange && (
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-xs font-medium text-gray-600 flex items-center gap-1.5">
+                    <Folder size={14} className="text-gray-500" />
+                    Проект
+                  </label>
+                  <select
+                    value={activeProjectId || ''}
+                    onChange={(e) => onProjectChange(e.target.value)}
+                    className="bg-green-50 border border-green-200 rounded-lg px-3 py-2 text-sm font-medium text-green-900 focus:ring-2 focus:ring-green-400 focus:border-transparent min-w-[180px]"
+                  >
+                    {projects.map((project) => (
+                      <option key={project.id} value={project.id}>
+                        {project.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              {/* Селектор аккаунтов */}
+              {connections.length > 0 && (
+                <div className="flex flex-col gap-1.5 relative">
+                  <label className="text-xs font-medium text-gray-600 flex items-center gap-1.5">
+                    <Building2 size={14} className="text-gray-500" />
+                    Аккаунт
+                  </label>
+                  <div className="flex items-center gap-1">
+                    <select
+                      value={activeConnectionId}
+                      onChange={(e) => onConnectionChange(e.target.value)}
+                      className="bg-blue-50 border border-blue-200 rounded-lg px-3 py-2 text-sm font-medium text-blue-900 focus:ring-2 focus:ring-blue-400 focus:border-transparent min-w-[180px]"
+                    >
+                      {connections.map((conn) => (
+                        <option key={conn.id} value={conn.id}>
+                          {conn.login}
+                        </option>
+                      ))}
+                    </select>
+                    <div className="relative">
+                      <button
+                        onClick={() => setShowAccountMenu(!showAccountMenu)}
+                        className="p-2 bg-gray-100 hover:bg-gray-200 border border-gray-300 rounded-lg transition-colors"
+                        title="Управление аккаунтами"
+                      >
+                        <MoreVertical size={18} className="text-gray-600" />
+                      </button>
+                      {showAccountMenu && (
+                        <>
+                          <div
+                            className="fixed inset-0 z-40"
+                            onClick={() => setShowAccountMenu(false)}
+                          />
+                          <div className="absolute right-0 top-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg z-50 min-w-[200px] py-1">
+                            <button
+                              onClick={() => {
+                                setShowAccountMenu(false);
+                                navigate('/connect-yandex-simple');
+                              }}
+                              className="w-full px-4 py-2.5 text-left text-sm hover:bg-gray-50 flex items-center gap-2 text-gray-700"
+                            >
+                              <Plus size={16} className="text-green-600" />
+                              Добавить аккаунт
+                            </button>
+                            <button
+                              onClick={() => setShowAccountMenu(false)}
+                              className="w-full px-4 py-2.5 text-left text-sm hover:bg-gray-50 flex items-center gap-2 text-gray-700"
+                            >
+                              <Edit3 size={16} className="text-blue-600" />
+                              Редактировать текущий
+                            </button>
+                            <button
+                              onClick={() => setShowAccountMenu(false)}
+                              className="w-full px-4 py-2.5 text-left text-sm hover:bg-gray-50 flex items-center gap-2 text-gray-700"
+                            >
+                              <Settings size={16} className="text-gray-500" />
+                              Все подключения
+                            </button>
+                            <div className="border-t border-gray-100 my-1" />
+                            <button
+                              onClick={async () => {
+                                setShowAccountMenu(false);
+                                if (
+                                  activeConnection &&
+                                  confirm(`Удалить подключение ${activeConnection.login}?`)
+                                ) {
+                                  try {
+                                    await fetch(
+                                      `${API_BASE_URL}/api/yandex/connection/${activeConnection.id}`,
+                                      { method: 'DELETE' }
+                                    );
+                                    window.location.reload();
+                                  } catch {
+                                    alert('Ошибка при удалении');
+                                  }
+                                }
+                              }}
+                              className="w-full px-4 py-2.5 text-left text-sm hover:bg-red-50 flex items-center gap-2 text-red-600"
+                            >
+                              <Trash2 size={16} />
+                              Удалить текущий
+                            </button>
+                          </div>
+                        </>
+                      )}
+                    </div>
                   </div>
                 </div>
               )}
+
+              {/* Время синхронизации */}
+              {activeConnection && (
+                <div className="flex items-center gap-2 text-sm text-gray-500 self-end pb-2">
+                  <Clock size={14} />
+                  <span>Синхронизация: {formatLastSync(lastSyncAt)}</span>
+                </div>
+              )}
             </div>
+
+            {/* Кнопка обновления */}
             <button
               onClick={onSync}
               disabled={isSyncing}
-              className="flex items-center gap-2 bg-primary-600 text-white px-4 py-2.5 rounded-lg hover:bg-primary-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed shrink-0"
+              className="flex items-center gap-2 bg-primary-600 text-white px-4 py-2.5 rounded-lg hover:bg-primary-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed shrink-0 self-end"
             >
               {isSyncing ? (
                 <Loader2 className="animate-spin" size={18} />
@@ -233,139 +337,8 @@ export function DashboardHeader({
             </button>
           </div>
 
-          {/* Вторая строка: Селекторы */}
-          <div className="flex items-start gap-4 flex-wrap">
-            {/* Кнопка обновления - появляется в компактном режиме */}
-            <div
-              className={`flex flex-col gap-1.5 overflow-hidden transition-all duration-300 ease-in-out ${
-                isCompact ? 'max-w-[60px] opacity-100' : 'max-w-0 opacity-0'
-              }`}
-            >
-              <label className="text-xs font-medium text-transparent whitespace-nowrap">Sync</label>
-              <button
-                onClick={onSync}
-                disabled={isSyncing}
-                className="flex items-center justify-center bg-primary-600 text-white p-2 rounded-lg hover:bg-primary-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {isSyncing ? (
-                  <Loader2 className="animate-spin" size={18} />
-                ) : (
-                  <RefreshCw size={18} />
-                )}
-              </button>
-            </div>
-
-            {/* Селектор проекта */}
-            {projects && projects.length > 0 && onProjectChange && (
-              <div className="flex flex-col gap-1.5">
-                <label className="text-xs font-medium text-gray-600 flex items-center gap-1.5">
-                  <Folder size={14} className="text-gray-500" />
-                  Проект
-                </label>
-                <select
-                  value={activeProjectId || ''}
-                  onChange={(e) => onProjectChange(e.target.value)}
-                  className="bg-green-50 border border-green-200 rounded-lg px-3 py-2 text-sm font-medium text-green-900 focus:ring-2 focus:ring-green-400 focus:border-transparent min-w-[180px]"
-                >
-                  {projects.map((project) => (
-                    <option key={project.id} value={project.id}>
-                      {project.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            )}
-
-            {/* Селектор аккаунтов */}
-            {connections.length > 0 && (
-              <div className="flex flex-col gap-1.5 relative">
-                <label className="text-xs font-medium text-gray-600 flex items-center gap-1.5">
-                  <Building2 size={14} className="text-gray-500" />
-                  Аккаунт
-                </label>
-                <div className="flex items-center gap-1">
-                  <select
-                    value={activeConnectionId}
-                    onChange={(e) => onConnectionChange(e.target.value)}
-                    className="bg-blue-50 border border-blue-200 rounded-lg px-3 py-2 text-sm font-medium text-blue-900 focus:ring-2 focus:ring-blue-400 focus:border-transparent min-w-[180px]"
-                  >
-                    {connections.map((conn) => (
-                      <option key={conn.id} value={conn.id}>
-                        {conn.login}
-                      </option>
-                    ))}
-                  </select>
-                  <div className="relative">
-                    <button
-                      onClick={() => setShowAccountMenu(!showAccountMenu)}
-                      className="p-2 bg-gray-100 hover:bg-gray-200 border border-gray-300 rounded-lg transition-colors"
-                      title="Управление аккаунтами"
-                    >
-                      <MoreVertical size={18} className="text-gray-600" />
-                    </button>
-                    {showAccountMenu && (
-                      <>
-                        <div
-                          className="fixed inset-0 z-40"
-                          onClick={() => setShowAccountMenu(false)}
-                        />
-                        <div className="absolute right-0 top-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg z-50 min-w-[200px] py-1">
-                          <button
-                            onClick={() => {
-                              setShowAccountMenu(false);
-                              navigate('/connect-yandex-simple');
-                            }}
-                            className="w-full px-4 py-2.5 text-left text-sm hover:bg-gray-50 flex items-center gap-2 text-gray-700"
-                          >
-                            <Plus size={16} className="text-green-600" />
-                            Добавить аккаунт
-                          </button>
-                          <button
-                            onClick={() => setShowAccountMenu(false)}
-                            className="w-full px-4 py-2.5 text-left text-sm hover:bg-gray-50 flex items-center gap-2 text-gray-700"
-                          >
-                            <Edit3 size={16} className="text-blue-600" />
-                            Редактировать текущий
-                          </button>
-                          <button
-                            onClick={() => setShowAccountMenu(false)}
-                            className="w-full px-4 py-2.5 text-left text-sm hover:bg-gray-50 flex items-center gap-2 text-gray-700"
-                          >
-                            <Settings size={16} className="text-gray-500" />
-                            Все подключения
-                          </button>
-                          <div className="border-t border-gray-100 my-1" />
-                          <button
-                            onClick={async () => {
-                              setShowAccountMenu(false);
-                              if (
-                                activeConnection &&
-                                confirm(`Удалить подключение ${activeConnection.login}?`)
-                              ) {
-                                try {
-                                  await fetch(
-                                    `${API_BASE_URL}/api/yandex/connection/${activeConnection.id}`,
-                                    { method: 'DELETE' }
-                                  );
-                                  window.location.reload();
-                                } catch {
-                                  alert('Ошибка при удалении');
-                                }
-                              }
-                            }}
-                            className="w-full px-4 py-2.5 text-left text-sm hover:bg-red-50 flex items-center gap-2 text-red-600"
-                          >
-                            <Trash2 size={16} />
-                            Удалить текущий
-                          </button>
-                        </div>
-                      </>
-                    )}
-                  </div>
-                </div>
-              </div>
-            )}
-
+          {/* Вторая строка: Фильтры данных + Фильтры кампаний */}
+          <div className="flex items-start gap-4 flex-wrap mt-4 pt-4 border-t border-gray-200">
             {/* Селектор целей */}
             {availableGoals.length > 0 && (
               <div className="flex flex-col gap-1.5 relative">
@@ -377,7 +350,7 @@ export function DashboardHeader({
                   <button
                     type="button"
                     onClick={() => setShowGoalsDropdown(!showGoalsDropdown)}
-                    className="bg-white border border-gray-300 rounded-lg px-3 py-2 text-sm font-medium focus:ring-2 focus:ring-blue-400 focus:border-transparent min-w-[180px] text-left flex items-center justify-between gap-2"
+                    className="bg-white border border-gray-300 rounded-lg px-3 py-2 text-sm font-medium focus:ring-2 focus:ring-blue-400 focus:border-transparent min-w-[150px] text-left flex items-center justify-between gap-2"
                   >
                     <span className="truncate">
                       {selectedGoalIds.length === 0
@@ -506,7 +479,7 @@ export function DashboardHeader({
             <div className="flex flex-col gap-1.5">
               <label className="text-xs font-medium text-gray-600 flex items-center gap-1.5">
                 <BarChart3 size={14} className="text-gray-500" />
-                Группировать по
+                Группировка
               </label>
               <select
                 value={groupBy}
@@ -519,12 +492,14 @@ export function DashboardHeader({
                 <option value="month">Месяц</option>
               </select>
             </div>
-          </div>
 
-          {/* Глобальные фильтры */}
-          {filterCampaignOptions.length > 0 && (
-            <div className="flex items-start gap-4 flex-wrap mt-4 pt-4 border-t border-gray-200">
-              {/* Фильтр по кампании */}
+            {/* Разделитель */}
+            {filterCampaignOptions.length > 0 && (
+              <div className="h-10 w-px bg-gray-200 self-end mb-0.5" />
+            )}
+
+            {/* Фильтр по кампании */}
+            {filterCampaignOptions.length > 0 && (
               <div className="flex flex-col gap-1.5">
                 <label className="text-xs font-medium text-gray-600 flex items-center gap-1.5">
                   <Megaphone size={14} className="text-gray-500" />
@@ -533,7 +508,7 @@ export function DashboardHeader({
                 <select
                   value={globalFilterCampaignId || ''}
                   onChange={(e) => onCampaignFilterChange(e.target.value || null)}
-                  className="bg-white border border-gray-300 rounded-lg px-3 py-2 text-sm font-medium focus:ring-2 focus:ring-blue-400 focus:border-transparent min-w-[200px]"
+                  className="bg-white border border-gray-300 rounded-lg px-3 py-2 text-sm font-medium focus:ring-2 focus:ring-blue-400 focus:border-transparent min-w-[180px]"
                 >
                   <option value="">Все кампании</option>
                   {filterCampaignOptions.map((c) => (
@@ -543,82 +518,82 @@ export function DashboardHeader({
                   ))}
                 </select>
               </div>
+            )}
 
-              {/* Фильтр по группе */}
-              {globalFilterCampaignId && filterAdGroupOptions.length > 0 && (
-                <div className="flex flex-col gap-1.5">
-                  <label className="text-xs font-medium text-gray-600 flex items-center gap-1.5">
-                    <Folder size={14} className="text-gray-500" />
-                    Группа объявлений
-                  </label>
-                  <select
-                    value={globalFilterAdGroupId || ''}
-                    onChange={(e) => onAdGroupFilterChange(e.target.value || null)}
-                    className="bg-purple-50 border border-purple-200 rounded-lg px-3 py-2 text-sm font-medium text-purple-900 focus:ring-2 focus:ring-purple-400 focus:border-transparent min-w-[200px]"
-                  >
-                    <option value="">Все группы</option>
-                    {filterAdGroupOptions.map((g) => (
-                      <option key={g.id} value={g.id}>
-                        {g.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              )}
-
-              {/* Фильтр по объявлению */}
-              {globalFilterAdGroupId && filterAdOptions.length > 0 && (
-                <div className="flex flex-col gap-1.5">
-                  <label className="text-xs font-medium text-gray-600 flex items-center gap-1.5">
-                    <FileText size={14} className="text-gray-500" />
-                    Объявление
-                  </label>
-                  <select
-                    value={globalFilterAdId || ''}
-                    onChange={(e) => onAdIdFilterChange(e.target.value || null)}
-                    className="bg-orange-50 border border-orange-200 rounded-lg px-3 py-2 text-sm font-medium text-orange-900 focus:ring-2 focus:ring-orange-400 focus:border-transparent min-w-[200px]"
-                  >
-                    <option value="">Все объявления</option>
-                    {filterAdOptions.map((a) => (
-                      <option key={a.id} value={a.id}>
-                        {a.title}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              )}
-
-              {/* Кнопка сброса */}
-              {(globalFilterCampaignId || globalFilterAdGroupId || globalFilterAdId) && (
-                <div className="flex flex-col gap-1.5">
-                  <label className="text-xs font-medium text-transparent">Сбросить</label>
-                  <button
-                    onClick={() => {
-                      onCampaignFilterChange(null);
-                      onAdGroupFilterChange(null);
-                      onAdIdFilterChange(null);
-                    }}
-                    className="px-3 py-2 text-sm font-medium text-gray-600 hover:text-gray-900 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors flex items-center gap-1.5"
-                  >
-                    <X size={14} />
-                    Сбросить
-                  </button>
-                </div>
-              )}
-
-              {/* Кнопка сворачивания */}
-              <div className="flex flex-col gap-1.5 ml-auto">
-                <label className="text-xs font-medium text-transparent">Скрыть</label>
-                <button
-                  onClick={() => onCollapsedChange(true)}
-                  className="px-3 py-2 text-sm font-medium text-gray-500 hover:text-gray-700 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors flex items-center gap-1.5"
-                  title="Свернуть фильтры"
+            {/* Фильтр по группе */}
+            {globalFilterCampaignId && filterAdGroupOptions.length > 0 && (
+              <div className="flex flex-col gap-1.5">
+                <label className="text-xs font-medium text-gray-600 flex items-center gap-1.5">
+                  <Folder size={14} className="text-gray-500" />
+                  Группа
+                </label>
+                <select
+                  value={globalFilterAdGroupId || ''}
+                  onChange={(e) => onAdGroupFilterChange(e.target.value || null)}
+                  className="bg-purple-50 border border-purple-200 rounded-lg px-3 py-2 text-sm font-medium text-purple-900 focus:ring-2 focus:ring-purple-400 focus:border-transparent min-w-[180px]"
                 >
-                  <ChevronUp size={14} />
+                  <option value="">Все группы</option>
+                  {filterAdGroupOptions.map((g) => (
+                    <option key={g.id} value={g.id}>
+                      {g.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+
+            {/* Фильтр по объявлению */}
+            {globalFilterAdGroupId && filterAdOptions.length > 0 && (
+              <div className="flex flex-col gap-1.5">
+                <label className="text-xs font-medium text-gray-600 flex items-center gap-1.5">
+                  <FileText size={14} className="text-gray-500" />
+                  Объявление
+                </label>
+                <select
+                  value={globalFilterAdId || ''}
+                  onChange={(e) => onAdIdFilterChange(e.target.value || null)}
+                  className="bg-orange-50 border border-orange-200 rounded-lg px-3 py-2 text-sm font-medium text-orange-900 focus:ring-2 focus:ring-orange-400 focus:border-transparent min-w-[180px]"
+                >
+                  <option value="">Все объявления</option>
+                  {filterAdOptions.map((a) => (
+                    <option key={a.id} value={a.id}>
+                      {a.title}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+
+            {/* Кнопка сброса фильтров кампаний */}
+            {(globalFilterCampaignId || globalFilterAdGroupId || globalFilterAdId) && (
+              <div className="flex flex-col gap-1.5">
+                <label className="text-xs font-medium text-transparent">Сбросить</label>
+                <button
+                  onClick={() => {
+                    onCampaignFilterChange(null);
+                    onAdGroupFilterChange(null);
+                    onAdIdFilterChange(null);
+                  }}
+                  className="px-3 py-2 text-sm font-medium text-gray-600 hover:text-gray-900 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors flex items-center gap-1.5"
+                >
+                  <X size={14} />
+                  Сбросить
                 </button>
               </div>
+            )}
+
+            {/* Кнопка сворачивания */}
+            <div className="flex flex-col gap-1.5 ml-auto">
+              <label className="text-xs font-medium text-transparent">Скрыть</label>
+              <button
+                onClick={() => onCollapsedChange(true)}
+                className="px-3 py-2 text-sm font-medium text-gray-500 hover:text-gray-700 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors flex items-center gap-1.5"
+                title="Свернуть фильтры"
+              >
+                <ChevronUp size={14} />
+              </button>
             </div>
-          )}
+          </div>
         </div>
       </div>
 
