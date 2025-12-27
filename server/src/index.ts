@@ -46,6 +46,9 @@ import yandexRouter from './routes/yandex';
 import adminRouter from './routes/admin';
 import publicSharesRouter from './routes/public-shares';
 import publicDashboardRouter from './routes/public-dashboard';
+import alertsRouter from './routes/alerts';
+import searchQueriesRouter from './routes/search-queries';
+import telegramRouter from './routes/telegram';
 import { startSyncJob } from './jobs/sync.job';
 import { redisService } from './services/redis.service';
 import { queueService } from './services/queue.service';
@@ -135,6 +138,9 @@ app.use('/api/yandex', apiLimiter, yandexRouter);
 app.use('/api/admin', apiLimiter, adminRouter);
 app.use('/api/public-shares', apiLimiter, publicSharesRouter);
 app.use('/api/public/dashboard', apiLimiter, publicDashboardRouter);
+app.use('/api/alerts', apiLimiter, alertsRouter);
+app.use('/api/search-queries', apiLimiter, searchQueriesRouter);
+app.use('/api/telegram', telegramRouter); // No rate limit for webhook
 
 // Error handling
 app.use(errorHandler);

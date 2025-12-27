@@ -17,6 +17,8 @@ import {
   Lock,
   BarChart3,
   LayoutGrid,
+  Bell,
+  Search,
 } from 'lucide-react';
 import { useAuthStore } from '../store/authStore';
 
@@ -29,17 +31,24 @@ export default function Layout() {
   const isAdmin = user?.isAdmin;
 
   const navigation = [
-    { name: 'Аналитика кампаний', href: '/yandex-dashboard', icon: BarChart3, available: true },
-    { name: 'Управление', href: '/management', icon: LayoutGrid, available: true },
+    // Основные разделы
     { name: 'Dashboard', href: '/', icon: LayoutDashboard, available: true },
     { name: 'Проекты', href: '/projects', icon: FolderOpen, available: true },
+    // Аналитика и управление
+    { name: 'Аналитика кампаний', href: '/yandex-dashboard', icon: BarChart3, available: true },
+    { name: 'Управление', href: '/management', icon: LayoutGrid, available: true },
+    { name: 'Уведомления', href: '/alerts', icon: Bell, available: true },
     { name: 'Аналитика', href: '/analytics', icon: TrendingUp, available: isAdmin },
+    // Семантика и ключевые слова
     { name: 'Семантика', href: '/semantics', icon: FileText, available: isAdmin },
-    { name: 'Кампании', href: '/campaign', icon: Megaphone, available: isAdmin },
-    { name: 'Креативы', href: '/creatives', icon: Lightbulb, available: isAdmin },
-    { name: 'Объявления', href: '/ads', icon: MessageSquare, available: isAdmin },
-    { name: 'Стратегия', href: '/strategy', icon: Target, available: isAdmin },
+    { name: 'Анализ запросов', href: '/search-queries', icon: Search, available: true },
     { name: 'Минус-слова', href: '/minus-words', icon: Filter, available: isAdmin },
+    // Создание кампаний
+    { name: 'Кампании', href: '/campaign', icon: Megaphone, available: isAdmin },
+    { name: 'Объявления', href: '/ads', icon: MessageSquare, available: isAdmin },
+    { name: 'Креативы', href: '/creatives', icon: Lightbulb, available: isAdmin },
+    { name: 'Стратегия', href: '/strategy', icon: Target, available: isAdmin },
+    // Админка в конце
     ...(isAdmin ? [{ name: 'Админ-панель', href: '/admin', icon: Shield, available: true }] : []),
   ];
 
