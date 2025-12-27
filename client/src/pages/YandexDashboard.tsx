@@ -371,6 +371,9 @@ export function YandexDashboard() {
       {/* Header с фильтрами */}
       <DashboardHeader
         projectName={activeProject?.name}
+        projects={projects}
+        activeProjectId={activeProjectId}
+        onProjectChange={setActiveProjectId}
         connections={connections}
         activeConnectionId={activeConnectionId}
         onConnectionChange={setSelectedConnectionId}

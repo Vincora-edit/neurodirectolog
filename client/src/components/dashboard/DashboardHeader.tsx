@@ -53,9 +53,17 @@ interface Ad {
   adTitle2?: string;
 }
 
+interface Project {
+  id: string;
+  name: string;
+}
+
 interface DashboardHeaderProps {
   // Project info
   projectName?: string;
+  projects?: Project[];
+  activeProjectId?: string;
+  onProjectChange?: (projectId: string) => void;
 
   // Connections
   connections: Connection[];
@@ -103,6 +111,9 @@ interface DashboardHeaderProps {
 
 export function DashboardHeader({
   projectName,
+  projects,
+  activeProjectId,
+  onProjectChange,
   connections,
   activeConnectionId,
   onConnectionChange,
@@ -243,6 +254,27 @@ export function DashboardHeader({
                 )}
               </button>
             </div>
+
+            {/* Селектор проекта */}
+            {projects && projects.length > 0 && onProjectChange && (
+              <div className="flex flex-col gap-1.5">
+                <label className="text-xs font-medium text-gray-600 flex items-center gap-1.5">
+                  <Folder size={14} className="text-gray-500" />
+                  Проект
+                </label>
+                <select
+                  value={activeProjectId || ''}
+                  onChange={(e) => onProjectChange(e.target.value)}
+                  className="bg-green-50 border border-green-200 rounded-lg px-3 py-2 text-sm font-medium text-green-900 focus:ring-2 focus:ring-green-400 focus:border-transparent min-w-[180px]"
+                >
+                  {projects.map((project) => (
+                    <option key={project.id} value={project.id}>
+                      {project.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
 
             {/* Селектор аккаунтов */}
             {connections.length > 0 && (
