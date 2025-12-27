@@ -1,19 +1,13 @@
 import { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
-import {
-  LineChart,
-  Line,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
-  Legend,
-} from 'recharts';
-import { TrendingUp, DollarSign, MousePointer, Target, AlertCircle, Gauge, Calendar, ChevronDown, ChevronUp, ArrowUpDown, LayoutGrid, Table, CheckCircle, TrendingDown } from 'lucide-react';
+import { Target, AlertCircle, Gauge, Calendar, ChevronDown } from 'lucide-react';
 import { DATE_RANGES } from '../constants';
-import { KpiContent } from '../components/dashboard';
-import { getCplDeviation, getCplStatus, getCplRowBgColor, getDeviationColor, formatDeviation } from '../utils/cpl';
+import {
+  KpiContent,
+  StatsChart,
+  PublicCampaignsTable,
+  DailyStatsTable
+} from '../components/dashboard';
 
 interface Goal {
   id: string;
@@ -98,6 +92,7 @@ interface DashboardData {
     ctr: number;
     cpc: number;
     cpl: number;
+    bounceRate?: number | null;
   }>;
   dailyStats: Array<{
     date: string;
@@ -113,34 +108,19 @@ interface DashboardData {
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001/api';
 
-// Тип сортировки для таблицы кампаний
-type SortColumn = 'impressions' | 'clicks' | 'cost' | 'cpc' | 'ctr' | 'bounceRate' | 'conversions' | 'cr' | 'cpl';
-type SortDirection = 'asc' | 'desc';
-
 export default function PublicDashboard() {
   const { token } = useParams<{ token: string }>();
   const [data, setData] = useState<DashboardData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [selectedMetrics, setSelectedMetrics] = useState<Set<string>>(
-    new Set(['cost', 'clicks'])
-  );
 
-  // Состояние для выбора дат
+  // Date range
   const [dateRange, setDateRange] = useState(30);
   const [customDateMode, setCustomDateMode] = useState(false);
   const [customStartDate, setCustomStartDate] = useState('');
   const [customEndDate, setCustomEndDate] = useState('');
 
-  // Состояние для таблицы кампаний
-  const [campaignsOpen, setCampaignsOpen] = useState(true);
-  const [sortColumn, setSortColumn] = useState<SortColumn>('cost');
-  const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
-
-  // Состояние для таблицы по дням
-  const [dailyTableOpen, setDailyTableOpen] = useState(true);
-
-  // Состояние для выбора целей
+  // Goals
   const [selectedGoalIds, setSelectedGoalIds] = useState<string[]>([]);
   const [goalsDropdownOpen, setGoalsDropdownOpen] = useState(false);
 
@@ -180,7 +160,6 @@ export default function PublicDashboard() {
     }
   }, [token, dateRange, customDateMode, customStartDate, customEndDate, selectedGoalIds]);
 
-  // Используем валюту из данных API
   const currencyCode = data?.currency || 'RUB';
 
   const formatCurrency = (value: number | undefined | null) => {
@@ -192,30 +171,8 @@ export default function PublicDashboard() {
     }).format(value || 0);
   };
 
-  // Символ валюты для отображения
-  const getCurrencySymbol = (currency: string) => {
-    const symbols: Record<string, string> = {
-      RUB: '₽',
-      USD: '$',
-      EUR: '€',
-      BYN: 'Br',
-      KZT: '₸',
-      UAH: '₴',
-      TRY: '₺',
-      GBP: '£',
-      CHF: 'CHF',
-    };
-    return symbols[currency] || currency;
-  };
-  const currencySymbol = getCurrencySymbol(currencyCode);
-
   const formatNumber = (value: number | undefined | null) => {
     return new Intl.NumberFormat('ru-RU').format(value || 0);
-  };
-
-  const formatPercent = (value: number | undefined | null) => {
-    if (value === undefined || value === null) return '0.00%';
-    return `${value.toFixed(2)}%`;
   };
 
   const formatDate = (dateStr: string) => {
@@ -224,107 +181,6 @@ export default function PublicDashboard() {
       month: 'short',
     });
   };
-
-  const toggleMetric = (metric: string) => {
-    setSelectedMetrics((prev) => {
-      const next = new Set(prev);
-      if (next.has(metric)) {
-        next.delete(metric);
-      } else {
-        next.add(metric);
-      }
-      return next;
-    });
-  };
-
-  const handleSort = (column: SortColumn) => {
-    if (sortColumn === column) {
-      setSortDirection((prev) => (prev === 'desc' ? 'asc' : 'desc'));
-    } else {
-      setSortColumn(column);
-      setSortDirection('desc');
-    }
-  };
-
-  const getSortValue = (item: any, column: SortColumn): number => {
-    switch (column) {
-      case 'impressions': return item.impressions || 0;
-      case 'clicks': return item.clicks || 0;
-      case 'cost': return item.cost || 0;
-      case 'cpc': return item.cpc || 0;
-      case 'ctr': return item.ctr || 0;
-      case 'bounceRate': return item.bounceRate || 0;
-      case 'conversions': return item.conversions || 0;
-      case 'cr': return item.clicks > 0 ? ((item.conversions || 0) / item.clicks) * 100 : 0;
-      case 'cpl': return item.conversions > 0 ? (item.cost || 0) / item.conversions : 0;
-      default: return 0;
-    }
-  };
-
-  const sortedCampaigns = data?.campaigns ? [...data.campaigns].sort((a, b) => {
-    const aVal = getSortValue(a, sortColumn);
-    const bVal = getSortValue(b, sortColumn);
-    return sortDirection === 'desc' ? bVal - aVal : aVal - bVal;
-  }) : [];
-
-  // Итоги таблицы кампаний
-  const campaignTotals = data?.campaigns ? data.campaigns.reduce(
-    (acc, c) => ({
-      impressions: acc.impressions + (c.impressions || 0),
-      clicks: acc.clicks + (c.clicks || 0),
-      cost: acc.cost + (c.cost || 0),
-      conversions: acc.conversions + (c.conversions || 0),
-    }),
-    { impressions: 0, clicks: 0, cost: 0, conversions: 0 }
-  ) : { impressions: 0, clicks: 0, cost: 0, conversions: 0 };
-
-  const totalCtr = campaignTotals.impressions > 0 ? (campaignTotals.clicks / campaignTotals.impressions) * 100 : 0;
-  const totalCpc = campaignTotals.clicks > 0 ? campaignTotals.cost / campaignTotals.clicks : 0;
-  const totalCr = campaignTotals.clicks > 0 ? (campaignTotals.conversions / campaignTotals.clicks) * 100 : 0;
-  const totalCpl = campaignTotals.conversions > 0 ? campaignTotals.cost / campaignTotals.conversions : 0;
-
-  // CPL highlighting - use shared utils
-  const targetCpl = data?.kpi?.targetCpl || 0;
-
-  // Local wrappers that use targetCpl from closure
-  const getCplDeviationLocal = (cpl: number) => getCplDeviation(cpl, targetCpl);
-  const getCplStatusLocal = (cpl: number) => getCplStatus(cpl, targetCpl);
-  const getRowBgColor = (status: 'good' | 'warning' | 'bad' | 'neutral') => getCplRowBgColor(status);
-
-  // Подсчет статусов кампаний
-  const campaignStatusCounts = sortedCampaigns.reduce(
-    (acc, c) => {
-      const status = getCplStatusLocal(c.cpl || 0);
-      acc[status]++;
-      return acc;
-    },
-    { good: 0, warning: 0, bad: 0, neutral: 0 }
-  );
-
-  // Компонент заголовка для сортировки
-  const SortHeader = ({ column, label }: { column: SortColumn; label: string }) => (
-    <th
-      className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase cursor-pointer hover:bg-gray-100 select-none"
-      onClick={() => handleSort(column)}
-    >
-      <div className="flex items-center justify-end gap-1">
-        {label}
-        {sortColumn === column ? (
-          sortDirection === 'desc' ? <ChevronDown size={14} /> : <ChevronUp size={14} />
-        ) : (
-          <ArrowUpDown size={14} className="opacity-30" />
-        )}
-      </div>
-    </th>
-  );
-
-  const CHART_METRICS = [
-    { value: 'cost', label: 'Расход', color: '#ef4444' },
-    { value: 'clicks', label: 'Клики', color: '#3b82f6' },
-    { value: 'conversions', label: 'Конверсии', color: '#22c55e' },
-    { value: 'impressions', label: 'Показы', color: '#8b5cf6' },
-    { value: 'ctr', label: 'CTR', color: '#f59e0b' },
-  ];
 
   if (isLoading) {
     return (
@@ -348,9 +204,11 @@ export default function PublicDashboard() {
 
   if (!data) return null;
 
+  // Prepare data for StatsChart
   const chartData = data.dailyStats.map((item) => ({
     ...item,
-    dateFormatted: formatDate(item.date),
+    cpl: item.conversions > 0 ? item.cost / item.conversions : 0,
+    cr: item.clicks > 0 ? (item.conversions / item.clicks) * 100 : 0,
   }));
 
   return (
@@ -360,19 +218,17 @@ export default function PublicDashboard() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
           <div className="flex items-center justify-between flex-wrap gap-4">
             <div>
-              <h1 className="text-xl font-bold text-gray-900">
-                Статистика Yandex.Direct
-              </h1>
-              <p className="text-sm text-gray-500">
-                Аккаунт: {data.accountLogin}
-              </p>
+              <h1 className="text-xl font-bold text-gray-900">Статистика Yandex.Direct</h1>
+              <p className="text-sm text-gray-500">Аккаунт: {data.accountLogin}</p>
             </div>
             <div className="text-right text-sm text-gray-500">
               Обновлено: {new Date(data.lastUpdated).toLocaleString('ru-RU')}
             </div>
           </div>
-          {/* Date Range Selector */}
+
+          {/* Controls: Date Range + Goals */}
           <div className="mt-4 flex items-center gap-2 flex-wrap">
+            {/* Date Range Selector */}
             <div className="flex items-center gap-1 bg-gray-100 rounded-lg p-1">
               {DATE_RANGES.map((range) => (
                 <button
@@ -391,6 +247,7 @@ export default function PublicDashboard() {
                 </button>
               ))}
             </div>
+
             <button
               onClick={() => setCustomDateMode(!customDateMode)}
               className={`flex items-center gap-2 px-3 py-1.5 text-sm font-medium rounded-lg transition-colors ${
@@ -402,6 +259,7 @@ export default function PublicDashboard() {
               <Calendar className="w-4 h-4" />
               Произвольный
             </button>
+
             {customDateMode && (
               <div className="flex items-center gap-2">
                 <input
@@ -419,6 +277,7 @@ export default function PublicDashboard() {
                 />
               </div>
             )}
+
             <span className="text-sm text-gray-500 ml-2">
               {formatDate(data.period.startDate)} — {formatDate(data.period.endDate)}
             </span>
@@ -435,9 +294,7 @@ export default function PublicDashboard() {
                   }`}
                 >
                   <Target className="w-4 h-4" />
-                  {selectedGoalIds.length > 0
-                    ? `Цели (${selectedGoalIds.length})`
-                    : 'Все цели'}
+                  {selectedGoalIds.length > 0 ? `Цели (${selectedGoalIds.length})` : 'Все цели'}
                   <ChevronDown className={`w-4 h-4 transition-transform ${goalsDropdownOpen ? 'rotate-180' : ''}`} />
                 </button>
 
@@ -492,66 +349,29 @@ export default function PublicDashboard() {
       </header>
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
-        {/* Summary Cards */}
+        {/* Summary Cards - simplified version */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-5">
-            <div className="flex items-center gap-3">
-              <div className="p-2 bg-red-100 rounded-lg">
-                <DollarSign size={20} className="text-red-600" />
-              </div>
-              <div>
-                <p className="text-sm text-gray-500">Расход</p>
-                <p className="text-xl font-bold text-gray-900">
-                  {formatCurrency(data.totals.cost)}
-                </p>
-              </div>
-            </div>
+            <p className="text-sm text-gray-500">Расход</p>
+            <p className="text-xl font-bold text-gray-900">{formatCurrency(data.totals.cost)}</p>
           </div>
-
           <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-5">
-            <div className="flex items-center gap-3">
-              <div className="p-2 bg-blue-100 rounded-lg">
-                <MousePointer size={20} className="text-blue-600" />
-              </div>
-              <div>
-                <p className="text-sm text-gray-500">Клики</p>
-                <p className="text-xl font-bold text-gray-900">
-                  {formatNumber(data.totals.clicks)}
-                </p>
-              </div>
-            </div>
+            <p className="text-sm text-gray-500">Клики</p>
+            <p className="text-xl font-bold text-gray-900">{formatNumber(data.totals.clicks)}</p>
           </div>
-
           <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-5">
-            <div className="flex items-center gap-3">
-              <div className="p-2 bg-green-100 rounded-lg">
-                <Target size={20} className="text-green-600" />
-              </div>
-              <div>
-                <p className="text-sm text-gray-500">Конверсии</p>
-                <p className="text-xl font-bold text-gray-900">
-                  {formatNumber(data.totals.conversions)}
-                </p>
-              </div>
-            </div>
+            <p className="text-sm text-gray-500">Конверсии</p>
+            <p className="text-xl font-bold text-gray-900">{formatNumber(data.totals.conversions)}</p>
           </div>
-
           <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-5">
-            <div className="flex items-center gap-3">
-              <div className="p-2 bg-purple-100 rounded-lg">
-                <TrendingUp size={20} className="text-purple-600" />
-              </div>
-              <div>
-                <p className="text-sm text-gray-500">CPL</p>
-                <p className="text-xl font-bold text-gray-900">
-                  {(data.totals.cpl || 0) > 0 ? formatCurrency(data.totals.cpl) : '—'}
-                </p>
-              </div>
-            </div>
+            <p className="text-sm text-gray-500">CPL</p>
+            <p className="text-xl font-bold text-gray-900">
+              {(data.totals.cpl || 0) > 0 ? formatCurrency(data.totals.cpl) : '—'}
+            </p>
           </div>
         </div>
 
-        {/* KPI Widget - Using shared KpiContent component */}
+        {/* KPI Widget */}
         {data.kpi && (data.kpi.targetCost > 0 || data.kpi.targetLeads > 0) && (
           <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
             <div className="px-5 py-4 border-b border-gray-200">
@@ -573,7 +393,6 @@ export default function PublicDashboard() {
                 )}
               </div>
             </div>
-
             <div className="p-5">
               <KpiContent
                 kpiData={{
@@ -589,272 +408,18 @@ export default function PublicDashboard() {
           </div>
         )}
 
-        {/* Chart */}
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-          <div className="px-5 py-4 border-b border-gray-200">
-            <div className="flex items-center gap-3">
-              <TrendingUp size={20} className="text-green-600" />
-              <span className="font-semibold text-gray-900">Динамика</span>
-            </div>
-          </div>
-          <div className="p-6">
-            <div className="flex flex-wrap gap-2 mb-4">
-              {CHART_METRICS.map((metric) => (
-                <button
-                  key={metric.value}
-                  onClick={() => toggleMetric(metric.value)}
-                  className={`px-3 py-1.5 text-sm font-medium rounded-lg transition-colors ${
-                    selectedMetrics.has(metric.value)
-                      ? 'text-white'
-                      : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                  }`}
-                  style={{
-                    backgroundColor: selectedMetrics.has(metric.value)
-                      ? metric.color
-                      : undefined,
-                  }}
-                >
-                  {metric.label}
-                </button>
-              ))}
-            </div>
-            <div style={{ width: '100%', height: 300 }}>
-              <ResponsiveContainer>
-                <LineChart data={chartData}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-                  <XAxis
-                    dataKey="dateFormatted"
-                    tick={{ fontSize: 12 }}
-                    tickLine={false}
-                    axisLine={{ stroke: '#e5e7eb' }}
-                  />
-                  <YAxis
-                    yAxisId="left"
-                    tick={{ fontSize: 12 }}
-                    tickLine={false}
-                    axisLine={{ stroke: '#e5e7eb' }}
-                    tickFormatter={(value) => {
-                      if (value >= 1000000) return `${(value / 1000000).toFixed(1)}M`;
-                      if (value >= 1000) return `${(value / 1000).toFixed(1)}K`;
-                      return value;
-                    }}
-                  />
-                  <YAxis
-                    yAxisId="right"
-                    orientation="right"
-                    tick={{ fontSize: 12 }}
-                    tickLine={false}
-                    axisLine={{ stroke: '#e5e7eb' }}
-                    tickFormatter={(value) => `${value.toFixed(1)}%`}
-                  />
-                  <Tooltip
-                    contentStyle={{
-                      backgroundColor: 'white',
-                      border: '1px solid #e5e7eb',
-                      borderRadius: '8px',
-                      boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)',
-                    }}
-                  />
-                  <Legend />
-                  {CHART_METRICS.filter((m) => selectedMetrics.has(m.value)).map((metric) => (
-                    <Line
-                      key={metric.value}
-                      yAxisId={metric.value === 'ctr' ? 'right' : 'left'}
-                      type="monotone"
-                      dataKey={metric.value}
-                      name={metric.label}
-                      stroke={metric.color}
-                      strokeWidth={2}
-                      dot={false}
-                      activeDot={{ r: 4 }}
-                    />
-                  ))}
-                </LineChart>
-              </ResponsiveContainer>
-            </div>
-          </div>
-        </div>
+        {/* Chart - reusing StatsChart component */}
+        <StatsChart data={chartData} />
 
-        {/* Campaigns Table */}
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-          <button
-            onClick={() => setCampaignsOpen(!campaignsOpen)}
-            className="w-full px-5 py-4 flex items-center justify-between hover:bg-gray-50 transition-colors"
-          >
-            <div className="flex items-center gap-3">
-              <LayoutGrid size={20} className="text-blue-600" />
-              <span className="font-semibold text-gray-900">Кампании</span>
-              <span className="text-xs text-gray-400">{data.campaigns.length} кампаний</span>
-              {/* CPL Status Summary */}
-              {targetCpl > 0 && (
-                <div className="flex items-center gap-2 ml-4">
-                  <div className="flex items-center gap-1" title="CPL ниже плана (хорошо)">
-                    <CheckCircle size={14} className="text-green-600" />
-                    <span className="text-xs font-medium text-green-600">{campaignStatusCounts.good}</span>
-                  </div>
-                  <div className="flex items-center gap-1" title="CPL в пределах нормы">
-                    <AlertCircle size={14} className="text-amber-600" />
-                    <span className="text-xs font-medium text-amber-600">{campaignStatusCounts.warning}</span>
-                  </div>
-                  <div className="flex items-center gap-1" title="CPL выше плана (плохо)">
-                    <TrendingDown size={14} className="text-red-600" />
-                    <span className="text-xs font-medium text-red-600">{campaignStatusCounts.bad}</span>
-                  </div>
-                </div>
-              )}
-            </div>
-            {campaignsOpen ? (
-              <ChevronUp size={20} className="text-gray-400" />
-            ) : (
-              <ChevronDown size={20} className="text-gray-400" />
-            )}
-          </button>
-          {campaignsOpen && (
-            <div className="border-t border-gray-200 overflow-x-auto">
-              <table className="w-full">
-                <thead className="bg-gray-50 border-b border-gray-200">
-                  <tr>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                      Название
-                    </th>
-                    <SortHeader column="impressions" label="Показы" />
-                    <SortHeader column="clicks" label="Клики" />
-                    <SortHeader column="cost" label="Расход" />
-                    <SortHeader column="cpc" label="CPC" />
-                    <SortHeader column="ctr" label="CTR" />
-                    <SortHeader column="bounceRate" label="Отказы" />
-                    <SortHeader column="conversions" label="Конверсии" />
-                    <SortHeader column="cr" label="CR %" />
-                    <SortHeader column="cpl" label="CPL" />
-                    {targetCpl > 0 && (
-                      <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">
-                        vs план
-                      </th>
-                    )}
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-200">
-                  {sortedCampaigns.map((campaign) => {
-                    const campaignCr = campaign.clicks > 0 ? (campaign.conversions / campaign.clicks) * 100 : 0;
-                    const cplStatus = getCplStatusLocal(campaign.cpl || 0);
-                    const deviation = getCplDeviationLocal(campaign.cpl || 0);
-                    return (
-                      <tr key={campaign.id} className={getRowBgColor(cplStatus)}>
-                        <td className="px-4 py-3">
-                          <div className="flex items-center gap-2">
-                            <span
-                              className={`w-2 h-2 rounded-full ${
-                                campaign.status === 'ON'
-                                  ? 'bg-green-500'
-                                  : campaign.status === 'OFF'
-                                  ? 'bg-gray-400'
-                                  : 'bg-yellow-500'
-                              }`}
-                            />
-                            <span className="font-medium text-gray-900 truncate max-w-[300px]">
-                              {campaign.name}
-                            </span>
-                          </div>
-                        </td>
-                        <td className="px-4 py-3 text-right text-gray-900">
-                          {formatNumber(campaign.impressions)}
-                        </td>
-                        <td className="px-4 py-3 text-right text-gray-900">
-                          {formatNumber(campaign.clicks)}
-                        </td>
-                        <td className="px-4 py-3 text-right font-semibold text-gray-900">
-                          {formatCurrency(campaign.cost)}
-                        </td>
-                        <td className="px-4 py-3 text-right text-gray-900">
-                          {(campaign.cpc || 0).toFixed(2)} {currencySymbol}
-                        </td>
-                        <td className="px-4 py-3 text-right">
-                          <span className={`font-medium ${
-                            (campaign.ctr || 0) >= 5 ? 'text-green-600' :
-                            (campaign.ctr || 0) >= 3 ? 'text-yellow-600' : 'text-red-600'
-                          }`}>
-                            {formatPercent(campaign.ctr)}
-                          </span>
-                        </td>
-                        <td className="px-4 py-3 text-right text-gray-900">
-                          {typeof (campaign as any).bounceRate === 'number'
-                            ? `${(campaign as any).bounceRate.toFixed(2)}%`
-                            : '—'}
-                        </td>
-                        <td className="px-4 py-3 text-right">
-                          <span className={`font-medium ${
-                            (campaign.conversions || 0) > 0 ? 'text-green-600' : 'text-gray-400'
-                          }`}>
-                            {formatNumber(campaign.conversions)}
-                          </span>
-                        </td>
-                        <td className="px-4 py-3 text-right">
-                          <span className={`font-medium ${
-                            campaignCr >= 10 ? 'text-green-600' :
-                            campaignCr >= 5 ? 'text-yellow-600' : 'text-gray-600'
-                          }`}>
-                            {campaignCr > 0 ? `${campaignCr.toFixed(2)}%` : '—'}
-                          </span>
-                        </td>
-                        <td className="px-4 py-3 text-right text-gray-900">
-                          {(campaign.cpl || 0) > 0 ? formatCurrency(campaign.cpl) : '—'}
-                        </td>
-                        {targetCpl > 0 && (
-                          <td className="px-4 py-3 text-right">
-                            <span className={`font-medium ${getDeviationColor(deviation)}`}>
-                              {formatDeviation(deviation)}
-                            </span>
-                          </td>
-                        )}
-                      </tr>
-                    );
-                  })}
-                  {/* Totals row */}
-                  {data.campaigns.length > 0 && (
-                    <tr className="bg-gray-100 border-t-2 border-gray-300 font-semibold">
-                      <td className="px-4 py-3 text-gray-900">
-                        ИТОГО ({data.campaigns.length} кампаний)
-                      </td>
-                      <td className="px-4 py-3 text-right text-gray-900">
-                        {formatNumber(campaignTotals.impressions)}
-                      </td>
-                      <td className="px-4 py-3 text-right text-gray-900">
-                        {formatNumber(campaignTotals.clicks)}
-                      </td>
-                      <td className="px-4 py-3 text-right text-gray-900">
-                        {formatCurrency(campaignTotals.cost)}
-                      </td>
-                      <td className="px-4 py-3 text-right text-gray-900">
-                        {totalCpc.toFixed(2)} {currencySymbol}
-                      </td>
-                      <td className="px-4 py-3 text-right text-gray-900">
-                        {totalCtr.toFixed(2)}%
-                      </td>
-                      <td className="px-4 py-3 text-right text-gray-900">—</td>
-                      <td className="px-4 py-3 text-right text-gray-900">
-                        {formatNumber(campaignTotals.conversions)}
-                      </td>
-                      <td className="px-4 py-3 text-right text-gray-900">
-                        {totalCr > 0 ? `${totalCr.toFixed(2)}%` : '—'}
-                      </td>
-                      <td className="px-4 py-3 text-right text-gray-900">
-                        {totalCpl > 0 ? formatCurrency(totalCpl) : '—'}
-                      </td>
-                      {targetCpl > 0 && (
-                        <td className="px-4 py-3 text-right text-gray-500 text-xs">
-                          план: {formatCurrency(targetCpl)}
-                        </td>
-                      )}
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </div>
+        {/* Campaigns Table - using new simplified component */}
+        <PublicCampaignsTable
+          campaigns={data.campaigns}
+          targetCpl={data.kpi?.targetCpl}
+          currency={currencyCode}
+        />
 
-        {/* Legend for CPL highlighting */}
-        {targetCpl > 0 && data.campaigns.length > 0 && (
+        {/* CPL Legend */}
+        {data.kpi?.targetCpl && data.kpi.targetCpl > 0 && data.campaigns.length > 0 && (
           <div className="flex items-center gap-6 text-sm text-gray-600 px-1">
             <span className="font-medium">Подсветка по CPL:</span>
             <div className="flex items-center gap-2">
@@ -872,104 +437,8 @@ export default function PublicDashboard() {
           </div>
         )}
 
-        {/* Daily Stats Table */}
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-          <button
-            onClick={() => setDailyTableOpen(!dailyTableOpen)}
-            className="w-full px-5 py-4 flex items-center justify-between hover:bg-gray-50 transition-colors"
-          >
-            <div className="flex items-center gap-3">
-              <Table size={20} className="text-purple-600" />
-              <span className="font-semibold text-gray-900">Статистика по дням</span>
-              <span className="text-xs text-gray-400">{data.dailyStats.length} дней</span>
-            </div>
-            {dailyTableOpen ? (
-              <ChevronUp size={20} className="text-gray-400" />
-            ) : (
-              <ChevronDown size={20} className="text-gray-400" />
-            )}
-          </button>
-          {dailyTableOpen && (
-            <div className="border-t border-gray-200 overflow-x-auto">
-              <table className="w-full">
-                <thead className="bg-gray-50 border-b border-gray-200">
-                  <tr>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                      Дата
-                    </th>
-                    <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">
-                      Показы
-                    </th>
-                    <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">
-                      Клики
-                    </th>
-                    <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">
-                      CTR
-                    </th>
-                    <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">
-                      Расход
-                    </th>
-                    <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">
-                      CPC
-                    </th>
-                    <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">
-                      Конверсии
-                    </th>
-                    <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">
-                      CPL
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-200">
-                  {[...data.dailyStats].reverse().map((day) => {
-                    const dayCpl = day.conversions > 0 ? day.cost / day.conversions : 0;
-                    return (
-                      <tr key={day.date} className="hover:bg-gray-50">
-                        <td className="px-4 py-3 font-medium text-gray-900">
-                          {new Date(day.date).toLocaleDateString('ru-RU', {
-                            day: 'numeric',
-                            month: 'short',
-                            weekday: 'short',
-                          })}
-                        </td>
-                        <td className="px-4 py-3 text-right text-gray-900">
-                          {formatNumber(day.impressions)}
-                        </td>
-                        <td className="px-4 py-3 text-right text-gray-900">
-                          {formatNumber(day.clicks)}
-                        </td>
-                        <td className="px-4 py-3 text-right">
-                          <span className={`font-medium ${
-                            (day.ctr || 0) >= 5 ? 'text-green-600' :
-                            (day.ctr || 0) >= 3 ? 'text-yellow-600' : 'text-red-600'
-                          }`}>
-                            {formatPercent(day.ctr)}
-                          </span>
-                        </td>
-                        <td className="px-4 py-3 text-right font-semibold text-gray-900">
-                          {formatCurrency(day.cost)}
-                        </td>
-                        <td className="px-4 py-3 text-right text-gray-900">
-                          {(day.cpc || 0).toFixed(2)} {currencySymbol}
-                        </td>
-                        <td className="px-4 py-3 text-right">
-                          <span className={`font-medium ${
-                            (day.conversions || 0) > 0 ? 'text-green-600' : 'text-gray-400'
-                          }`}>
-                            {formatNumber(day.conversions)}
-                          </span>
-                        </td>
-                        <td className="px-4 py-3 text-right text-gray-900">
-                          {dayCpl > 0 ? formatCurrency(dayCpl) : '—'}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </div>
+        {/* Daily Stats Table - using new component */}
+        <DailyStatsTable data={data.dailyStats} currency={currencyCode} />
       </main>
 
       {/* Footer */}

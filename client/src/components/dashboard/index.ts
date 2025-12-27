@@ -7,6 +7,8 @@ export { MetricsCards } from './MetricsCards';
 export { KpiWidget, KpiContent, type KpiAnalysis } from './KpiWidget';
 export { DashboardHeader } from './DashboardHeader';
 export { CampaignsTable } from './CampaignsTable';
+export { PublicCampaignsTable } from './PublicCampaignsTable';
+export { DailyStatsTable } from './DailyStatsTable';
 export { StatsChart } from './StatsChart';
 export { ReportsSection } from './ReportsSection';
 export { AIRecommendations } from './AIRecommendations';
