@@ -251,15 +251,15 @@ export const telegramService = {
       return;
     }
 
-    // Handle /stats command - quick today stats
+    // Handle /stats command - quick today stats for all projects
     if (text === '/stats' || text === '/статистика') {
-      await this.handleStatsCommand(chatId, 'today');
+      await this.handleStatsCommand(chatId, 'today', 'all');
       return;
     }
 
-    // Handle /report command - show period selection
+    // Handle /report command - show project selection first
     if (text === '/report' || text === '/отчет' || text === '/отчёт') {
-      await this.showReportPeriodSelection(chatId);
+      await this.showProjectSelection(chatId);
       return;
     }
 
@@ -315,25 +315,97 @@ export const telegramService = {
   },
 
   /**
+   * Show project selection for report
+   */
+  async showProjectSelection(chatId: string): Promise<void> {
+    try {
+      // Find app user by chat_id
+      const users = await clickhouseService.query(`
+        SELECT user_id
+        FROM telegram_users FINAL
+        WHERE chat_id = '${chatId}'
+          AND is_active = 1
+        LIMIT 1
+      `);
+
+      if (users.length === 0) {
+        await this.sendMessage(chatId, {
+          text: '❌ Ваш аккаунт не подключён. Перейдите в настройки системы для подключения.',
+        });
+        return;
+      }
+
+      const userId = users[0].user_id;
+
+      // Get user's connections with project names
+      const connections = await clickhouseService.query(`
+        SELECT
+          c.id as connection_id,
+          c.login,
+          p.name as project_name
+        FROM yandex_direct_connections c FINAL
+        LEFT JOIN projects p FINAL ON c.project_id = p.id
+        WHERE c.user_id = '${userId}'
+          AND c.status = 'active'
+      `);
+
+      if (connections.length === 0) {
+        await this.sendMessage(chatId, {
+          text: 'У вас нет активных подключений к Яндекс.Директ.',
+        });
+        return;
+      }
+
+      // Build keyboard with projects
+      const keyboard: any[][] = [];
+
+      // Add "All projects" button if more than 1 connection
+      if (connections.length > 1) {
+        keyboard.push([{ text: '📊 Все проекты', callback_data: 'proj_all' }]);
+      }
+
+      // Add individual project buttons
+      for (const conn of connections) {
+        const projectName = conn.project_name || conn.login;
+        keyboard.push([{
+          text: `📁 ${projectName}`,
+          callback_data: `proj_${conn.connection_id}`
+        }]);
+      }
+
+      await this.sendMessage(chatId, {
+        text: '📁 <b>Выберите проект для отчёта:</b>',
+        parse_mode: 'HTML',
+        reply_markup: { inline_keyboard: keyboard },
+      });
+    } catch (error) {
+      console.error('[Telegram] Failed to show project selection:', error);
+      await this.sendMessage(chatId, {
+        text: '❌ Произошла ошибка при получении списка проектов.',
+      });
+    }
+  },
+
+  /**
    * Show period selection for report
    */
-  async showReportPeriodSelection(chatId: string): Promise<void> {
+  async showReportPeriodSelection(chatId: string, connectionId: string): Promise<void> {
     await this.sendMessage(chatId, {
       text: '📊 <b>Выберите период для отчёта:</b>',
       parse_mode: 'HTML',
       reply_markup: {
         inline_keyboard: [
           [
-            { text: '📅 Сегодня', callback_data: 'report_today' },
-            { text: '📅 Вчера', callback_data: 'report_yesterday' },
+            { text: '📅 Сегодня', callback_data: `period_today_${connectionId}` },
+            { text: '📅 Вчера', callback_data: `period_yesterday_${connectionId}` },
           ],
           [
-            { text: '📆 Последние 7 дней', callback_data: 'report_week' },
-            { text: '📆 Последние 30 дней', callback_data: 'report_month' },
+            { text: '📆 7 дней', callback_data: `period_week_${connectionId}` },
+            { text: '📆 30 дней', callback_data: `period_month_${connectionId}` },
           ],
           [
-            { text: '📆 Этот месяц', callback_data: 'report_this_month' },
-            { text: '📆 Прошлый месяц', callback_data: 'report_last_month' },
+            { text: '📆 Этот месяц', callback_data: `period_this_month_${connectionId}` },
+            { text: '📆 Прошлый месяц', callback_data: `period_last_month_${connectionId}` },
           ],
         ],
       },
@@ -353,10 +425,20 @@ export const telegramService = {
     // Answer callback to remove loading state
     await this.answerCallbackQuery(callbackId);
 
-    // Handle report period selection
-    if (data.startsWith('report_')) {
-      const period = data.replace('report_', '');
-      await this.handleStatsCommand(chatId, period);
+    // Handle project selection
+    if (data.startsWith('proj_')) {
+      const connectionId = data.replace('proj_', '');
+      await this.showReportPeriodSelection(chatId, connectionId);
+      return;
+    }
+
+    // Handle period selection (format: period_<period>_<connectionId>)
+    if (data.startsWith('period_')) {
+      const parts = data.replace('period_', '').split('_');
+      const period = parts[0];
+      const connectionId = parts.slice(1).join('_'); // Handle UUIDs with underscores
+      await this.handleStatsCommand(chatId, period, connectionId);
+      return;
     }
   },
 
@@ -382,9 +464,9 @@ export const telegramService = {
   },
 
   /**
-   * Handle /stats command
+   * Handle /stats command with project selection
    */
-  async handleStatsCommand(chatId: string, period: string = 'today'): Promise<void> {
+  async handleStatsCommand(chatId: string, period: string = 'today', connectionId: string = 'all'): Promise<void> {
     try {
       // Find app user by chat_id
       const users = await clickhouseService.query(`
@@ -404,13 +486,30 @@ export const telegramService = {
 
       const userId = users[0].user_id;
 
-      // Get user's connections
-      const connections = await clickhouseService.query(`
-        SELECT id, login
-        FROM yandex_direct_connections FINAL
-        WHERE user_id = '${userId}'
-          AND status = 'active'
-      `);
+      // Get connections based on selection
+      let connections: any[];
+      let projectName = 'все проекты';
+
+      if (connectionId === 'all') {
+        connections = await clickhouseService.query(`
+          SELECT id, login, conversion_goals
+          FROM yandex_direct_connections FINAL
+          WHERE user_id = '${userId}'
+            AND status = 'active'
+        `);
+      } else {
+        connections = await clickhouseService.query(`
+          SELECT c.id, c.login, c.conversion_goals, p.name as project_name
+          FROM yandex_direct_connections c FINAL
+          LEFT JOIN projects p FINAL ON c.project_id = p.id
+          WHERE c.id = '${connectionId}'
+            AND c.user_id = '${userId}'
+            AND c.status = 'active'
+        `);
+        if (connections.length > 0) {
+          projectName = connections[0].project_name || connections[0].login;
+        }
+      }
 
       if (connections.length === 0) {
         await this.sendMessage(chatId, {
@@ -423,6 +522,7 @@ export const telegramService = {
       const { startDate, endDate, periodName } = this.getDateRange(period);
       const connectionIds = connections.map((c: any) => `'${c.id}'`).join(',');
 
+      // Get basic stats
       const stats = await clickhouseService.query(`
         SELECT
           sum(impressions) as impressions,
@@ -439,14 +539,84 @@ export const telegramService = {
       const clicks = parseInt(s.clicks) || 0;
       const cost = parseFloat(s.cost) || 0;
 
-      await this.sendQuickStats(chatId, {
+      // Get KPI goals for the current month
+      const currentMonth = new Date().toISOString().slice(0, 7);
+      const kpiGoals = await clickhouseService.query(`
+        SELECT goal_ids
+        FROM account_kpi FINAL
+        WHERE connection_id IN (${connectionIds})
+          AND month = '${currentMonth}'
+        LIMIT 1
+      `);
+
+      // Parse KPI goal IDs
+      let kpiGoalIds: string[] = [];
+      if (kpiGoals.length > 0 && kpiGoals[0].goal_ids) {
+        try {
+          kpiGoalIds = JSON.parse(kpiGoals[0].goal_ids);
+        } catch (e) {
+          // If not JSON, try to parse as array string
+          const match = kpiGoals[0].goal_ids.match(/\d+/g);
+          if (match) kpiGoalIds = match;
+        }
+      }
+
+      // Get conversions - either from KPI goals or all goals
+      let conversionsQuery: string;
+      if (kpiGoalIds.length > 0) {
+        const goalIdsStr = kpiGoalIds.map(g => `'${g}'`).join(',');
+        conversionsQuery = `
+          SELECT
+            goal_id,
+            sum(conversions) as conversions
+          FROM campaign_conversions
+          WHERE connection_id IN (${connectionIds})
+            AND date >= '${startDate}'
+            AND date <= '${endDate}'
+            AND goal_id IN (${goalIdsStr})
+          GROUP BY goal_id
+        `;
+      } else {
+        conversionsQuery = `
+          SELECT
+            goal_id,
+            sum(conversions) as conversions
+          FROM campaign_conversions
+          WHERE connection_id IN (${connectionIds})
+            AND date >= '${startDate}'
+            AND date <= '${endDate}'
+          GROUP BY goal_id
+        `;
+      }
+
+      const conversionsData = await clickhouseService.query(conversionsQuery);
+
+      // Calculate total conversions
+      let totalConversions = 0;
+      const conversionsByGoal: { goalId: string; conversions: number }[] = [];
+
+      for (const row of conversionsData) {
+        const convs = parseInt(row.conversions) || 0;
+        totalConversions += convs;
+        conversionsByGoal.push({ goalId: row.goal_id, conversions: convs });
+      }
+
+      // Calculate CPL
+      const cpl = totalConversions > 0 ? cost / totalConversions : 0;
+
+      // Send detailed report
+      await this.sendDetailedStats(chatId, {
+        projectName,
         period: periodName,
         impressions,
         clicks,
         cost,
-        conversions: 0, // Конверсии пока не собираются в этой таблице
         ctr: impressions > 0 ? (clicks / impressions) * 100 : 0,
-        cpl: 0, // CPL недоступен без конверсий
+        avgCpc: clicks > 0 ? cost / clicks : 0,
+        totalConversions,
+        cpl,
+        conversionsByGoal,
+        hasKpiGoals: kpiGoalIds.length > 0,
       });
     } catch (error) {
       console.error('[Telegram] Failed to handle stats command:', error);
@@ -454,6 +624,51 @@ export const telegramService = {
         text: '❌ Произошла ошибка при получении статистики.',
       });
     }
+  },
+
+  /**
+   * Send detailed stats message
+   */
+  async sendDetailedStats(chatId: string, stats: {
+    projectName: string;
+    period: string;
+    impressions: number;
+    clicks: number;
+    cost: number;
+    ctr: number;
+    avgCpc: number;
+    totalConversions: number;
+    cpl: number;
+    conversionsByGoal: { goalId: string; conversions: number }[];
+    hasKpiGoals: boolean;
+  }): Promise<boolean> {
+    let text = `📈 <b>Отчёт: ${stats.projectName}</b>\n`;
+    text += `📅 Период: ${stats.period}\n\n`;
+
+    text += `👁 Показы: ${stats.impressions.toLocaleString('ru-RU')}\n`;
+    text += `👆 Клики: ${stats.clicks.toLocaleString('ru-RU')}\n`;
+    text += `💰 Расход: ${Math.round(stats.cost).toLocaleString('ru-RU')} ₽\n`;
+    text += `📊 CTR: ${stats.ctr.toFixed(2)}%\n`;
+    text += `💵 Ср. CPC: ${stats.avgCpc > 0 ? stats.avgCpc.toFixed(2) + ' ₽' : '—'}\n`;
+
+    text += `\n<b>🎯 Конверсии${stats.hasKpiGoals ? ' (KPI)' : ''}:</b>\n`;
+
+    if (stats.totalConversions > 0) {
+      text += `Всего: <b>${stats.totalConversions}</b>\n`;
+      text += `📉 CPL: <b>${Math.round(stats.cpl).toLocaleString('ru-RU')} ₽</b>\n`;
+
+      if (stats.conversionsByGoal.length > 1) {
+        text += '\nПо целям:\n';
+        for (const goal of stats.conversionsByGoal) {
+          const goalCpl = goal.conversions > 0 ? stats.cost / goal.conversions : 0;
+          text += `• Цель ${goal.goalId}: ${goal.conversions} (CPL: ${Math.round(goalCpl).toLocaleString('ru-RU')} ₽)\n`;
+        }
+      }
+    } else {
+      text += `Нет данных по конверсиям за этот период\n`;
+    }
+
+    return this.sendMessage(chatId, { text, parse_mode: 'HTML' });
   },
 
   /**
