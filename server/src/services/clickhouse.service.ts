@@ -804,9 +804,13 @@ export const clickhouseService = {
     const dateTo = endDate.toISOString().split('T')[0];
 
     // Определяем какую таблицу использовать в зависимости от уровня фильтрации
+    // ВАЖНО: Для конверсий всегда используем campaign_conversions, т.к. таблицы
+    // ad_group_conversions и ad_conversions не существуют. campaign_conversions
+    // содержит колонки ad_group_id и ad_id для фильтрации.
     let performanceTable: string;
-    let conversionsTable: string;
+    const conversionsTable = 'campaign_conversions'; // Всегда используем эту таблицу
     let additionalFilters = '';
+    let conversionsFilters = '';
     const queryParams: Record<string, any> = {
       connectionId,
       startDate: dateFrom,
@@ -816,8 +820,12 @@ export const clickhouseService = {
     if (adId && adGroupId && campaignId) {
       // Фильтр по объявлению
       performanceTable = 'ad_performance';
-      conversionsTable = 'ad_conversions';
       additionalFilters = `
+        AND campaign_id = {campaignId:String}
+        AND ad_group_id = {adGroupId:String}
+        AND ad_id = {adId:String}
+      `;
+      conversionsFilters = `
         AND campaign_id = {campaignId:String}
         AND ad_group_id = {adGroupId:String}
         AND ad_id = {adId:String}
@@ -828,8 +836,11 @@ export const clickhouseService = {
     } else if (adGroupId && campaignId) {
       // Фильтр по группе
       performanceTable = 'ad_group_performance';
-      conversionsTable = 'ad_group_conversions';
       additionalFilters = `
+        AND campaign_id = {campaignId:String}
+        AND ad_group_id = {adGroupId:String}
+      `;
+      conversionsFilters = `
         AND campaign_id = {campaignId:String}
         AND ad_group_id = {adGroupId:String}
       `;
@@ -838,15 +849,16 @@ export const clickhouseService = {
     } else if (campaignId) {
       // Фильтр по кампании
       performanceTable = 'campaign_performance';
-      conversionsTable = 'campaign_conversions';
       additionalFilters = `
+        AND campaign_id = {campaignId:String}
+      `;
+      conversionsFilters = `
         AND campaign_id = {campaignId:String}
       `;
       queryParams.campaignId = campaignId;
     } else {
       // Без фильтра - агрегация по всем кампаниям
       performanceTable = 'campaign_performance';
-      conversionsTable = 'campaign_conversions';
     }
 
     // Базовая статистика по дням
@@ -891,7 +903,7 @@ export const clickhouseService = {
           AND date >= {startDate:Date}
           AND date <= {endDate:Date}
           AND goal_id IN ({goalIds:Array(String)})
-          ${additionalFilters}
+          ${conversionsFilters}
         GROUP BY date
         ORDER BY date ASC
       `;
@@ -905,7 +917,7 @@ export const clickhouseService = {
         WHERE connection_id = {connectionId:String}
           AND date >= {startDate:Date}
           AND date <= {endDate:Date}
-          ${additionalFilters}
+          ${conversionsFilters}
         GROUP BY date
         ORDER BY date ASC
       `;
