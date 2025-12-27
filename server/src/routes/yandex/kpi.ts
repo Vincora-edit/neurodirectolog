@@ -31,10 +31,12 @@ router.get('/kpi/:connectionId', authenticate, requireConnectionAccess, async (r
     const kpiGoalIds = kpi?.goalIds && kpi.goalIds.length > 0 ? kpi.goalIds : undefined;
     const monthStats = await clickhouseService.getMonthStats(connectionId, kpiGoalIds);
 
-    // Получаем статистику за последние 7 дней для расчёта среднего
+    // Получаем статистику за последние 7 завершённых дней для расчёта среднего
+    // Используем вчера как конец периода, т.к. данные за сегодня неполные
     const last7DaysEnd = new Date();
-    const last7DaysStart = new Date();
-    last7DaysStart.setDate(last7DaysStart.getDate() - 7);
+    last7DaysEnd.setDate(last7DaysEnd.getDate() - 1); // вчера
+    const last7DaysStart = new Date(last7DaysEnd);
+    last7DaysStart.setDate(last7DaysStart.getDate() - 6); // 7 дней назад от вчера
 
     const last7DaysStats = await clickhouseService.getDailyStats(
       connectionId,
@@ -44,12 +46,12 @@ router.get('/kpi/:connectionId', authenticate, requireConnectionAccess, async (r
     );
 
     // Рассчитываем средние показатели за 7 дней
-    const avgDailyCost = last7DaysStats.length > 0
-      ? last7DaysStats.reduce((sum: number, d: any) => sum + (d.cost || 0), 0) / last7DaysStats.length
-      : 0;
-    const avgDailyLeads = last7DaysStats.length > 0
-      ? last7DaysStats.reduce((sum: number, d: any) => sum + (d.conversions || 0), 0) / last7DaysStats.length
-      : 0;
+    // Делим на 7 (кол-во дней в периоде), а не на кол-во записей,
+    // чтобы учесть дни без данных как дни с нулевым расходом
+    const totalCost7d = last7DaysStats.reduce((sum: number, d: any) => sum + (d.cost || 0), 0);
+    const totalLeads7d = last7DaysStats.reduce((sum: number, d: any) => sum + (d.conversions || 0), 0);
+    const avgDailyCost = totalCost7d / 7;
+    const avgDailyLeads = totalLeads7d / 7;
     const avgDailyCpl = avgDailyLeads > 0 ? avgDailyCost / avgDailyLeads : 0;
 
     // Рассчитываем прогресс
