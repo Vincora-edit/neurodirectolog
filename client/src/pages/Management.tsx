@@ -10,6 +10,9 @@ import {
   ChevronUp,
   ArrowUpDown,
   RefreshCw,
+  TrendingDown,
+  AlertTriangle,
+  CheckCircle,
 } from 'lucide-react';
 import { api } from '../services/api';
 import { DATE_RANGES } from '../constants';
@@ -44,8 +47,44 @@ interface ManagementResponse {
   accounts: AccountData[];
 }
 
-type SortColumn = 'projectName' | 'accountLogin' | 'impressions' | 'clicks' | 'cost' | 'conversions' | 'cpl' | 'kpiCost' | 'kpiLeads';
+type SortColumn = 'projectName' | 'accountLogin' | 'impressions' | 'clicks' | 'cost' | 'conversions' | 'cpl' | 'cplDeviation' | 'kpiCost' | 'kpiLeads';
 type SortDirection = 'asc' | 'desc';
+
+// Функция для расчета отклонения CPL от целевого
+const getCplDeviation = (account: AccountData): number | null => {
+  if (!account.kpi?.targetCpl || account.kpi.targetCpl <= 0 || account.stats.cpl <= 0) {
+    return null;
+  }
+  return ((account.stats.cpl - account.kpi.targetCpl) / account.kpi.targetCpl) * 100;
+};
+
+// Функция для определения статуса CPL
+const getCplStatus = (account: AccountData): 'good' | 'warning' | 'bad' | 'neutral' => {
+  const deviation = getCplDeviation(account);
+  if (deviation === null) return 'neutral';
+
+  if (deviation <= -10) return 'good';      // CPL на 10%+ ниже целевого - отлично
+  if (deviation <= 10) return 'warning';    // CPL в пределах ±10% от целевого - нормально
+  return 'bad';                              // CPL на 10%+ выше целевого - плохо
+};
+
+// Цвета для строк таблицы
+const getRowBgColor = (status: 'good' | 'warning' | 'bad' | 'neutral'): string => {
+  switch (status) {
+    case 'good': return 'bg-green-50 hover:bg-green-100';
+    case 'warning': return 'bg-amber-50 hover:bg-amber-100';
+    case 'bad': return 'bg-red-50 hover:bg-red-100';
+    default: return 'hover:bg-gray-50';
+  }
+};
+
+// Цвета для текста отклонения
+const getDeviationColor = (deviation: number | null): string => {
+  if (deviation === null) return 'text-gray-400';
+  if (deviation <= -10) return 'text-green-600';
+  if (deviation <= 10) return 'text-amber-600';
+  return 'text-red-600';
+};
 
 export default function Management() {
   const [days, setDays] = useState(30);
@@ -70,6 +109,12 @@ export default function Management() {
     return new Intl.NumberFormat('ru-RU').format(value);
   };
 
+  const formatPercent = (value: number | null): string => {
+    if (value === null) return '—';
+    const sign = value > 0 ? '+' : '';
+    return `${sign}${value.toFixed(0)}%`;
+  };
+
   const handleSort = (column: SortColumn) => {
     if (sortColumn === column) {
       setSortDirection(prev => prev === 'desc' ? 'asc' : 'desc');
@@ -88,6 +133,7 @@ export default function Management() {
       case 'cost': return account.stats.cost;
       case 'conversions': return account.stats.conversions;
       case 'cpl': return account.stats.cpl;
+      case 'cplDeviation': return getCplDeviation(account) ?? 9999;
       case 'kpiCost': return account.kpi?.costProgress ?? -1;
       case 'kpiLeads': return account.kpi?.leadsProgress ?? -1;
       default: return 0;
@@ -124,15 +170,13 @@ export default function Management() {
     </th>
   );
 
-  // Функция для определения цвета прогресса
+  // Функция для определения цвета прогресса KPI
   const getProgressColor = (progress: number, dayProgress: number, isLeads: boolean) => {
     if (isLeads) {
-      // Для лидов: чем больше - тем лучше
       if (progress >= dayProgress) return 'text-green-600';
       if (progress < dayProgress - 10) return 'text-red-600';
       return 'text-amber-600';
     } else {
-      // Для расхода: перерасход - плохо
       if (progress > dayProgress + 10) return 'text-red-600';
       if (progress >= dayProgress - 5) return 'text-green-600';
       return 'text-amber-600';
@@ -159,6 +203,16 @@ export default function Management() {
   );
 
   const totalCpl = totals.conversions > 0 ? totals.cost / totals.conversions : 0;
+
+  // Подсчет статистики по статусам
+  const statusCounts = sortedAccounts.reduce(
+    (acc, account) => {
+      const status = getCplStatus(account);
+      acc[status]++;
+      return acc;
+    },
+    { good: 0, warning: 0, bad: 0, neutral: 0 }
+  );
 
   return (
     <div className="space-y-6">
@@ -202,7 +256,7 @@ export default function Management() {
       </div>
 
       {/* Summary cards */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4">
           <div className="flex items-center gap-3">
             <div className="p-2 bg-purple-100 rounded-lg">
@@ -252,6 +306,42 @@ export default function Management() {
             </div>
           </div>
         </div>
+
+        {/* CPL Status Summary */}
+        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4">
+          <p className="text-sm text-gray-500 mb-2">CPL vs план</p>
+          <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1" title="Ниже плана (хорошо)">
+              <CheckCircle size={16} className="text-green-600" />
+              <span className="text-sm font-medium text-green-600">{statusCounts.good}</span>
+            </div>
+            <div className="flex items-center gap-1" title="В пределах нормы">
+              <AlertTriangle size={16} className="text-amber-600" />
+              <span className="text-sm font-medium text-amber-600">{statusCounts.warning}</span>
+            </div>
+            <div className="flex items-center gap-1" title="Выше плана (плохо)">
+              <TrendingDown size={16} className="text-red-600" />
+              <span className="text-sm font-medium text-red-600">{statusCounts.bad}</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Legend */}
+      <div className="flex items-center gap-6 text-sm text-gray-600">
+        <span className="font-medium">Подсветка по CPL:</span>
+        <div className="flex items-center gap-2">
+          <div className="w-4 h-4 bg-green-100 rounded border border-green-200"></div>
+          <span>Ниже плана (&gt;10%)</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <div className="w-4 h-4 bg-amber-100 rounded border border-amber-200"></div>
+          <span>В норме (±10%)</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <div className="w-4 h-4 bg-red-100 rounded border border-red-200"></div>
+          <span>Выше плана (&gt;10%)</span>
+        </div>
       </div>
 
       {/* Main table */}
@@ -267,58 +357,75 @@ export default function Management() {
                 <SortHeader column="cost" label="Расход" />
                 <SortHeader column="conversions" label="Лиды" />
                 <SortHeader column="cpl" label="CPL" />
+                <SortHeader column="cplDeviation" label="vs план" />
                 <SortHeader column="kpiCost" label="KPI ₽" />
                 <SortHeader column="kpiLeads" label="KPI лиды" />
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200">
-              {sortedAccounts.map((account) => (
-                <tr key={account.id} className="hover:bg-gray-50">
-                  <td className="px-3 py-3">
-                    <span className="font-medium text-gray-900">{account.projectName}</span>
-                  </td>
-                  <td className="px-3 py-3">
-                    <span className="px-2 py-0.5 bg-gray-100 text-gray-700 text-xs rounded">
-                      {account.accountLogin}
-                    </span>
-                  </td>
-                  <td className="px-3 py-3 text-right text-gray-900">
-                    {formatNumber(account.stats.impressions)}
-                  </td>
-                  <td className="px-3 py-3 text-right text-gray-900">
-                    {formatNumber(account.stats.clicks)}
-                  </td>
-                  <td className="px-3 py-3 text-right font-semibold text-gray-900">
-                    {formatCurrency(account.stats.cost)}
-                  </td>
-                  <td className="px-3 py-3 text-right font-medium text-gray-900">
-                    {formatNumber(account.stats.conversions)}
-                  </td>
-                  <td className="px-3 py-3 text-right font-medium text-gray-900">
-                    {account.stats.cpl > 0 ? formatCurrency(account.stats.cpl) : '—'}
-                  </td>
-                  {/* KPI Расход */}
-                  <td className="px-3 py-3 text-right">
-                    {account.kpi ? (
-                      <span className={`font-medium ${getProgressColor(account.kpi.costProgress, account.kpi.dayProgress, false)}`}>
-                        {account.kpi.costProgress}%
+              {sortedAccounts.map((account) => {
+                const cplStatus = getCplStatus(account);
+                const deviation = getCplDeviation(account);
+
+                return (
+                  <tr key={account.id} className={getRowBgColor(cplStatus)}>
+                    <td className="px-3 py-3">
+                      <span className="font-medium text-gray-900">{account.projectName}</span>
+                    </td>
+                    <td className="px-3 py-3">
+                      <span className="px-2 py-0.5 bg-gray-100 text-gray-700 text-xs rounded">
+                        {account.accountLogin}
                       </span>
-                    ) : (
-                      <span className="text-gray-400">—</span>
-                    )}
-                  </td>
-                  {/* KPI Лиды */}
-                  <td className="px-3 py-3 text-right">
-                    {account.kpi ? (
-                      <span className={`font-medium ${getProgressColor(account.kpi.leadsProgress, account.kpi.dayProgress, true)}`}>
-                        {account.kpi.leadsProgress}%
+                    </td>
+                    <td className="px-3 py-3 text-right text-gray-900">
+                      {formatNumber(account.stats.impressions)}
+                    </td>
+                    <td className="px-3 py-3 text-right text-gray-900">
+                      {formatNumber(account.stats.clicks)}
+                    </td>
+                    <td className="px-3 py-3 text-right font-semibold text-gray-900">
+                      {formatCurrency(account.stats.cost)}
+                    </td>
+                    <td className="px-3 py-3 text-right font-medium text-gray-900">
+                      {formatNumber(account.stats.conversions)}
+                    </td>
+                    <td className="px-3 py-3 text-right font-medium text-gray-900">
+                      {account.stats.cpl > 0 ? formatCurrency(account.stats.cpl) : '—'}
+                    </td>
+                    {/* Отклонение CPL от плана */}
+                    <td className="px-3 py-3 text-right">
+                      <span className={`font-medium ${getDeviationColor(deviation)}`}>
+                        {formatPercent(deviation)}
                       </span>
-                    ) : (
-                      <span className="text-gray-400">—</span>
-                    )}
-                  </td>
-                </tr>
-              ))}
+                      {account.kpi?.targetCpl && account.kpi.targetCpl > 0 && (
+                        <div className="text-xs text-gray-400">
+                          план: {formatCurrency(account.kpi.targetCpl)}
+                        </div>
+                      )}
+                    </td>
+                    {/* KPI Расход */}
+                    <td className="px-3 py-3 text-right">
+                      {account.kpi ? (
+                        <span className={`font-medium ${getProgressColor(account.kpi.costProgress, account.kpi.dayProgress, false)}`}>
+                          {account.kpi.costProgress}%
+                        </span>
+                      ) : (
+                        <span className="text-gray-400">—</span>
+                      )}
+                    </td>
+                    {/* KPI Лиды */}
+                    <td className="px-3 py-3 text-right">
+                      {account.kpi ? (
+                        <span className={`font-medium ${getProgressColor(account.kpi.leadsProgress, account.kpi.dayProgress, true)}`}>
+                          {account.kpi.leadsProgress}%
+                        </span>
+                      ) : (
+                        <span className="text-gray-400">—</span>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
 
               {/* Totals row */}
               {sortedAccounts.length > 0 && (
@@ -330,6 +437,7 @@ export default function Management() {
                   <td className="px-3 py-3 text-right text-gray-900">{formatCurrency(totals.cost)}</td>
                   <td className="px-3 py-3 text-right text-gray-900">{formatNumber(totals.conversions)}</td>
                   <td className="px-3 py-3 text-right text-gray-900">{totalCpl > 0 ? formatCurrency(totalCpl) : '—'}</td>
+                  <td className="px-3 py-3"></td>
                   <td className="px-3 py-3"></td>
                   <td className="px-3 py-3"></td>
                 </tr>
