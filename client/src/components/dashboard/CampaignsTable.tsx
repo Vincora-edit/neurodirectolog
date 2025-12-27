@@ -406,11 +406,12 @@ export function CampaignsTable({
                         adGroup.totalConversions > 0
                           ? adGroup.totalCost / adGroup.totalConversions
                           : 0;
+                      const adGroupCplStatus = getCplStatus(adGroupCpl, targetCpl);
 
                       return (
                         <React.Fragment key={adGroupKey}>
                           <tr
-                            className="hover:bg-green-50 transition-colors cursor-pointer bg-gray-50 border-b border-gray-100"
+                            className={`${targetCpl > 0 ? getRowBgColor(adGroupCplStatus).replace('hover:bg-green-100', 'hover:bg-green-200').replace('hover:bg-amber-100', 'hover:bg-amber-200').replace('hover:bg-red-100', 'hover:bg-red-200') : 'hover:bg-green-50 bg-gray-50'} transition-colors cursor-pointer border-b border-gray-100`}
                             onClick={(e) => {
                               e.stopPropagation();
                               toggleAdGroup(adGroupKey);
@@ -514,11 +515,12 @@ export function CampaignsTable({
                                 ad.totalConversions > 0
                                   ? ad.totalCost / ad.totalConversions
                                   : 0;
+                              const adCplStatus = getCplStatus(adCpl, targetCpl);
 
                               return (
                                 <tr
                                   key={`${adGroupKey}-${ad.adId}`}
-                                  className="bg-gray-100 border-b border-gray-100"
+                                  className={`${targetCpl > 0 ? getRowBgColor(adCplStatus).replace('bg-green-50', 'bg-green-100').replace('bg-amber-50', 'bg-amber-100').replace('bg-red-50', 'bg-red-100').replace('hover:bg-green-100', 'hover:bg-green-200').replace('hover:bg-amber-100', 'hover:bg-amber-200').replace('hover:bg-red-100', 'hover:bg-red-200') : 'bg-gray-100'} border-b border-gray-100`}
                                 >
                                   <td className="px-6 py-2 whitespace-nowrap">
                                     <div className="flex items-center gap-2 pl-14">
