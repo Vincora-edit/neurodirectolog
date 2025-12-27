@@ -1621,22 +1621,10 @@ export const clickhouseService = {
       GROUP BY campaign_id
     `;
 
-    // Конверсии по группам объявлений (с фильтрацией по целям если указаны)
-    // Используем campaign_conversions с группировкой по ad_group_id
-    const adGroupConvQuery = hasGoalFilter ? `
-      SELECT
-        campaign_id,
-        ad_group_id,
-        sum(conversions) as total_conversions,
-        sum(revenue) as total_revenue
-      FROM campaign_conversions
-      WHERE connection_id = {connectionId:String}
-        AND date >= {startDate:Date}
-        AND date <= {endDate:Date}
-        AND goal_id IN {goalIds:Array(String)}
-        AND ad_group_id IS NOT NULL
-      GROUP BY campaign_id, ad_group_id
-    ` : `
+    // Конверсии по группам объявлений
+    // Таблица campaign_conversions не содержит ad_group_id, поэтому всегда используем ad_group_performance
+    // Фильтрация по целям на уровне групп недоступна - показываем общие конверсии
+    const adGroupConvQuery = `
       SELECT
         campaign_id,
         ad_group_id,
@@ -1649,23 +1637,10 @@ export const clickhouseService = {
       GROUP BY campaign_id, ad_group_id
     `;
 
-    // Конверсии по объявлениям (с фильтрацией по целям если указаны)
-    // Используем campaign_conversions с группировкой по ad_id
-    const adConvQuery = hasGoalFilter ? `
-      SELECT
-        campaign_id,
-        ad_group_id,
-        ad_id,
-        sum(conversions) as total_conversions,
-        sum(revenue) as total_revenue
-      FROM campaign_conversions
-      WHERE connection_id = {connectionId:String}
-        AND date >= {startDate:Date}
-        AND date <= {endDate:Date}
-        AND goal_id IN {goalIds:Array(String)}
-        AND ad_id IS NOT NULL
-      GROUP BY campaign_id, ad_group_id, ad_id
-    ` : `
+    // Конверсии по объявлениям
+    // Таблица campaign_conversions не содержит ad_id, поэтому всегда используем ad_performance
+    // Фильтрация по целям на уровне объявлений недоступна - показываем общие конверсии
+    const adConvQuery = `
       SELECT
         campaign_id,
         ad_group_id,
@@ -1689,8 +1664,9 @@ export const clickhouseService = {
       client.query({ query: adGroupQuery, query_params: baseParams, format: 'JSONEachRow' }),
       client.query({ query: adQuery, query_params: baseParams, format: 'JSONEachRow' }),
       client.query({ query: campaignConvQuery, query_params: convParams, format: 'JSONEachRow' }),
-      client.query({ query: adGroupConvQuery, query_params: convParams, format: 'JSONEachRow' }),
-      client.query({ query: adConvQuery, query_params: convParams, format: 'JSONEachRow' }),
+      // adGroupConvQuery и adConvQuery используют baseParams, т.к. они не поддерживают фильтрацию по целям
+      client.query({ query: adGroupConvQuery, query_params: baseParams, format: 'JSONEachRow' }),
+      client.query({ query: adConvQuery, query_params: baseParams, format: 'JSONEachRow' }),
     ]);
 
     const campaigns = await campaignResult.json<any>();
