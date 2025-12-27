@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import {
@@ -157,6 +157,8 @@ export function DashboardHeader({
   const navigate = useNavigate();
   const [showGoalsDropdown, setShowGoalsDropdown] = useState(false);
   const [showAccountMenu, setShowAccountMenu] = useState(false);
+  const [menuPosition, setMenuPosition] = useState({ top: 0, right: 0 });
+  const accountMenuButtonRef = useRef<HTMLButtonElement>(null);
   const [showEditModal, setShowEditModal] = useState(false);
   const [editGoals, setEditGoals] = useState('');
   const [editMetrikaCounterId, setEditMetrikaCounterId] = useState('');
@@ -318,21 +320,38 @@ export function DashboardHeader({
                         </option>
                       ))}
                     </select>
-                    <div className="relative">
+                    <div className="relative z-30">
                       <button
-                        onClick={() => setShowAccountMenu(!showAccountMenu)}
-                        className="p-2 bg-gray-100 hover:bg-gray-200 border border-gray-300 rounded-lg transition-colors"
+                        ref={accountMenuButtonRef}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (accountMenuButtonRef.current) {
+                            const rect = accountMenuButtonRef.current.getBoundingClientRect();
+                            setMenuPosition({
+                              top: rect.bottom + 4,
+                              right: window.innerWidth - rect.right,
+                            });
+                          }
+                          setShowAccountMenu(!showAccountMenu);
+                        }}
+                        className="p-2 bg-gray-100 hover:bg-gray-200 border border-gray-300 rounded-lg transition-colors relative z-30"
                         title="Управление аккаунтами"
                       >
                         <MoreVertical size={18} className="text-gray-600" />
                       </button>
-                      {showAccountMenu && (
-                        <>
+                      {showAccountMenu && createPortal(
+                        <div className="fixed inset-0 z-[9998]">
                           <div
-                            className="fixed inset-0 z-40"
+                            className="absolute inset-0"
                             onClick={() => setShowAccountMenu(false)}
                           />
-                          <div className="absolute right-0 top-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg z-50 min-w-[200px] py-1">
+                          <div
+                            className="fixed bg-white border border-gray-200 rounded-lg shadow-lg min-w-[200px] py-1"
+                            style={{
+                              top: `${menuPosition.top}px`,
+                              right: `${menuPosition.right}px`,
+                            }}
+                          >
                             <button
                               onClick={() => {
                                 setShowAccountMenu(false);
@@ -382,7 +401,8 @@ export function DashboardHeader({
                               Удалить текущий
                             </button>
                           </div>
-                        </>
+                        </div>,
+                        document.body
                       )}
                     </div>
                   </div>
