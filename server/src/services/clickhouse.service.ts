@@ -2364,11 +2364,12 @@ export const clickhouseService = {
     passwordHash: string;
     name: string;
     isAdmin: boolean;
+    isVerified: boolean;
     createdAt: Date;
   } | null> {
     const result = await client.query({
       query: `
-        SELECT id, email, password_hash, name, is_admin, created_at
+        SELECT id, email, password_hash, name, is_admin, is_verified, created_at
         FROM users FINAL
         WHERE id = {id:String}
         LIMIT 1
@@ -2387,6 +2388,7 @@ export const clickhouseService = {
       passwordHash: row.password_hash,
       name: row.name,
       isAdmin: row.is_admin === 1,
+      isVerified: row.is_verified === 1,
       createdAt: new Date(row.created_at),
     };
   },
@@ -2397,11 +2399,12 @@ export const clickhouseService = {
     passwordHash: string;
     name: string;
     isAdmin: boolean;
+    isVerified: boolean;
     createdAt: Date;
   } | null> {
     const result = await client.query({
       query: `
-        SELECT id, email, password_hash, name, is_admin, created_at
+        SELECT id, email, password_hash, name, is_admin, is_verified, created_at
         FROM users FINAL
         WHERE email = {email:String}
         LIMIT 1
@@ -2420,6 +2423,7 @@ export const clickhouseService = {
       passwordHash: row.password_hash,
       name: row.name,
       isAdmin: row.is_admin === 1,
+      isVerified: row.is_verified === 1,
       createdAt: new Date(row.created_at),
     };
   },
@@ -2773,10 +2777,39 @@ export const clickhouseService = {
           password_hash String,
           name String,
           is_admin UInt8 DEFAULT 0,
+          is_verified UInt8 DEFAULT 0,
           created_at DateTime DEFAULT now(),
           updated_at DateTime DEFAULT now()
         ) ENGINE = ReplacingMergeTree(updated_at)
         ORDER BY (id)
+        SETTINGS index_granularity = 8192
+      `,
+    });
+
+    // Добавляем колонку is_verified если не существует (для миграции)
+    try {
+      await client.command({
+        query: `ALTER TABLE users ADD COLUMN IF NOT EXISTS is_verified UInt8 DEFAULT 0`,
+      });
+    } catch (e) {
+      // Игнорируем если колонка уже есть
+    }
+
+    // Создаем таблицу verification_codes
+    await client.command({
+      query: `
+        CREATE TABLE IF NOT EXISTS verification_codes (
+          id String,
+          email String,
+          code String,
+          type String DEFAULT 'registration',
+          attempts UInt8 DEFAULT 0,
+          is_used UInt8 DEFAULT 0,
+          expires_at DateTime,
+          created_at DateTime DEFAULT now()
+        ) ENGINE = ReplacingMergeTree(created_at)
+        ORDER BY (id)
+        TTL expires_at + INTERVAL 1 DAY
         SETTINGS index_granularity = 8192
       `,
     });
@@ -2806,7 +2839,138 @@ export const clickhouseService = {
       `,
     });
 
-    console.log('✅ ClickHouse tables users/projects initialized');
+    console.log('✅ ClickHouse tables users/projects/verification_codes initialized');
+  },
+
+  // ===========================================
+  // Verification Codes
+  // ===========================================
+
+  async createVerificationCode(email: string, code: string, type: 'registration' | 'password_reset' = 'registration'): Promise<string> {
+    const id = uuidv4();
+    const now = new Date();
+    const expiresAt = new Date(now.getTime() + 10 * 60 * 1000); // 10 minutes
+
+    await client.insert({
+      table: 'verification_codes',
+      values: [{
+        id,
+        email,
+        code,
+        type,
+        attempts: 0,
+        is_used: 0,
+        expires_at: formatDate(expiresAt),
+        created_at: formatDate(now),
+      }],
+      format: 'JSONEachRow',
+    });
+
+    return id;
+  },
+
+  async getValidVerificationCode(email: string, code: string): Promise<any | null> {
+    const result = await client.query({
+      query: `
+        SELECT *
+        FROM verification_codes FINAL
+        WHERE email = {email:String}
+          AND code = {code:String}
+          AND is_used = 0
+          AND expires_at > now()
+        ORDER BY created_at DESC
+        LIMIT 1
+      `,
+      query_params: { email, code },
+      format: 'JSONEachRow',
+    });
+
+    const rows = await result.json<any>();
+    return rows.length > 0 ? rows[0] : null;
+  },
+
+  async markVerificationCodeUsed(id: string): Promise<void> {
+    // Get existing code
+    const result = await client.query({
+      query: `SELECT * FROM verification_codes FINAL WHERE id = {id:String} LIMIT 1`,
+      query_params: { id },
+      format: 'JSONEachRow',
+    });
+    const rows = await result.json<any>();
+    if (rows.length === 0) return;
+
+    const existing = rows[0];
+
+    // Insert updated version
+    await client.insert({
+      table: 'verification_codes',
+      values: [{
+        ...existing,
+        is_used: 1,
+      }],
+      format: 'JSONEachRow',
+    });
+  },
+
+  async incrementVerificationAttempts(id: string): Promise<number> {
+    const result = await client.query({
+      query: `SELECT * FROM verification_codes FINAL WHERE id = {id:String} LIMIT 1`,
+      query_params: { id },
+      format: 'JSONEachRow',
+    });
+    const rows = await result.json<any>();
+    if (rows.length === 0) return 0;
+
+    const existing = rows[0];
+    const newAttempts = (existing.attempts || 0) + 1;
+
+    await client.insert({
+      table: 'verification_codes',
+      values: [{
+        ...existing,
+        attempts: newAttempts,
+      }],
+      format: 'JSONEachRow',
+    });
+
+    return newAttempts;
+  },
+
+  async getLatestVerificationCode(email: string): Promise<any | null> {
+    const result = await client.query({
+      query: `
+        SELECT *
+        FROM verification_codes FINAL
+        WHERE email = {email:String}
+        ORDER BY created_at DESC
+        LIMIT 1
+      `,
+      query_params: { email },
+      format: 'JSONEachRow',
+    });
+
+    const rows = await result.json<any>();
+    return rows.length > 0 ? rows[0] : null;
+  },
+
+  async verifyUser(userId: string): Promise<void> {
+    const user = await this.getUserById(userId);
+    if (!user) return;
+
+    await client.insert({
+      table: 'users',
+      values: [{
+        id: user.id,
+        email: user.email,
+        password_hash: user.passwordHash,
+        name: user.name,
+        is_admin: user.isAdmin ? 1 : 0,
+        is_verified: 1,
+        created_at: formatDate(user.createdAt),
+        updated_at: formatDate(new Date()),
+      }],
+      format: 'JSONEachRow',
+    });
   },
 
   // ===========================================

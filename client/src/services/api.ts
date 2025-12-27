@@ -41,22 +41,58 @@ export interface AuthResponse {
   token: string;
 }
 
+export interface RegisterResponse {
+  success: boolean;
+  message: string;
+  requiresVerification?: boolean;
+  data?: AuthResponse;
+}
+
+export interface LoginResponse {
+  success: boolean;
+  message?: string;
+  requiresVerification?: boolean;
+  email?: string;
+  data?: AuthResponse;
+}
+
+export interface VerifyEmailResponse {
+  success: boolean;
+  message: string;
+  data?: AuthResponse;
+}
+
 export const authService = {
-  register: async (email: string, password: string, name: string) => {
-    const { data } = await api.post<{ data: AuthResponse }>('/auth/register', {
+  register: async (email: string, password: string, name: string): Promise<RegisterResponse> => {
+    const { data } = await api.post<RegisterResponse>('/auth/register', {
       email,
       password,
       name,
     });
-    return data.data;
+    return data;
   },
 
-  login: async (email: string, password: string) => {
-    const { data } = await api.post<{ data: AuthResponse }>('/auth/login', {
+  login: async (email: string, password: string): Promise<LoginResponse> => {
+    const { data } = await api.post<LoginResponse>('/auth/login', {
       email,
       password,
     });
-    return data.data;
+    return data;
+  },
+
+  verifyEmail: async (email: string, code: string): Promise<VerifyEmailResponse> => {
+    const { data } = await api.post<VerifyEmailResponse>('/auth/verify-email', {
+      email,
+      code,
+    });
+    return data;
+  },
+
+  resendCode: async (email: string): Promise<{ success: boolean; message: string }> => {
+    const { data } = await api.post<{ success: boolean; message: string }>('/auth/resend-code', {
+      email,
+    });
+    return data;
   },
 };
 

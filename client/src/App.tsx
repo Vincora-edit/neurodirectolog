@@ -9,6 +9,7 @@ import Layout from './components/Layout';
 const Dashboard = lazy(() => import('./pages/Dashboard'));
 const Login = lazy(() => import('./pages/Login'));
 const Register = lazy(() => import('./pages/Register'));
+const VerifyEmail = lazy(() => import('./pages/VerifyEmail'));
 const Semantics = lazy(() => import('./pages/Semantics'));
 const Campaign = lazy(() => import('./pages/Campaign'));
 const Creatives = lazy(() => import('./pages/Creatives'));
@@ -51,6 +52,7 @@ function App() {
           <Routes>
             <Route path="/login" element={<Login />} />
             <Route path="/register" element={<Register />} />
+            <Route path="/verify-email" element={<VerifyEmail />} />
             <Route path="/public/:token" element={<PublicDashboard />} />
             <Route
               path="/"

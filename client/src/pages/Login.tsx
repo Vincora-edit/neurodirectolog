@@ -4,6 +4,14 @@ import { useMutation } from '@tanstack/react-query';
 import { Eye, EyeOff } from 'lucide-react';
 import { authService } from '../services/api';
 import { useAuthStore } from '../store/authStore';
+import type { AxiosError } from 'axios';
+
+interface ErrorResponse {
+  success: boolean;
+  message: string;
+  requiresVerification?: boolean;
+  email?: string;
+}
 
 export default function Login() {
   const navigate = useNavigate();
@@ -14,9 +22,17 @@ export default function Login() {
 
   const loginMutation = useMutation({
     mutationFn: () => authService.login(email, password),
-    onSuccess: (data) => {
-      setAuth(data.user, data.token);
-      navigate('/');
+    onSuccess: (response) => {
+      if (response.data) {
+        setAuth(response.data.user, response.data.token);
+        navigate('/');
+      }
+    },
+    onError: (error: AxiosError<ErrorResponse>) => {
+      const data = error.response?.data;
+      if (data?.requiresVerification && data.email) {
+        navigate('/verify-email', { state: { email: data.email } });
+      }
     },
   });
 

@@ -13,9 +13,13 @@ export default function Register() {
 
   const registerMutation = useMutation({
     mutationFn: () => authService.register(email, password, name),
-    onSuccess: (data) => {
-      setAuth(data.user, data.token);
-      navigate('/');
+    onSuccess: (response) => {
+      if (response.requiresVerification) {
+        navigate('/verify-email', { state: { email } });
+      } else if (response.data) {
+        setAuth(response.data.user, response.data.token);
+        navigate('/');
+      }
     },
   });
 
