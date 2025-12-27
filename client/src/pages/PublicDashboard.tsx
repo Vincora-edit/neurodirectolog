@@ -58,6 +58,10 @@ interface DashboardData {
   shareName: string;
   accountLogin: string;
   currency?: string;
+  budgetForecast?: {
+    balance?: { amount: number; currency: string };
+    forecast?: { daysRemaining: number };
+  } | null;
   availableGoals?: Goal[];
   period: {
     startDate: string;
@@ -420,6 +424,7 @@ export default function PublicDashboard() {
         {/* Metrics Cards - same component as main dashboard */}
         <MetricsCards
           totalStats={totalStats}
+          budgetForecast={data.budgetForecast || undefined}
           currency={currencyCode}
         />
 

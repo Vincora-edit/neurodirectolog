@@ -33,8 +33,9 @@ router.get('/:token', async (req: Request, res: Response, next: NextFunction) =>
       return res.status(404).json({ error: 'Connection not found' });
     }
 
-    // Получаем валюту аккаунта
+    // Получаем баланс и валюту аккаунта
     let currency = 'RUB';
+    let budgetForecast: { balance?: { amount: number; currency: string }; forecast?: { daysRemaining: number } } | null = null;
     try {
       const balance = await yandexDirectService.getAccountBalance(
         connection.accessToken,
@@ -43,8 +44,34 @@ router.get('/:token', async (req: Request, res: Response, next: NextFunction) =>
       if (balance?.currency) {
         currency = balance.currency;
       }
+      if (balance?.amount !== undefined) {
+        budgetForecast = {
+          balance: {
+            amount: balance.amount,
+            currency: balance.currency || 'RUB',
+          },
+        };
+        // Рассчитываем прогноз на сколько хватит бюджета
+        // Берём средний расход за последние 7 дней
+        const last7DaysEnd = new Date();
+        const last7DaysStart = new Date();
+        last7DaysStart.setDate(last7DaysStart.getDate() - 7);
+        const recentStats = await clickhouseService.getDailyStats(
+          connectionId,
+          last7DaysStart,
+          last7DaysEnd
+        );
+        if (recentStats.length > 0) {
+          const avgDailyCost = recentStats.reduce((sum: number, d: any) => sum + (d.cost || 0), 0) / recentStats.length;
+          if (avgDailyCost > 0) {
+            budgetForecast.forecast = {
+              daysRemaining: Math.floor(balance.amount / avgDailyCost),
+            };
+          }
+        }
+      }
     } catch (e) {
-      console.log('[PublicDashboard] Could not get currency, using RUB');
+      console.log('[PublicDashboard] Could not get balance, using RUB');
     }
 
     // Получаем доступные цели для селектора
@@ -291,6 +318,7 @@ router.get('/:token', async (req: Request, res: Response, next: NextFunction) =>
       shareName: share.name,
       accountLogin: connection.login,
       currency,
+      budgetForecast,
       availableGoals: availableGoals.map(g => ({
         id: g.goalId,
         name: g.goalName || g.goalId,
