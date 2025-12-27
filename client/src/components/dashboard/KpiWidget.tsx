@@ -334,38 +334,38 @@ export function KpiContent({
         </div>
       </div>
 
-      {/* Projections */}
+      {/* Projections - compact single line */}
       {analysis && (
-        <div className="mt-5 pt-4 border-t border-gray-200">
-          <div className="text-xs text-gray-500 mb-2">Прогноз на конец месяца (при текущем темпе)</div>
-          <div className="grid grid-cols-2 gap-4 text-sm">
-            <div className="flex items-center justify-between">
-              <span className="text-gray-600">Расход:</span>
-              <span className={`font-medium ${
-                (analysis.cost.projectedMonthly > kpi.targetCost * 1.1)
-                  ? 'text-red-600'
-                  : 'text-gray-900'
-              }`}>
-                {formatCurrency(analysis.cost.projectedMonthly)}
-                {analysis.cost.projectedMonthly > kpi.targetCost * 1.1 && (
-                  <span className="text-xs ml-1">(+{Math.round(((analysis.cost.projectedMonthly / kpi.targetCost) - 1) * 100)}%)</span>
-                )}
-              </span>
-            </div>
-            <div className="flex items-center justify-between">
-              <span className="text-gray-600">Лиды:</span>
-              <span className={`font-medium ${
-                analysis.leads.projectedMonthly < kpi.targetLeads * 0.9
-                  ? 'text-amber-600'
-                  : 'text-gray-900'
-              }`}>
-                ~{Math.round(analysis.leads.projectedMonthly)} шт.
-                {analysis.leads.projectedMonthly < kpi.targetLeads * 0.9 && (
-                  <span className="text-xs ml-1">({Math.round(((analysis.leads.projectedMonthly / kpi.targetLeads) - 1) * 100)}%)</span>
-                )}
-              </span>
-            </div>
-          </div>
+        <div className="mt-3 pt-3 border-t border-gray-200 flex items-center gap-6 text-xs text-gray-500">
+          <span>Прогноз на конец месяца (при текущем темпе)</span>
+          <span className="text-gray-400">|</span>
+          <span>
+            Расход:{' '}
+            <span className={`font-medium ${
+              (analysis.cost.projectedMonthly > kpi.targetCost * 1.1)
+                ? 'text-red-600'
+                : 'text-gray-700'
+            }`}>
+              {formatCurrency(analysis.cost.projectedMonthly)}
+              {analysis.cost.projectedMonthly > kpi.targetCost * 1.1 && (
+                <span className="ml-1">(+{Math.round(((analysis.cost.projectedMonthly / kpi.targetCost) - 1) * 100)}%)</span>
+              )}
+            </span>
+          </span>
+          <span className="text-gray-400">|</span>
+          <span>
+            Лиды:{' '}
+            <span className={`font-medium ${
+              analysis.leads.projectedMonthly < kpi.targetLeads * 0.9
+                ? 'text-amber-600'
+                : 'text-gray-700'
+            }`}>
+              ~{Math.round(analysis.leads.projectedMonthly)} шт.
+              {analysis.leads.projectedMonthly < kpi.targetLeads * 0.9 && (
+                <span className="ml-1">({Math.round(((analysis.leads.projectedMonthly / kpi.targetLeads) - 1) * 100)}%)</span>
+              )}
+            </span>
+          </span>
         </div>
       )}
     </div>
