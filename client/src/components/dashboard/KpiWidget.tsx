@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { ChevronDown, ChevronUp, Gauge, Settings, Target, X, Loader2, DollarSign, TrendingUp, TrendingDown, AlertTriangle, CheckCircle, AlertCircle, Info, Calendar } from 'lucide-react';
+import { getCurrencySymbol } from '../../utils/formatters';
 
 // Типы для KPI аналитики
 export interface KpiAnalysis {
@@ -60,6 +61,7 @@ interface KpiWidgetProps {
   kpiData: KpiData | null;
   availableGoals: Array<{ goalId: string; goalName: string }>;
   connectionId: string;
+  currency?: string;
   onSaveKpi: (kpi: {
     targetCost: number;
     targetCpl: number;
@@ -372,7 +374,7 @@ export function KpiContent({
   );
 }
 
-export function KpiWidget({ kpiData, availableGoals, connectionId, onSaveKpi }: KpiWidgetProps) {
+export function KpiWidget({ kpiData, availableGoals, connectionId, currency = 'RUB', onSaveKpi }: KpiWidgetProps) {
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [showModal, setShowModal] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -427,13 +429,13 @@ export function KpiWidget({ kpiData, availableGoals, connectionId, onSaveKpi }: 
     }
   };
 
+  const currencySymbol = getCurrencySymbol(currency);
   const formatCurrency = (value: number) => {
-    return new Intl.NumberFormat('ru-RU', {
-      style: 'currency',
-      currency: 'RUB',
+    const formatted = new Intl.NumberFormat('ru-RU', {
       minimumFractionDigits: 0,
       maximumFractionDigits: 0,
     }).format(value);
+    return `${formatted} ${currencySymbol}`;
   };
 
   if (!connectionId) return null;
@@ -541,7 +543,7 @@ export function KpiWidget({ kpiData, availableGoals, connectionId, onSaveKpi }: 
               <div className="space-y-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Целевой расход (₽/месяц)
+                    Целевой расход ({currencySymbol}/месяц)
                   </label>
                   <input
                     type="number"
@@ -566,7 +568,7 @@ export function KpiWidget({ kpiData, availableGoals, connectionId, onSaveKpi }: 
 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Целевой CPL (₽)
+                    Целевой CPL ({currencySymbol})
                   </label>
                   <input
                     type="number"

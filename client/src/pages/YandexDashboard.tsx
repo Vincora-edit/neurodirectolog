@@ -424,6 +424,7 @@ export function YandexDashboard() {
           kpiData={kpiData}
           availableGoals={availableGoals}
           connectionId={activeConnectionId}
+          currency={budgetForecastData?.balance?.currency || 'RUB'}
           onSaveKpi={handleSaveKpi}
         />
       )}
