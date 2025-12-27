@@ -165,10 +165,18 @@ export const telegramService = {
 
     text += `👁 Показы: ${stats.impressions.toLocaleString('ru-RU')}\n`;
     text += `👆 Клики: ${stats.clicks.toLocaleString('ru-RU')}\n`;
-    text += `💰 Расход: ${stats.cost.toLocaleString('ru-RU')}₽\n`;
-    text += `🎯 Конверсии: ${stats.conversions}\n`;
+    text += `💰 Расход: ${Math.round(stats.cost).toLocaleString('ru-RU')} ₽\n`;
     text += `📊 CTR: ${stats.ctr.toFixed(2)}%\n`;
-    text += `📉 CPL: ${stats.cpl > 0 ? Math.round(stats.cpl).toLocaleString('ru-RU') + '₽' : '—'}\n`;
+
+    // Показываем конверсии и CPL только если есть данные
+    if (stats.conversions > 0) {
+      text += `🎯 Конверсии: ${stats.conversions}\n`;
+      text += `📉 CPL: ${stats.cpl > 0 ? Math.round(stats.cpl).toLocaleString('ru-RU') + ' ₽' : '—'}\n`;
+    }
+
+    // Добавляем средний CPC
+    const avgCpc = stats.clicks > 0 ? stats.cost / stats.clicks : 0;
+    text += `💵 Ср. CPC: ${avgCpc > 0 ? avgCpc.toFixed(2) + ' ₽' : '—'}\n`;
 
     return this.sendMessage(chatId, { text, parse_mode: 'HTML' });
   },
@@ -419,8 +427,7 @@ export const telegramService = {
         SELECT
           sum(impressions) as impressions,
           sum(clicks) as clicks,
-          sum(cost) as cost,
-          sum(conversions) as conversions
+          sum(cost) as cost
         FROM campaign_performance
         WHERE connection_id IN (${connectionIds})
           AND date >= '${startDate}'
@@ -431,16 +438,15 @@ export const telegramService = {
       const impressions = parseInt(s.impressions) || 0;
       const clicks = parseInt(s.clicks) || 0;
       const cost = parseFloat(s.cost) || 0;
-      const conversions = parseInt(s.conversions) || 0;
 
       await this.sendQuickStats(chatId, {
         period: periodName,
         impressions,
         clicks,
         cost,
-        conversions,
+        conversions: 0, // Конверсии пока не собираются в этой таблице
         ctr: impressions > 0 ? (clicks / impressions) * 100 : 0,
-        cpl: conversions > 0 ? cost / conversions : 0,
+        cpl: 0, // CPL недоступен без конверсий
       });
     } catch (error) {
       console.error('[Telegram] Failed to handle stats command:', error);
