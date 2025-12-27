@@ -269,7 +269,7 @@ export const telegramService = {
    */
   async connectUser(appUserId: string, chatId: string, telegramUser: any): Promise<void> {
     try {
-      await clickhouseService.query(`
+      await clickhouseService.exec(`
         INSERT INTO telegram_users (
           id, user_id, chat_id, username, first_name, is_active, created_at
         ) VALUES (
@@ -426,7 +426,7 @@ export const telegramService = {
    */
   async disconnectUser(userId: string): Promise<boolean> {
     try {
-      await clickhouseService.query(`
+      await clickhouseService.exec(`
         ALTER TABLE telegram_users UPDATE is_active = 0
         WHERE user_id = '${userId}'
       `);
