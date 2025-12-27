@@ -387,7 +387,7 @@ export function DashboardHeader({
                                   try {
                                     await fetch(
                                       `${API_BASE_URL}/api/yandex/connection/${activeConnection.id}`,
-                                      { method: 'DELETE' }
+                                      { method: 'DELETE', headers: getAuthHeaders() }
                                     );
                                     window.location.reload();
                                   } catch {
