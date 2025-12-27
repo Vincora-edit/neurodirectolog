@@ -259,9 +259,9 @@ export default function PublicDashboard() {
   const getCplStatus = (cpl: number): 'good' | 'warning' | 'bad' | 'neutral' => {
     const deviation = getCplDeviation(cpl);
     if (deviation === null) return 'neutral';
-    if (deviation <= -10) return 'good';      // CPL на 10%+ ниже целевого
-    if (deviation <= 10) return 'warning';    // CPL в пределах ±10%
-    return 'bad';                              // CPL на 10%+ выше целевого
+    if (deviation <= 0) return 'good';        // CPL равен или ниже целевого
+    if (deviation <= 10) return 'warning';    // CPL выше до 10%
+    return 'bad';                              // CPL выше 10%
   };
 
   const getRowBgColor = (status: 'good' | 'warning' | 'bad' | 'neutral'): string => {
@@ -275,7 +275,7 @@ export default function PublicDashboard() {
 
   const getDeviationColor = (deviation: number | null): string => {
     if (deviation === null) return 'text-gray-400';
-    if (deviation <= -10) return 'text-green-600';
+    if (deviation <= 0) return 'text-green-600';
     if (deviation <= 10) return 'text-amber-600';
     return 'text-red-600';
   };
@@ -789,15 +789,15 @@ export default function PublicDashboard() {
             <span className="font-medium">Подсветка по CPL:</span>
             <div className="flex items-center gap-2">
               <div className="w-4 h-4 bg-green-100 rounded border border-green-200"></div>
-              <span>Ниже плана (&gt;10%)</span>
+              <span>В плане или ниже</span>
             </div>
             <div className="flex items-center gap-2">
               <div className="w-4 h-4 bg-amber-100 rounded border border-amber-200"></div>
-              <span>В норме (±10%)</span>
+              <span>Выше до 10%</span>
             </div>
             <div className="flex items-center gap-2">
               <div className="w-4 h-4 bg-red-100 rounded border border-red-200"></div>
-              <span>Выше плана (&gt;10%)</span>
+              <span>Выше 10%</span>
             </div>
           </div>
         )}
