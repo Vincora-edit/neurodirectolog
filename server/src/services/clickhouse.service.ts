@@ -139,11 +139,12 @@ export const clickhouseService = {
     return result.success;
   },
 
-  // Generic query method for custom queries
-  async query(sql: string): Promise<any[]> {
+  // Generic query method for custom queries with optional parameterized queries
+  async query(sql: string, params?: Record<string, string | number>): Promise<any[]> {
     const result = await client.query({
       query: sql,
       format: 'JSONEachRow',
+      query_params: params,
     });
     return await result.json();
   },
@@ -309,6 +310,27 @@ export const clickhouseService = {
       lastSyncAt: new Date(row.last_sync_at),
       createdAt: new Date(row.created_at),
     }));
+  },
+
+  // Batch method to get connection counts grouped by project
+  async getConnectionCountsByProjectIds(projectIds: string[]): Promise<Map<string, number>> {
+    if (projectIds.length === 0) return new Map();
+
+    const result = await client.query({
+      query: `
+        SELECT project_id, count() as cnt
+        FROM yandex_direct_connections FINAL
+        WHERE project_id IN ({projectIds:Array(String)})
+        AND status = 'active'
+        GROUP BY project_id
+      `,
+      query_params: { projectIds },
+      format: 'JSONEachRow',
+    });
+    const rows = await result.json() as { project_id: string; cnt: string }[];
+    const map = new Map<string, number>();
+    rows.forEach(row => map.set(row.project_id, parseInt(row.cnt) || 0));
+    return map;
   },
 
   async updateConnectionTokens(connectionId: string, accessToken: string, refreshToken: string): Promise<void> {

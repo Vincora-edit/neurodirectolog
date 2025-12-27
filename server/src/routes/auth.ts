@@ -25,15 +25,28 @@ async function initializeAuth() {
     const userCount = await clickhouseService.countUsers();
     if (userCount === 0) {
       // Создаем админа при первом запуске
-      const adminPassword = await bcrypt.hash('admin123', 10);
+      // Пароль берём из переменной окружения или генерируем случайный
+      const defaultPassword = process.env.ADMIN_DEFAULT_PASSWORD ||
+        require('crypto').randomBytes(16).toString('hex');
+      const adminPassword = await bcrypt.hash(defaultPassword, 10);
+      const adminEmail = process.env.ADMIN_EMAIL || 'admin@neurodirectolog.ru';
+
       await clickhouseService.createUser({
         id: 'admin-1',
-        email: 'admin@neurodirectolog.ru',
+        email: adminEmail,
         passwordHash: adminPassword,
         name: 'Администратор',
         isAdmin: true,
       });
-      console.log('✅ Admin user created: admin@neurodirectolog.ru / admin123');
+
+      // Выводим пароль только если он был сгенерирован (не из env)
+      if (!process.env.ADMIN_DEFAULT_PASSWORD) {
+        console.log(`✅ Admin user created: ${adminEmail}`);
+        console.log(`   Generated password: ${defaultPassword}`);
+        console.log('   ⚠️  Please change this password immediately!');
+      } else {
+        console.log(`✅ Admin user created: ${adminEmail}`);
+      }
     }
   } catch (error) {
     console.error('Error initializing auth:', error);

@@ -1,4 +1,5 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
+import throttle from 'lodash/throttle';
 import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import {
@@ -119,10 +120,9 @@ export function YandexDashboard() {
   const [isHeaderCollapsed, setIsHeaderCollapsed] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
 
-  // Scroll listener с гистерезисом - разные пороги для сворачивания/разворачивания
-  // чтобы избежать цикла (сворачивание меняет высоту страницы, что триггерит обратно)
+  // Scroll listener с гистерезисом и throttle для производительности
   useEffect(() => {
-    const handleScroll = () => {
+    const handleScroll = throttle(() => {
       const scrollY = window.scrollY;
       setIsHeaderCompact((prev) => {
         if (prev) {
@@ -133,9 +133,12 @@ export function YandexDashboard() {
           return scrollY > 150;
         }
       });
-    };
+    }, 100);
     window.addEventListener('scroll', handleScroll);
-    return () => window.removeEventListener('scroll', handleScroll);
+    return () => {
+      handleScroll.cancel();
+      window.removeEventListener('scroll', handleScroll);
+    };
   }, []);
 
   // Загрузка проектов
@@ -282,8 +285,8 @@ export function YandexDashboard() {
 
   const isLoading = hierarchicalLoading || connectionsLoading;
 
-  // Handlers
-  const handleSync = async () => {
+  // Handlers - wrapped in useCallback to prevent unnecessary re-renders
+  const handleSync = useCallback(async () => {
     if (!activeProjectId) return;
     setIsSyncing(true);
     try {
@@ -293,9 +296,9 @@ export function YandexDashboard() {
     } finally {
       setIsSyncing(false);
     }
-  };
+  }, [activeProjectId, refetchHierarchical, refetchKpi]);
 
-  const handleSaveKpi = async (kpi: {
+  const handleSaveKpi = useCallback(async (kpi: {
     targetCost: number;
     targetCpl: number;
     targetLeads: number;
@@ -303,23 +306,23 @@ export function YandexDashboard() {
   }) => {
     await dashboardService.saveKpi(activeConnectionId, kpi);
     refetchKpi();
-  };
+  }, [activeConnectionId, refetchKpi]);
 
-  const handleCampaignFilterChange = (campaignId: string | null) => {
+  const handleCampaignFilterChange = useCallback((campaignId: string | null) => {
     setGlobalFilterCampaignId(campaignId);
     setGlobalFilterAdGroupId(null);
     setGlobalFilterAdId(null);
-  };
+  }, []);
 
-  const handleAdGroupFilterChange = (adGroupId: string | null, campaignId?: string) => {
+  const handleAdGroupFilterChange = useCallback((adGroupId: string | null, campaignId?: string) => {
     if (campaignId) {
       setGlobalFilterCampaignId(campaignId);
     }
     setGlobalFilterAdGroupId(adGroupId);
     setGlobalFilterAdId(null);
-  };
+  }, []);
 
-  const handleAdFilterChange = (adId: string | null, adGroupId?: string, campaignId?: string) => {
+  const handleAdFilterChange = useCallback((adId: string | null, adGroupId?: string, campaignId?: string) => {
     if (campaignId) {
       setGlobalFilterCampaignId(campaignId);
     }
@@ -327,7 +330,7 @@ export function YandexDashboard() {
       setGlobalFilterAdGroupId(adGroupId);
     }
     setGlobalFilterAdId(adId);
-  };
+  }, []);
 
   // Нет проектов
   if (!projectsLoading && projects.length === 0) {

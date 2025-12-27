@@ -7,6 +7,7 @@ import {
   Filter,
   LayoutGrid,
 } from 'lucide-react';
+import { getCplStatus, getCplRowBgColor } from '../../utils/cpl';
 
 interface Ad {
   adId: string;
@@ -70,27 +71,10 @@ interface CampaignsTableProps {
   targetCpl?: number;
 }
 
-// CPL highlighting functions
-const getCplDeviation = (cpl: number, targetCpl: number): number | null => {
-  if (!targetCpl || targetCpl <= 0 || cpl <= 0) return null;
-  return ((cpl - targetCpl) / targetCpl) * 100;
-};
-
-const getCplStatus = (cpl: number, targetCpl: number): 'good' | 'warning' | 'bad' | 'neutral' => {
-  const deviation = getCplDeviation(cpl, targetCpl);
-  if (deviation === null) return 'neutral';
-  if (deviation <= 0) return 'good';        // CPL равен или ниже целевого
-  if (deviation <= 10) return 'warning';    // CPL выше до 10%
-  return 'bad';                              // CPL выше 10%
-};
-
+// Local wrapper for row background (uses hover:bg-blue-50 for neutral)
 const getRowBgColor = (status: 'good' | 'warning' | 'bad' | 'neutral'): string => {
-  switch (status) {
-    case 'good': return 'bg-green-50 hover:bg-green-100';
-    case 'warning': return 'bg-amber-50 hover:bg-amber-100';
-    case 'bad': return 'bg-red-50 hover:bg-red-100';
-    default: return 'hover:bg-blue-50';
-  }
+  if (status === 'neutral') return 'hover:bg-blue-50';
+  return getCplRowBgColor(status);
 };
 
 export function CampaignsTable({

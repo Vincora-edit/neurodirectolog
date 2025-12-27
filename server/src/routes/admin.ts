@@ -22,21 +22,27 @@ router.get('/users', authenticate, requireAdmin, async (_req, res, next) => {
   try {
     const users = await clickhouseService.getAllUsers();
 
-    // Получаем проекты и подключения для каждого пользователя
-    const usersWithStats = await Promise.all(users.map(async (user) => {
-      // Получаем проекты пользователя
-      const projects = await projectStore.getByUserIdLightweight(user.id, false);
-      const userProjects = projects.filter(p => p.userId === user.id);
+    // Получаем все проекты одним запросом
+    const allProjects = await projectStore.getByUserIdLightweight('', true);
 
-      // Получаем подключения для всех проектов пользователя
+    // Группируем проекты по userId
+    const projectsByUser = new Map<string, typeof allProjects>();
+    for (const project of allProjects) {
+      const userProjects = projectsByUser.get(project.userId) || [];
+      userProjects.push(project);
+      projectsByUser.set(project.userId, userProjects);
+    }
+
+    // Получаем все подключения одним batch-запросом
+    const allProjectIds = allProjects.map(p => p.id);
+    const connectionCounts = await clickhouseService.getConnectionCountsByProjectIds(allProjectIds);
+
+    // Собираем статистику для каждого пользователя
+    const usersWithStats = users.map(user => {
+      const userProjects = projectsByUser.get(user.id) || [];
       let connectionsCount = 0;
       for (const project of userProjects) {
-        try {
-          const connections = await clickhouseService.getConnectionsByProjectId(project.id);
-          connectionsCount += connections.length;
-        } catch (e) {
-          // Игнорируем ошибки
-        }
+        connectionsCount += connectionCounts.get(project.id) || 0;
       }
 
       return {
@@ -48,7 +54,7 @@ router.get('/users', authenticate, requireAdmin, async (_req, res, next) => {
         projectsCount: userProjects.length,
         connectionsCount,
       };
-    }));
+    });
 
     res.json(usersWithStats);
   } catch (error) {
@@ -202,18 +208,10 @@ router.get('/stats', authenticate, requireAdmin, async (_req, res, next) => {
       console.error('Error getting ClickHouse stats:', e);
     }
 
-    // Считаем подключения
-    let totalConnections = 0;
-    let activeConnections = 0;
-    for (const project of allProjects) {
-      try {
-        const connections = await clickhouseService.getConnectionsByProjectId(project.id);
-        totalConnections += connections.length;
-        activeConnections += connections.filter(c => c.status === 'active').length;
-      } catch (e) {
-        // Игнорируем ошибки
-      }
-    }
+    // Считаем подключения одним запросом
+    const allProjectIds = allProjects.map(p => p.id);
+    const connectionCounts = await clickhouseService.getConnectionCountsByProjectIds(allProjectIds);
+    const totalConnections = Array.from(connectionCounts.values()).reduce((sum, cnt) => sum + cnt, 0);
 
     res.json({
       users: {
@@ -227,7 +225,7 @@ router.get('/stats', authenticate, requireAdmin, async (_req, res, next) => {
       },
       connections: {
         total: totalConnections,
-        active: activeConnections,
+        active: totalConnections, // batch method only counts active connections
       },
       storage: {
         clickhouse: {
@@ -381,10 +379,14 @@ router.get('/management', authenticate, async (req: AuthRequest, res, next) => {
               sum(clicks) as clicks,
               sum(cost) as cost
             FROM campaign_performance
-            WHERE connection_id = '${connection.id}'
-              AND date >= '${startDate.toISOString().split('T')[0]}'
-              AND date <= '${endDate.toISOString().split('T')[0]}'
-          `);
+            WHERE connection_id = {connectionId:String}
+              AND date >= {startDate:String}
+              AND date <= {endDate:String}
+          `, {
+            connectionId: connection.id,
+            startDate: startDate.toISOString().split('T')[0],
+            endDate: endDate.toISOString().split('T')[0],
+          });
 
           if (perfStats && perfStats.length > 0) {
             stats.impressions = parseInt(perfStats[0].impressions) || 0;
@@ -396,10 +398,14 @@ router.get('/management', authenticate, async (req: AuthRequest, res, next) => {
           const convStats = await clickhouseService.query(`
             SELECT sum(conversions) as conversions
             FROM campaign_conversions
-            WHERE connection_id = '${connection.id}'
-              AND date >= '${startDate.toISOString().split('T')[0]}'
-              AND date <= '${endDate.toISOString().split('T')[0]}'
-          `);
+            WHERE connection_id = {connectionId:String}
+              AND date >= {startDate:String}
+              AND date <= {endDate:String}
+          `, {
+            connectionId: connection.id,
+            startDate: startDate.toISOString().split('T')[0],
+            endDate: endDate.toISOString().split('T')[0],
+          });
 
           if (convStats && convStats.length > 0) {
             stats.conversions = parseInt(convStats[0].conversions) || 0;

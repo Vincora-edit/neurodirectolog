@@ -1,3 +1,4 @@
+import crypto from 'crypto';
 import { clickhouseService } from './clickhouse.service';
 import { yandexDirectService } from './yandex-direct.service';
 import { aiAnalysisService } from './ai-analysis.service';
@@ -150,7 +151,6 @@ export const syncService = {
       // 7. Преобразуем данные для campaign_performance
       const performanceRecords = performanceData.map(row => {
         // Генерируем детерминированный ID для предотвращения дубликатов
-        const crypto = require('crypto');
         const idString = `${connection.id}_${row.CampaignId}_${row.Date}`;
         const id = crypto.createHash('md5').update(idString).digest('hex');
 
@@ -197,7 +197,6 @@ export const syncService = {
       // 8. Преобразуем данные конверсий из CUSTOM_REPORT
       const conversionRecords: any[] = conversionsData.map(row => {
         // Генерируем детерминированный ID для предотвращения дубликатов
-        const crypto = require('crypto');
         const idString = `${connection.id}_${row.CampaignId}_${row.Date}_${row.GoalId}`;
         const id = crypto.createHash('md5').update(idString).digest('hex');
 
@@ -239,8 +238,6 @@ export const syncService = {
         console.log(`[Sync] Fetched ${adGroupData.length} ad group records`);
 
         if (adGroupData.length > 0) {
-          const crypto = require('crypto');
-
           const adGroupRecords = adGroupData.map(row => {
             const idString = `${connection.id}_${row.CampaignId}_${row.AdGroupId}_${row.Date}`;
             const id = crypto.createHash('md5').update(idString).digest('hex');
@@ -279,7 +276,6 @@ export const syncService = {
           );
 
           if (adGroupConversionsData.length > 0) {
-            const crypto = require('crypto');
             const adGroupConvRecords = adGroupConversionsData.map(row => {
               const idString = `${connection.id}_${row.CampaignId}_${row.AdGroupId}_${row.GoalId}_${row.Date}`;
               const id = crypto.createHash('md5').update(idString).digest('hex');
@@ -316,8 +312,6 @@ export const syncService = {
         console.log(`[Sync] Fetched ${adData.length} ad records`);
 
         if (adData.length > 0) {
-          const crypto = require('crypto');
-
           const adRecords = adData.map(row => {
             const idString = `${connection.id}_${row.CampaignId}_${row.AdGroupId}_${row.AdId}_${row.Date}`;
             const id = crypto.createHash('md5').update(idString).digest('hex');
@@ -397,7 +391,6 @@ export const syncService = {
           );
 
           if (adConversionsData.length > 0) {
-            const crypto = require('crypto');
             const adConvRecords = adConversionsData.map(row => {
               const idString = `${connection.id}_${row.CampaignId}_${row.AdGroupId}_${row.AdId}_${row.GoalId}_${row.Date}`;
               const id = crypto.createHash('md5').update(idString).digest('hex');
@@ -434,7 +427,6 @@ export const syncService = {
         console.log(`[Sync] Fetched ${searchQueriesData.length} search query records`);
 
         if (searchQueriesData.length > 0) {
-          const crypto = require('crypto');
           const searchQueryRecords = searchQueriesData.map((row: any) => {
             const idString = `${connection.id}_${row.campaignId}_${row.query}_${dateFrom}_${dateTo}`;
             const id = crypto.createHash('md5').update(idString).digest('hex');

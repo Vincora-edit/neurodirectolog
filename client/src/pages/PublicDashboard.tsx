@@ -13,6 +13,7 @@ import {
 import { TrendingUp, DollarSign, MousePointer, Target, AlertCircle, Gauge, Calendar, ChevronDown, ChevronUp, ArrowUpDown, LayoutGrid, Table, CheckCircle, TrendingDown } from 'lucide-react';
 import { DATE_RANGES } from '../constants';
 import { KpiContent } from '../components/dashboard';
+import { getCplDeviation, getCplStatus, getCplRowBgColor, getDeviationColor, formatDeviation } from '../utils/cpl';
 
 interface DashboardData {
   shareName: string;
@@ -248,48 +249,18 @@ export default function PublicDashboard() {
   const totalCr = campaignTotals.clicks > 0 ? (campaignTotals.conversions / campaignTotals.clicks) * 100 : 0;
   const totalCpl = campaignTotals.conversions > 0 ? campaignTotals.cost / campaignTotals.conversions : 0;
 
-  // Функции для CPL подсветки
+  // CPL highlighting - use shared utils
   const targetCpl = data?.kpi?.targetCpl || 0;
 
-  const getCplDeviation = (cpl: number): number | null => {
-    if (!targetCpl || targetCpl <= 0 || cpl <= 0) return null;
-    return ((cpl - targetCpl) / targetCpl) * 100;
-  };
-
-  const getCplStatus = (cpl: number): 'good' | 'warning' | 'bad' | 'neutral' => {
-    const deviation = getCplDeviation(cpl);
-    if (deviation === null) return 'neutral';
-    if (deviation <= 0) return 'good';        // CPL равен или ниже целевого
-    if (deviation <= 10) return 'warning';    // CPL выше до 10%
-    return 'bad';                              // CPL выше 10%
-  };
-
-  const getRowBgColor = (status: 'good' | 'warning' | 'bad' | 'neutral'): string => {
-    switch (status) {
-      case 'good': return 'bg-green-50 hover:bg-green-100';
-      case 'warning': return 'bg-amber-50 hover:bg-amber-100';
-      case 'bad': return 'bg-red-50 hover:bg-red-100';
-      default: return 'hover:bg-gray-50';
-    }
-  };
-
-  const getDeviationColor = (deviation: number | null): string => {
-    if (deviation === null) return 'text-gray-400';
-    if (deviation <= 0) return 'text-green-600';
-    if (deviation <= 10) return 'text-amber-600';
-    return 'text-red-600';
-  };
-
-  const formatDeviation = (deviation: number | null): string => {
-    if (deviation === null) return '—';
-    const sign = deviation > 0 ? '+' : '';
-    return `${sign}${deviation.toFixed(0)}%`;
-  };
+  // Local wrappers that use targetCpl from closure
+  const getCplDeviationLocal = (cpl: number) => getCplDeviation(cpl, targetCpl);
+  const getCplStatusLocal = (cpl: number) => getCplStatus(cpl, targetCpl);
+  const getRowBgColor = (status: 'good' | 'warning' | 'bad' | 'neutral') => getCplRowBgColor(status);
 
   // Подсчет статусов кампаний
   const campaignStatusCounts = sortedCampaigns.reduce(
     (acc, c) => {
-      const status = getCplStatus(c.cpl || 0);
+      const status = getCplStatusLocal(c.cpl || 0);
       acc[status]++;
       return acc;
     },
@@ -666,8 +637,8 @@ export default function PublicDashboard() {
                 <tbody className="divide-y divide-gray-200">
                   {sortedCampaigns.map((campaign) => {
                     const campaignCr = campaign.clicks > 0 ? (campaign.conversions / campaign.clicks) * 100 : 0;
-                    const cplStatus = getCplStatus(campaign.cpl || 0);
-                    const deviation = getCplDeviation(campaign.cpl || 0);
+                    const cplStatus = getCplStatusLocal(campaign.cpl || 0);
+                    const deviation = getCplDeviationLocal(campaign.cpl || 0);
                     return (
                       <tr key={campaign.id} className={getRowBgColor(cplStatus)}>
                         <td className="px-4 py-3">
