@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import {
   RefreshCw,
@@ -690,9 +691,9 @@ export function DashboardHeader({
         </div>
       )}
 
-      {/* Модальное окно редактирования подключения */}
-      {showEditModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center">
+      {/* Модальное окно редактирования подключения - через Portal для корректного z-index */}
+      {showEditModal && createPortal(
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center">
           <div
             className="absolute inset-0 bg-black/50"
             onClick={() => setShowEditModal(false)}
@@ -789,7 +790,8 @@ export function DashboardHeader({
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </>
   );
