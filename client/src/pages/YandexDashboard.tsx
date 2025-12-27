@@ -438,6 +438,7 @@ export function YandexDashboard() {
           onCampaignFilterChange={handleCampaignFilterChange}
           onAdGroupFilterChange={handleAdGroupFilterChange}
           onAdFilterChange={handleAdFilterChange}
+          targetCpl={kpiData?.kpi?.targetCpl || 0}
         />
 
         {/* График динамики */}

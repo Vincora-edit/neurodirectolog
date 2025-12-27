@@ -67,7 +67,31 @@ interface CampaignsTableProps {
   onCampaignFilterChange: (campaignId: string | null) => void;
   onAdGroupFilterChange: (adGroupId: string | null, campaignId?: string) => void;
   onAdFilterChange?: (adId: string | null, adGroupId?: string, campaignId?: string) => void;
+  targetCpl?: number;
 }
+
+// CPL highlighting functions
+const getCplDeviation = (cpl: number, targetCpl: number): number | null => {
+  if (!targetCpl || targetCpl <= 0 || cpl <= 0) return null;
+  return ((cpl - targetCpl) / targetCpl) * 100;
+};
+
+const getCplStatus = (cpl: number, targetCpl: number): 'good' | 'warning' | 'bad' | 'neutral' => {
+  const deviation = getCplDeviation(cpl, targetCpl);
+  if (deviation === null) return 'neutral';
+  if (deviation <= 0) return 'good';        // CPL равен или ниже целевого
+  if (deviation <= 10) return 'warning';    // CPL выше до 10%
+  return 'bad';                              // CPL выше 10%
+};
+
+const getRowBgColor = (status: 'good' | 'warning' | 'bad' | 'neutral'): string => {
+  switch (status) {
+    case 'good': return 'bg-green-50 hover:bg-green-100';
+    case 'warning': return 'bg-amber-50 hover:bg-amber-100';
+    case 'bad': return 'bg-red-50 hover:bg-red-100';
+    default: return 'hover:bg-blue-50';
+  }
+};
 
 export function CampaignsTable({
   campaigns,
@@ -77,6 +101,7 @@ export function CampaignsTable({
   onCampaignFilterChange,
   onAdGroupFilterChange,
   onAdFilterChange,
+  targetCpl = 0,
 }: CampaignsTableProps) {
   const [isOpen, setIsOpen] = useState(true);
   const [expandedCampaigns, setExpandedCampaigns] = useState<Set<string>>(new Set());
@@ -246,12 +271,13 @@ export function CampaignsTable({
                 campaign.totalConversions > 0
                   ? campaign.totalCost / campaign.totalConversions
                   : 0;
+              const cplStatus = getCplStatus(campaignCpl, targetCpl);
 
               return (
                 <React.Fragment key={campaignId}>
                   {/* Campaign row */}
                   <tr
-                    className="hover:bg-blue-50 transition-colors cursor-pointer border-b border-gray-200"
+                    className={`${targetCpl > 0 ? getRowBgColor(cplStatus) : 'hover:bg-blue-50'} transition-colors cursor-pointer border-b border-gray-200`}
                     onClick={() => toggleCampaign(campaignId)}
                   >
                     <td className="px-6 py-4 whitespace-nowrap">
