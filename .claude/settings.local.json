@@ -169,7 +169,8 @@
       "Bash(/Users/artemsubbotin/Desktop/Neurodirectolog/scripts/deploy.sh:*)",
       "Bash(./scripts/deploy.sh:*)",
       "Skill(db-query)",
-      "Skill(db-query:*)"
+      "Skill(db-query:*)",
+      "Bash(git revert:*)"
     ]
   }
 }

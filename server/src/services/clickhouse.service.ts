@@ -1597,7 +1597,7 @@ export const clickhouseService = {
     `;
 
     // Конверсии по кампаниям (с фильтрацией по целям если указаны)
-    // Используем campaign_conversions - единственную таблицу с goal_id
+    // Всегда используем campaign_conversions, т.к. campaign_performance не имеет колонки conversions
     const campaignConvQuery = hasGoalFilter ? `
       SELECT
         campaign_id,
@@ -1614,7 +1614,7 @@ export const clickhouseService = {
         campaign_id,
         sum(conversions) as total_conversions,
         sum(revenue) as total_revenue
-      FROM campaign_performance
+      FROM campaign_conversions
       WHERE connection_id = {connectionId:String}
         AND date >= {startDate:Date}
         AND date <= {endDate:Date}
