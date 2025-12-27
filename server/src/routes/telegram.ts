@@ -25,6 +25,20 @@ router.post('/webhook', async (req, res) => {
 });
 
 /**
+ * GET /api/telegram/check
+ * Public endpoint to check if Telegram is configured (no auth)
+ */
+router.get('/check', (_req, res) => {
+  const isConfigured = telegramService.isConfigured();
+  const token = process.env.TELEGRAM_BOT_TOKEN;
+  res.json({
+    isConfigured,
+    hasToken: !!token,
+    tokenLength: token?.length || 0,
+  });
+});
+
+/**
  * GET /api/telegram/status
  * Check Telegram bot status
  */
