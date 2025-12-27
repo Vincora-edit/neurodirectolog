@@ -30,7 +30,7 @@ export default function Layout() {
 
   const navigation = [
     { name: 'Аналитика кампаний', href: '/yandex-dashboard', icon: BarChart3, available: true },
-    ...(isAdmin ? [{ name: 'Управление', href: '/management', icon: LayoutGrid, available: true }] : []),
+    { name: 'Управление', href: '/management', icon: LayoutGrid, available: true },
     { name: 'Dashboard', href: '/', icon: LayoutDashboard, available: isAdmin },
     { name: 'Проекты', href: '/projects', icon: FolderOpen, available: isAdmin },
     { name: 'Аналитика', href: '/analytics', icon: TrendingUp, available: isAdmin },

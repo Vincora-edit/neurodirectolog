@@ -338,14 +338,19 @@ router.get('/usage/:userId', authenticate, requireAdmin, async (req, res, next) 
 });
 
 /**
- * Управленческая таблица - сводка по всем проектам с KPI
+ * Управленческая таблица - сводка по проектам с KPI
+ * Админы видят все проекты, обычные пользователи - только свои
  */
-router.get('/management', authenticate, requireAdmin, async (req, res, next) => {
+router.get('/management', authenticate, async (req: AuthRequest, res, next) => {
   try {
     const days = parseInt(req.query.days as string) || 30;
+    const isAdmin = req.isAdmin;
+    const userId = req.userId;
 
-    // Получаем все проекты
-    const allProjects = await projectStore.getByUserIdLightweight('', true);
+    // Админы видят все проекты, обычные пользователи - только свои
+    const allProjects = isAdmin
+      ? await projectStore.getByUserIdLightweight('', true)
+      : await projectStore.getByUserIdLightweight(userId!, false);
 
     // Для каждого проекта получаем подключения, статистику и KPI
     const projectsData = await Promise.all(allProjects.map(async (project) => {
