@@ -162,7 +162,9 @@
       "Bash(sshpass -p 'c9R+eLvxtQJ-,x' ssh -o StrictHostKeyChecking=no root@91.222.239.217 \"docker exec neurodirectolog-clickhouse clickhouse-client --query \"\"SELECT id, name FROM neurodirectolog.projects WHERE user_id = ''1766821611496''\"\"\")",
       "Bash(sshpass -p 'c9R+eLvxtQJ-,x' ssh -o StrictHostKeyChecking=no root@91.222.239.217 \"docker exec neurodirectolog-clickhouse clickhouse-client --query \"\"SELECT id, name FROM neurodirectolog.projects WHERE user_id = ''1766821611496''\"\" 2>&1\")",
       "Bash(sshpass -p 'c9R+eLvxtQJ-,x' ssh -o StrictHostKeyChecking=no root@91.222.239.217 \"docker exec neurodirectolog-clickhouse clickhouse-client -q \"\"SELECT id, name FROM neurodirectolog.projects WHERE user_id = ''1766821611496''\"\"\")",
-      "Bash(git push)"
+      "Bash(git push)",
+      "Bash(sshpass -p 'c9R+eLvxtQJ-,x' ssh -o StrictHostKeyChecking=no root@91.222.239.217 \"cd /root/neurodirectolog && git pull && docker-compose -f docker-compose.prod.yml build client && docker stop neurodirectolog-client; docker rm neurodirectolog-client; docker run -d --name neurodirectolog-client --network neurodirectolog_neurodirectolog-network -p 3000:80 neurodirectolog_client:latest\")",
+      "Bash(npm run build:server:*)"
     ]
   }
 }

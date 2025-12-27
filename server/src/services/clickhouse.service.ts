@@ -149,6 +149,11 @@ export const clickhouseService = {
     return await result.json();
   },
 
+  // Execute DDL/DML statements (INSERT, ALTER, etc.) that don't return data
+  async exec(sql: string): Promise<void> {
+    await client.command({ query: sql });
+  },
+
   // Yandex.Direct Connections
   async createConnection(connection: Omit<YandexDirectConnection, 'id' | 'createdAt'>): Promise<string> {
     const id = uuidv4();

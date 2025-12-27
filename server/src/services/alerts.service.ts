@@ -89,7 +89,7 @@ export const alertsService = {
     const now = new Date();
 
     try {
-      await clickhouseService.query(`
+      await clickhouseService.exec(`
         INSERT INTO alerts (
           id, connection_id, user_id, type, category, title, message,
           campaign_id, campaign_name, metric_name, previous_value, current_value,
@@ -183,7 +183,7 @@ export const alertsService = {
   async markAsRead(alertId: string, userId: string): Promise<boolean> {
     try {
       // ClickHouse doesn't support UPDATE, so we need to use ALTER TABLE ... UPDATE
-      await clickhouseService.query(`
+      await clickhouseService.exec(`
         ALTER TABLE alerts UPDATE is_read = 1
         WHERE id = '${alertId}' AND user_id = '${userId}'
       `);
@@ -199,16 +199,16 @@ export const alertsService = {
    */
   async markAllAsRead(userId: string, connectionId?: string): Promise<boolean> {
     try {
-      let query = `
+      let sql = `
         ALTER TABLE alerts UPDATE is_read = 1
         WHERE user_id = '${userId}' AND is_read = 0
       `;
 
       if (connectionId) {
-        query += ` AND connection_id = '${connectionId}'`;
+        sql += ` AND connection_id = '${connectionId}'`;
       }
 
-      await clickhouseService.query(query);
+      await clickhouseService.exec(sql);
       return true;
     } catch (error) {
       console.error('[Alerts] Failed to mark all as read:', error);
@@ -221,7 +221,7 @@ export const alertsService = {
    */
   async dismissAlert(alertId: string, userId: string): Promise<boolean> {
     try {
-      await clickhouseService.query(`
+      await clickhouseService.exec(`
         ALTER TABLE alerts UPDATE is_dismissed = 1
         WHERE id = '${alertId}' AND user_id = '${userId}'
       `);
@@ -265,8 +265,8 @@ export const alertsService = {
       const existing = await this.getSettings(userId);
       const merged = { ...existing, ...settings };
 
-      // Delete existing and insert new (ClickHouse pattern)
-      await clickhouseService.query(`
+      // Use exec for INSERT (query adds FORMAT JSONEachRow which breaks INSERT)
+      await clickhouseService.exec(`
         INSERT INTO alert_settings (
           user_id, email_notifications, telegram_notifications, telegram_chat_id,
           daily_digest, digest_time, monitor_budget, monitor_ctr, monitor_conversions,
