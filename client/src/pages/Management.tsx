@@ -14,10 +14,11 @@ import {
 import { api } from '../services/api';
 import { DATE_RANGES } from '../constants';
 
-interface ProjectData {
+interface AccountData {
   id: string;
-  name: string;
-  accounts: string[];
+  projectId: string;
+  projectName: string;
+  accountLogin: string;
   stats: {
     impressions: number;
     clicks: number;
@@ -40,10 +41,10 @@ interface ProjectData {
 
 interface ManagementResponse {
   period: number;
-  projects: ProjectData[];
+  accounts: AccountData[];
 }
 
-type SortColumn = 'name' | 'impressions' | 'clicks' | 'cost' | 'conversions' | 'cpl' | 'kpiCost' | 'kpiLeads';
+type SortColumn = 'projectName' | 'accountLogin' | 'impressions' | 'clicks' | 'cost' | 'conversions' | 'cpl' | 'kpiCost' | 'kpiLeads';
 type SortDirection = 'asc' | 'desc';
 
 export default function Management() {
@@ -78,22 +79,23 @@ export default function Management() {
     }
   };
 
-  const getSortValue = (project: ProjectData, column: SortColumn): number | string => {
+  const getSortValue = (account: AccountData, column: SortColumn): number | string => {
     switch (column) {
-      case 'name': return project.name.toLowerCase();
-      case 'impressions': return project.stats.impressions;
-      case 'clicks': return project.stats.clicks;
-      case 'cost': return project.stats.cost;
-      case 'conversions': return project.stats.conversions;
-      case 'cpl': return project.stats.cpl;
-      case 'kpiCost': return project.kpi?.costProgress ?? -1;
-      case 'kpiLeads': return project.kpi?.leadsProgress ?? -1;
+      case 'projectName': return account.projectName.toLowerCase();
+      case 'accountLogin': return account.accountLogin.toLowerCase();
+      case 'impressions': return account.stats.impressions;
+      case 'clicks': return account.stats.clicks;
+      case 'cost': return account.stats.cost;
+      case 'conversions': return account.stats.conversions;
+      case 'cpl': return account.stats.cpl;
+      case 'kpiCost': return account.kpi?.costProgress ?? -1;
+      case 'kpiLeads': return account.kpi?.leadsProgress ?? -1;
       default: return 0;
     }
   };
 
-  const sortedProjects = data?.projects
-    ? [...data.projects].sort((a, b) => {
+  const sortedAccounts = data?.accounts
+    ? [...data.accounts].sort((a, b) => {
         const aVal = getSortValue(a, sortColumn);
         const bVal = getSortValue(b, sortColumn);
         if (typeof aVal === 'string' && typeof bVal === 'string') {
@@ -145,13 +147,13 @@ export default function Management() {
     );
   }
 
-  // Итоги по всем проектам
-  const totals = sortedProjects.reduce(
-    (acc, p) => ({
-      impressions: acc.impressions + p.stats.impressions,
-      clicks: acc.clicks + p.stats.clicks,
-      cost: acc.cost + p.stats.cost,
-      conversions: acc.conversions + p.stats.conversions,
+  // Итоги по всем аккаунтам
+  const totals = sortedAccounts.reduce(
+    (acc, a) => ({
+      impressions: acc.impressions + a.stats.impressions,
+      clicks: acc.clicks + a.stats.clicks,
+      cost: acc.cost + a.stats.cost,
+      conversions: acc.conversions + a.stats.conversions,
     }),
     { impressions: 0, clicks: 0, cost: 0, conversions: 0 }
   );
@@ -167,7 +169,7 @@ export default function Management() {
             <LayoutGrid className="text-blue-600" />
             Управленческая таблица
           </h1>
-          <p className="text-gray-500 mt-1">Сводка по всем проектам</p>
+          <p className="text-gray-500 mt-1">Сводка по всем аккаунтам</p>
         </div>
 
         <div className="flex items-center gap-3">
@@ -207,8 +209,8 @@ export default function Management() {
               <Users size={20} className="text-purple-600" />
             </div>
             <div>
-              <p className="text-sm text-gray-500">Проектов</p>
-              <p className="text-xl font-bold text-gray-900">{sortedProjects.length}</p>
+              <p className="text-sm text-gray-500">Аккаунтов</p>
+              <p className="text-xl font-bold text-gray-900">{sortedAccounts.length}</p>
             </div>
           </div>
         </div>
@@ -258,8 +260,8 @@ export default function Management() {
           <table className="w-full">
             <thead className="bg-gray-50 border-b border-gray-200">
               <tr>
-                <SortHeader column="name" label="Проект" align="left" />
-                <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase">Аккаунт</th>
+                <SortHeader column="projectName" label="Проект" align="left" />
+                <SortHeader column="accountLogin" label="Аккаунт" align="left" />
                 <SortHeader column="impressions" label="Показы" />
                 <SortHeader column="clicks" label="Клики" />
                 <SortHeader column="cost" label="Расход" />
@@ -270,40 +272,36 @@ export default function Management() {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200">
-              {sortedProjects.map((project) => (
-                <tr key={project.id} className="hover:bg-gray-50">
+              {sortedAccounts.map((account) => (
+                <tr key={account.id} className="hover:bg-gray-50">
                   <td className="px-3 py-3">
-                    <span className="font-medium text-gray-900">{project.name}</span>
+                    <span className="font-medium text-gray-900">{account.projectName}</span>
                   </td>
                   <td className="px-3 py-3">
-                    <div className="flex flex-wrap gap-1">
-                      {project.accounts.map((acc, i) => (
-                        <span key={i} className="px-2 py-0.5 bg-gray-100 text-gray-700 text-xs rounded">
-                          {acc}
-                        </span>
-                      ))}
-                    </div>
+                    <span className="px-2 py-0.5 bg-gray-100 text-gray-700 text-xs rounded">
+                      {account.accountLogin}
+                    </span>
                   </td>
                   <td className="px-3 py-3 text-right text-gray-900">
-                    {formatNumber(project.stats.impressions)}
+                    {formatNumber(account.stats.impressions)}
                   </td>
                   <td className="px-3 py-3 text-right text-gray-900">
-                    {formatNumber(project.stats.clicks)}
+                    {formatNumber(account.stats.clicks)}
                   </td>
                   <td className="px-3 py-3 text-right font-semibold text-gray-900">
-                    {formatCurrency(project.stats.cost)}
+                    {formatCurrency(account.stats.cost)}
                   </td>
                   <td className="px-3 py-3 text-right font-medium text-gray-900">
-                    {formatNumber(project.stats.conversions)}
+                    {formatNumber(account.stats.conversions)}
                   </td>
                   <td className="px-3 py-3 text-right font-medium text-gray-900">
-                    {project.stats.cpl > 0 ? formatCurrency(project.stats.cpl) : '—'}
+                    {account.stats.cpl > 0 ? formatCurrency(account.stats.cpl) : '—'}
                   </td>
                   {/* KPI Расход */}
                   <td className="px-3 py-3 text-right">
-                    {project.kpi ? (
-                      <span className={`font-medium ${getProgressColor(project.kpi.costProgress, project.kpi.dayProgress, false)}`}>
-                        {project.kpi.costProgress}%
+                    {account.kpi ? (
+                      <span className={`font-medium ${getProgressColor(account.kpi.costProgress, account.kpi.dayProgress, false)}`}>
+                        {account.kpi.costProgress}%
                       </span>
                     ) : (
                       <span className="text-gray-400">—</span>
@@ -311,9 +309,9 @@ export default function Management() {
                   </td>
                   {/* KPI Лиды */}
                   <td className="px-3 py-3 text-right">
-                    {project.kpi ? (
-                      <span className={`font-medium ${getProgressColor(project.kpi.leadsProgress, project.kpi.dayProgress, true)}`}>
-                        {project.kpi.leadsProgress}%
+                    {account.kpi ? (
+                      <span className={`font-medium ${getProgressColor(account.kpi.leadsProgress, account.kpi.dayProgress, true)}`}>
+                        {account.kpi.leadsProgress}%
                       </span>
                     ) : (
                       <span className="text-gray-400">—</span>
@@ -323,10 +321,10 @@ export default function Management() {
               ))}
 
               {/* Totals row */}
-              {sortedProjects.length > 0 && (
+              {sortedAccounts.length > 0 && (
                 <tr className="bg-gray-100 border-t-2 border-gray-300 font-semibold">
                   <td className="px-3 py-3 text-gray-900">ИТОГО</td>
-                  <td className="px-3 py-3 text-gray-500 text-sm">{sortedProjects.length} проектов</td>
+                  <td className="px-3 py-3 text-gray-500 text-sm">{sortedAccounts.length} аккаунтов</td>
                   <td className="px-3 py-3 text-right text-gray-900">{formatNumber(totals.impressions)}</td>
                   <td className="px-3 py-3 text-right text-gray-900">{formatNumber(totals.clicks)}</td>
                   <td className="px-3 py-3 text-right text-gray-900">{formatCurrency(totals.cost)}</td>
@@ -340,10 +338,10 @@ export default function Management() {
           </table>
         </div>
 
-        {sortedProjects.length === 0 && (
+        {sortedAccounts.length === 0 && (
           <div className="text-center py-12 text-gray-500">
             <LayoutGrid size={48} className="mx-auto mb-3 text-gray-300" />
-            <p>Нет проектов с подключениями Yandex.Direct</p>
+            <p>Нет аккаунтов с подключениями Yandex.Direct</p>
           </div>
         )}
       </div>
