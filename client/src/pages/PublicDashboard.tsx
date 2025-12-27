@@ -10,7 +10,7 @@ import {
   ResponsiveContainer,
   Legend,
 } from 'recharts';
-import { TrendingUp, DollarSign, MousePointer, Target, AlertCircle, Gauge, Calendar, ChevronDown, ChevronUp, ArrowUpDown, LayoutGrid, Table } from 'lucide-react';
+import { TrendingUp, DollarSign, MousePointer, Target, AlertCircle, Gauge, Calendar, ChevronDown, ChevronUp, ArrowUpDown, LayoutGrid, Table, CheckCircle, TrendingDown } from 'lucide-react';
 import { DATE_RANGES } from '../constants';
 import { KpiContent } from '../components/dashboard';
 
@@ -247,6 +247,54 @@ export default function PublicDashboard() {
   const totalCpc = campaignTotals.clicks > 0 ? campaignTotals.cost / campaignTotals.clicks : 0;
   const totalCr = campaignTotals.clicks > 0 ? (campaignTotals.conversions / campaignTotals.clicks) * 100 : 0;
   const totalCpl = campaignTotals.conversions > 0 ? campaignTotals.cost / campaignTotals.conversions : 0;
+
+  // Функции для CPL подсветки
+  const targetCpl = data?.kpi?.targetCpl || 0;
+
+  const getCplDeviation = (cpl: number): number | null => {
+    if (!targetCpl || targetCpl <= 0 || cpl <= 0) return null;
+    return ((cpl - targetCpl) / targetCpl) * 100;
+  };
+
+  const getCplStatus = (cpl: number): 'good' | 'warning' | 'bad' | 'neutral' => {
+    const deviation = getCplDeviation(cpl);
+    if (deviation === null) return 'neutral';
+    if (deviation <= -10) return 'good';      // CPL на 10%+ ниже целевого
+    if (deviation <= 10) return 'warning';    // CPL в пределах ±10%
+    return 'bad';                              // CPL на 10%+ выше целевого
+  };
+
+  const getRowBgColor = (status: 'good' | 'warning' | 'bad' | 'neutral'): string => {
+    switch (status) {
+      case 'good': return 'bg-green-50 hover:bg-green-100';
+      case 'warning': return 'bg-amber-50 hover:bg-amber-100';
+      case 'bad': return 'bg-red-50 hover:bg-red-100';
+      default: return 'hover:bg-gray-50';
+    }
+  };
+
+  const getDeviationColor = (deviation: number | null): string => {
+    if (deviation === null) return 'text-gray-400';
+    if (deviation <= -10) return 'text-green-600';
+    if (deviation <= 10) return 'text-amber-600';
+    return 'text-red-600';
+  };
+
+  const formatDeviation = (deviation: number | null): string => {
+    if (deviation === null) return '—';
+    const sign = deviation > 0 ? '+' : '';
+    return `${sign}${deviation.toFixed(0)}%`;
+  };
+
+  // Подсчет статусов кампаний
+  const campaignStatusCounts = sortedCampaigns.reduce(
+    (acc, c) => {
+      const status = getCplStatus(c.cpl || 0);
+      acc[status]++;
+      return acc;
+    },
+    { good: 0, warning: 0, bad: 0, neutral: 0 }
+  );
 
   // Компонент заголовка для сортировки
   const SortHeader = ({ column, label }: { column: SortColumn; label: string }) => (
@@ -567,6 +615,23 @@ export default function PublicDashboard() {
               <LayoutGrid size={20} className="text-blue-600" />
               <span className="font-semibold text-gray-900">Кампании</span>
               <span className="text-xs text-gray-400">{data.campaigns.length} кампаний</span>
+              {/* CPL Status Summary */}
+              {targetCpl > 0 && (
+                <div className="flex items-center gap-2 ml-4">
+                  <div className="flex items-center gap-1" title="CPL ниже плана (хорошо)">
+                    <CheckCircle size={14} className="text-green-600" />
+                    <span className="text-xs font-medium text-green-600">{campaignStatusCounts.good}</span>
+                  </div>
+                  <div className="flex items-center gap-1" title="CPL в пределах нормы">
+                    <AlertCircle size={14} className="text-amber-600" />
+                    <span className="text-xs font-medium text-amber-600">{campaignStatusCounts.warning}</span>
+                  </div>
+                  <div className="flex items-center gap-1" title="CPL выше плана (плохо)">
+                    <TrendingDown size={14} className="text-red-600" />
+                    <span className="text-xs font-medium text-red-600">{campaignStatusCounts.bad}</span>
+                  </div>
+                </div>
+              )}
             </div>
             {campaignsOpen ? (
               <ChevronUp size={20} className="text-gray-400" />
@@ -591,13 +656,20 @@ export default function PublicDashboard() {
                     <SortHeader column="conversions" label="Конверсии" />
                     <SortHeader column="cr" label="CR %" />
                     <SortHeader column="cpl" label="CPL" />
+                    {targetCpl > 0 && (
+                      <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">
+                        vs план
+                      </th>
+                    )}
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-200">
                   {sortedCampaigns.map((campaign) => {
                     const campaignCr = campaign.clicks > 0 ? (campaign.conversions / campaign.clicks) * 100 : 0;
+                    const cplStatus = getCplStatus(campaign.cpl || 0);
+                    const deviation = getCplDeviation(campaign.cpl || 0);
                     return (
-                      <tr key={campaign.id} className="hover:bg-gray-50">
+                      <tr key={campaign.id} className={getRowBgColor(cplStatus)}>
                         <td className="px-4 py-3">
                           <div className="flex items-center gap-2">
                             <span
@@ -657,6 +729,13 @@ export default function PublicDashboard() {
                         <td className="px-4 py-3 text-right text-gray-900">
                           {(campaign.cpl || 0) > 0 ? formatCurrency(campaign.cpl) : '—'}
                         </td>
+                        {targetCpl > 0 && (
+                          <td className="px-4 py-3 text-right">
+                            <span className={`font-medium ${getDeviationColor(deviation)}`}>
+                              {formatDeviation(deviation)}
+                            </span>
+                          </td>
+                        )}
                       </tr>
                     );
                   })}
@@ -691,6 +770,11 @@ export default function PublicDashboard() {
                       <td className="px-4 py-3 text-right text-gray-900">
                         {totalCpl > 0 ? formatCurrency(totalCpl) : '—'}
                       </td>
+                      {targetCpl > 0 && (
+                        <td className="px-4 py-3 text-right text-gray-500 text-xs">
+                          план: {formatCurrency(targetCpl)}
+                        </td>
+                      )}
                     </tr>
                   )}
                 </tbody>
@@ -698,6 +782,25 @@ export default function PublicDashboard() {
             </div>
           )}
         </div>
+
+        {/* Legend for CPL highlighting */}
+        {targetCpl > 0 && data.campaigns.length > 0 && (
+          <div className="flex items-center gap-6 text-sm text-gray-600 px-1">
+            <span className="font-medium">Подсветка по CPL:</span>
+            <div className="flex items-center gap-2">
+              <div className="w-4 h-4 bg-green-100 rounded border border-green-200"></div>
+              <span>Ниже плана (&gt;10%)</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="w-4 h-4 bg-amber-100 rounded border border-amber-200"></div>
+              <span>В норме (±10%)</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="w-4 h-4 bg-red-100 rounded border border-red-200"></div>
+              <span>Выше плана (&gt;10%)</span>
+            </div>
+          </div>
+        )}
 
         {/* Daily Stats Table */}
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
