@@ -8,6 +8,7 @@ import {
   LayoutGrid,
 } from 'lucide-react';
 import { getCplStatus, getCplRowBgColor } from '../../utils/cpl';
+import { getCurrencySymbol } from '../../utils/formatters';
 
 interface Ad {
   adId: string;
@@ -69,6 +70,7 @@ interface CampaignsTableProps {
   onAdGroupFilterChange: (adGroupId: string | null, campaignId?: string) => void;
   onAdFilterChange?: (adId: string | null, adGroupId?: string, campaignId?: string) => void;
   targetCpl?: number;
+  currency?: string;
 }
 
 // Local wrapper for row background (uses hover:bg-blue-50 for neutral)
@@ -86,7 +88,9 @@ export function CampaignsTable({
   onAdGroupFilterChange,
   onAdFilterChange,
   targetCpl = 0,
+  currency = 'RUB',
 }: CampaignsTableProps) {
+  const currencySymbol = getCurrencySymbol(currency);
   const [isOpen, setIsOpen] = useState(true);
   const [expandedCampaigns, setExpandedCampaigns] = useState<Set<string>>(new Set());
   const [expandedAdGroups, setExpandedAdGroups] = useState<Set<string>>(new Set());
@@ -317,10 +321,10 @@ export function CampaignsTable({
                       {(campaign.totalClicks || 0).toLocaleString('ru-RU')}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-semibold text-gray-900">
-                      {(campaign.totalCost || 0).toLocaleString('ru-RU')} ₽
+                      {(campaign.totalCost || 0).toLocaleString('ru-RU')} {currencySymbol}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-right text-sm text-gray-900">
-                      {(campaign.avgCpc || 0).toFixed(2)} ₽
+                      {(campaign.avgCpc || 0).toFixed(2)} {currencySymbol}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-right">
                       <span
@@ -367,7 +371,7 @@ export function CampaignsTable({
                     <td className="px-6 py-4 whitespace-nowrap text-right">
                       {campaignCpl > 0 ? (
                         <span className="text-sm font-medium text-gray-900">
-                          {Math.round(campaignCpl).toLocaleString('ru-RU')} ₽
+                          {Math.round(campaignCpl).toLocaleString('ru-RU')} {currencySymbol}
                         </span>
                       ) : (
                         <span className="text-sm text-gray-400">—</span>
@@ -451,10 +455,10 @@ export function CampaignsTable({
                               {(adGroup.totalClicks || 0).toLocaleString('ru-RU')}
                             </td>
                             <td className="px-6 py-3 whitespace-nowrap text-right text-sm font-medium text-gray-700">
-                              {(adGroup.totalCost || 0).toLocaleString('ru-RU')} ₽
+                              {(adGroup.totalCost || 0).toLocaleString('ru-RU')} {currencySymbol}
                             </td>
                             <td className="px-6 py-3 whitespace-nowrap text-right text-sm text-gray-700">
-                              {(adGroup.avgCpc || 0).toFixed(2)} ₽
+                              {(adGroup.avgCpc || 0).toFixed(2)} {currencySymbol}
                             </td>
                             <td className="px-6 py-3 whitespace-nowrap text-right">
                               <span
@@ -482,7 +486,7 @@ export function CampaignsTable({
                             </td>
                             <td className="px-6 py-3 whitespace-nowrap text-right text-sm text-gray-700">
                               {adGroupCpl > 0
-                                ? `${Math.round(adGroupCpl).toLocaleString('ru-RU')} ₽`
+                                ? `${Math.round(adGroupCpl).toLocaleString('ru-RU')} ${currencySymbol}`
                                 : '—'}
                             </td>
                           </tr>
@@ -549,10 +553,10 @@ export function CampaignsTable({
                                     {(ad.totalClicks || 0).toLocaleString('ru-RU')}
                                   </td>
                                   <td className="px-6 py-2 whitespace-nowrap text-right text-xs text-gray-600">
-                                    {(ad.totalCost || 0).toLocaleString('ru-RU')} ₽
+                                    {(ad.totalCost || 0).toLocaleString('ru-RU')} {currencySymbol}
                                   </td>
                                   <td className="px-6 py-2 whitespace-nowrap text-right text-xs text-gray-600">
-                                    {(ad.avgCpc || 0).toFixed(2)} ₽
+                                    {(ad.avgCpc || 0).toFixed(2)} {currencySymbol}
                                   </td>
                                   <td className="px-6 py-2 whitespace-nowrap text-right">
                                     <span
@@ -580,7 +584,7 @@ export function CampaignsTable({
                                   </td>
                                   <td className="px-6 py-2 whitespace-nowrap text-right text-xs text-gray-600">
                                     {adCpl > 0
-                                      ? `${Math.round(adCpl).toLocaleString('ru-RU')} ₽`
+                                      ? `${Math.round(adCpl).toLocaleString('ru-RU')} ${currencySymbol}`
                                       : '—'}
                                   </td>
                                 </tr>
@@ -606,10 +610,10 @@ export function CampaignsTable({
                   {totals.clicks.toLocaleString('ru-RU')}
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap text-right text-sm text-gray-900">
-                  {totals.cost.toLocaleString('ru-RU')} ₽
+                  {totals.cost.toLocaleString('ru-RU')} {currencySymbol}
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap text-right text-sm text-gray-900">
-                  {totalCpc.toFixed(2)} ₽
+                  {totalCpc.toFixed(2)} {currencySymbol}
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap text-right text-sm text-gray-900">
                   {totalCtr.toFixed(2)}%
@@ -624,7 +628,7 @@ export function CampaignsTable({
                   {totalCr > 0 ? `${totalCr.toFixed(2)}%` : '—'}
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap text-right text-sm text-gray-900">
-                  {totalCpl > 0 ? `${Math.round(totalCpl).toLocaleString('ru-RU')} ₽` : '—'}
+                  {totalCpl > 0 ? `${Math.round(totalCpl).toLocaleString('ru-RU')} ${currencySymbol}` : '—'}
                 </td>
               </tr>
             )}

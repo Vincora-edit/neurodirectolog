@@ -444,6 +444,7 @@ export function YandexDashboard() {
           onAdGroupFilterChange={handleAdGroupFilterChange}
           onAdFilterChange={handleAdFilterChange}
           targetCpl={kpiData?.kpi?.targetCpl || 0}
+          currency={budgetForecastData?.balance?.currency || 'RUB'}
         />
 
         {/* График динамики */}
