@@ -1,0 +1,66 @@
+version: '3.8'
+
+# Staging environment - использует те же Redis и ClickHouse что и prod
+# Порты: client 3100, server 3101
+
+services:
+  server-staging:
+    build:
+      context: ./server
+      dockerfile: Dockerfile
+    container_name: neurodirectolog-server-staging
+    environment:
+      NODE_ENV: staging
+      PORT: 3001
+      CLICKHOUSE_HOST: http://neurodirectolog-clickhouse:8123
+      CLICKHOUSE_USER: ${CLICKHOUSE_USER:-default}
+      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD}
+      CLICKHOUSE_DB: neurodirectolog
+      YANDEX_CLIENT_ID: ${YANDEX_CLIENT_ID}
+      YANDEX_CLIENT_SECRET: ${YANDEX_CLIENT_SECRET}
+      YANDEX_REDIRECT_URI: ${YANDEX_REDIRECT_URI_STAGING:-https://test-dashboard.vincora.ru/yandex/callback}
+      JWT_SECRET: ${JWT_SECRET}
+      CORS_ORIGIN: https://test-dashboard.vincora.ru
+      PRODUCTION_URL: https://test-dashboard.vincora.ru
+      REDIS_HOST: neurodirectolog-redis
+      REDIS_PORT: 6379
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN}
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+    ports:
+      - "3101:3001"
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:3001/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    restart: unless-stopped
+    networks:
+      - neurodirectolog-network
+
+  client-staging:
+    build:
+      context: ./client
+      dockerfile: Dockerfile
+      args:
+        VITE_API_URL: https://test-dashboard.vincora.ru/api
+    container_name: neurodirectolog-client-staging
+    ports:
+      - "3100:80"
+    depends_on:
+      server-staging:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:80"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+    restart: unless-stopped
+    networks:
+      - neurodirectolog-network
+
+networks:
+  neurodirectolog-network:
+    external: true
+    name: neurodirectolog_neurodirectolog-network
