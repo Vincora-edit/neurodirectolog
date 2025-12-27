@@ -311,7 +311,7 @@ export default function Alerts() {
       </div>
 
       {/* Settings Panel */}
-      {showSettings && settings && (
+      {showSettings && (
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
           <h2 className="text-lg font-semibold mb-4">Настройки уведомлений</h2>
 
@@ -322,7 +322,7 @@ export default function Alerts() {
               <label className="flex items-center gap-3">
                 <input
                   type="checkbox"
-                  checked={settings.emailNotifications}
+                  checked={settings?.emailNotifications ?? false}
                   onChange={(e) =>
                     updateSettingsMutation.mutate({ emailNotifications: e.target.checked })
                   }
@@ -333,7 +333,7 @@ export default function Alerts() {
               <label className="flex items-center gap-3">
                 <input
                   type="checkbox"
-                  checked={settings.telegramNotifications}
+                  checked={settings?.telegramNotifications ?? false}
                   onChange={(e) =>
                     updateSettingsMutation.mutate({ telegramNotifications: e.target.checked })
                   }
@@ -344,7 +344,7 @@ export default function Alerts() {
               <label className="flex items-center gap-3">
                 <input
                   type="checkbox"
-                  checked={settings.dailyDigest}
+                  checked={settings?.dailyDigest ?? false}
                   onChange={(e) =>
                     updateSettingsMutation.mutate({ dailyDigest: e.target.checked })
                   }
@@ -363,7 +363,7 @@ export default function Alerts() {
                   <div className="flex items-center gap-2">
                     <input
                       type="number"
-                      value={settings.ctrDropThreshold}
+                      value={settings?.ctrDropThreshold ?? 30}
                       onChange={(e) =>
                         updateSettingsMutation.mutate({
                           ctrDropThreshold: parseInt(e.target.value),
@@ -379,7 +379,7 @@ export default function Alerts() {
                   <div className="flex items-center gap-2">
                     <input
                       type="number"
-                      value={settings.conversionsDropThreshold}
+                      value={settings?.conversionsDropThreshold ?? 50}
                       onChange={(e) =>
                         updateSettingsMutation.mutate({
                           conversionsDropThreshold: parseInt(e.target.value),
@@ -395,7 +395,7 @@ export default function Alerts() {
                   <div className="flex items-center gap-2">
                     <input
                       type="number"
-                      value={settings.cplIncreaseThreshold}
+                      value={settings?.cplIncreaseThreshold ?? 50}
                       onChange={(e) =>
                         updateSettingsMutation.mutate({
                           cplIncreaseThreshold: parseInt(e.target.value),
