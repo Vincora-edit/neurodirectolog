@@ -199,8 +199,10 @@ export function DashboardHeader({
         <div className={`bg-white rounded-xl shadow-sm border border-gray-200 transition-all duration-300 ease-in-out ${
           isCompact ? 'p-3' : 'p-4'
         }`}>
-          {/* Первая строка: Проект + Аккаунт + Синхронизация + Кнопка обновления */}
-          <div className="flex items-center justify-between gap-4 flex-wrap">
+          {/* Первая строка: Проект + Аккаунт + Синхронизация + Кнопка обновления - скрывается при скролле */}
+          <div className={`flex items-center justify-between gap-4 flex-wrap overflow-hidden transition-all duration-300 ease-in-out ${
+            isCompact ? 'max-h-0 opacity-0 mb-0' : 'max-h-[100px] opacity-100 mb-4'
+          }`}>
             <div className="flex items-center gap-4 flex-wrap">
               {/* Селектор проекта */}
               {projects && projects.length > 0 && onProjectChange && (
@@ -338,7 +340,7 @@ export function DashboardHeader({
           </div>
 
           {/* Вторая строка: Фильтры данных + Фильтры кампаний */}
-          <div className="flex items-start gap-4 flex-wrap mt-4 pt-4 border-t border-gray-200">
+          <div className={`flex items-start gap-4 flex-wrap ${isCompact ? '' : 'mt-4 pt-4 border-t border-gray-200'}`}>
             {/* Селектор целей */}
             {availableGoals.length > 0 && (
               <div className="flex flex-col gap-1.5 relative">
