@@ -21,6 +21,15 @@ import {
 } from 'lucide-react';
 import { API_BASE_URL } from '../../services/api';
 
+// Helper function to get auth headers
+const getAuthHeaders = () => {
+  const token = localStorage.getItem('token');
+  return {
+    'Content-Type': 'application/json',
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+  };
+};
+
 interface ReportsSectionProps {
   activeProjectId: string;
   activeConnectionId: string;
@@ -158,7 +167,7 @@ export function ReportsSection({
     queryFn: async () => {
       let url = `${API_BASE_URL}/api/yandex/search-queries/${activeProjectId}?days=${dateRange}&connectionId=${activeConnectionId}`;
       if (globalFilterCampaignId) url += `&campaignId=${globalFilterCampaignId}`;
-      const response = await fetch(url);
+      const response = await fetch(url, { headers: getAuthHeaders() });
       return response.json();
     },
     enabled: !!activeProjectId && !!activeConnectionId && audienceReportTab === 'search',
@@ -170,7 +179,7 @@ export function ReportsSection({
     queryFn: async () => {
       let url = `${API_BASE_URL}/api/yandex/device-stats/${activeProjectId}?days=${dateRange}&connectionId=${activeConnectionId}`;
       if (globalFilterCampaignId) url += `&campaignId=${globalFilterCampaignId}`;
-      const response = await fetch(url);
+      const response = await fetch(url, { headers: getAuthHeaders() });
       return response.json();
     },
     enabled: !!activeProjectId && !!activeConnectionId && audienceReportTab === 'devices',
@@ -182,7 +191,7 @@ export function ReportsSection({
     queryFn: async () => {
       let url = `${API_BASE_URL}/api/yandex/geo-report/${activeProjectId}?days=${dateRange}&connectionId=${activeConnectionId}`;
       if (globalFilterCampaignId) url += `&campaignId=${globalFilterCampaignId}`;
-      const response = await fetch(url);
+      const response = await fetch(url, { headers: getAuthHeaders() });
       return response.json();
     },
     enabled: !!activeProjectId && !!activeConnectionId && audienceReportTab === 'region',
@@ -194,7 +203,7 @@ export function ReportsSection({
     queryFn: async () => {
       let url = `${API_BASE_URL}/api/yandex/demographics/${activeProjectId}?days=${dateRange}&connectionId=${activeConnectionId}`;
       if (globalFilterCampaignId) url += `&campaignId=${globalFilterCampaignId}`;
-      const response = await fetch(url);
+      const response = await fetch(url, { headers: getAuthHeaders() });
       return response.json();
     },
     enabled: !!activeProjectId && !!activeConnectionId && audienceReportTab === 'demographics',
@@ -206,7 +215,7 @@ export function ReportsSection({
     queryFn: async () => {
       let url = `${API_BASE_URL}/api/yandex/income/${activeProjectId}?days=${dateRange}&connectionId=${activeConnectionId}`;
       if (globalFilterCampaignId) url += `&campaignId=${globalFilterCampaignId}`;
-      const response = await fetch(url);
+      const response = await fetch(url, { headers: getAuthHeaders() });
       return response.json();
     },
     enabled: !!activeProjectId && !!activeConnectionId && audienceReportTab === 'income',
@@ -218,7 +227,7 @@ export function ReportsSection({
     queryFn: async () => {
       let url = `${API_BASE_URL}/api/yandex/targeting-categories/${activeProjectId}?days=${dateRange}&connectionId=${activeConnectionId}`;
       if (globalFilterCampaignId) url += `&campaignId=${globalFilterCampaignId}`;
-      const response = await fetch(url);
+      const response = await fetch(url, { headers: getAuthHeaders() });
       return response.json();
     },
     enabled: !!activeProjectId && !!activeConnectionId && technicalReportTab === 'categories',
@@ -230,7 +239,7 @@ export function ReportsSection({
     queryFn: async () => {
       let url = `${API_BASE_URL}/api/yandex/criteria/${activeProjectId}?days=${dateRange}&connectionId=${activeConnectionId}`;
       if (globalFilterCampaignId) url += `&campaignId=${globalFilterCampaignId}`;
-      const response = await fetch(url);
+      const response = await fetch(url, { headers: getAuthHeaders() });
       return response.json();
     },
     enabled: !!activeProjectId && !!activeConnectionId && technicalReportTab === 'criteria',
@@ -242,7 +251,7 @@ export function ReportsSection({
     queryFn: async () => {
       let url = `${API_BASE_URL}/api/yandex/placements/${activeProjectId}?days=${dateRange}&connectionId=${activeConnectionId}`;
       if (globalFilterCampaignId) url += `&campaignId=${globalFilterCampaignId}`;
-      const response = await fetch(url);
+      const response = await fetch(url, { headers: getAuthHeaders() });
       return response.json();
     },
     enabled: !!activeProjectId && !!activeConnectionId && technicalReportTab === 'placements',
@@ -254,7 +263,7 @@ export function ReportsSection({
     queryFn: async () => {
       let url = `${API_BASE_URL}/api/yandex/ad-texts/${activeProjectId}?days=${dateRange}&connectionId=${activeConnectionId}`;
       if (globalFilterCampaignId) url += `&campaignId=${globalFilterCampaignId}`;
-      const response = await fetch(url);
+      const response = await fetch(url, { headers: getAuthHeaders() });
       return response.json();
     },
     enabled: !!activeProjectId && !!activeConnectionId && (technicalReportTab === 'titles' || technicalReportTab === 'text'),
