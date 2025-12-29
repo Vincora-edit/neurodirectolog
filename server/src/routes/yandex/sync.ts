@@ -34,6 +34,7 @@ router.post('/sync/:projectId', authenticate, requireProjectAccess, async (req: 
       });
 
       if (job) {
+        console.log(`[Sync] Manual sync job created: ${job.id} for connection ${connection.id}`);
         return res.json({
           success: true,
           message: 'Sync job added to queue',
@@ -163,6 +164,9 @@ router.get('/queue/job/:jobId', authenticate, async (req: AuthRequest, res) => {
     if (!status) {
       return res.status(404).json({ error: 'Job not found' });
     }
+
+    // Логируем для отладки
+    console.log(`[Queue] Job ${jobId} status: ${status.status}, progress: ${status.progress}, stage: ${status.stage}`);
 
     res.json(status);
   } catch (error: any) {
