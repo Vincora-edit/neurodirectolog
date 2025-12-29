@@ -293,7 +293,9 @@ export function YandexDashboard() {
 
     const pollInterval = setInterval(async () => {
       try {
+        console.log('[Sync] Polling job status:', syncJobId);
         const status = await dashboardService.getSyncJobStatus(syncJobId);
+        console.log('[Sync] Job status:', status);
         if (!status) return;
 
         setSyncProgress(status.progress);
@@ -332,11 +334,14 @@ export function YandexDashboard() {
 
     try {
       const result = await dashboardService.syncManual(activeProjectId);
+      console.log('[Sync] Manual sync result:', result);
 
       if (result.jobId) {
         // Асинхронная синхронизация через очередь
+        console.log('[Sync] Got jobId:', result.jobId);
         setSyncJobId(result.jobId);
       } else {
+        console.log('[Sync] No jobId, using fallback');
         // Fallback: прямая синхронизация (без очереди)
         // Ждём немного и обновляем данные
         setTimeout(() => {
