@@ -116,6 +116,8 @@ router.get('/search-queries/:projectId', authenticate, requireProjectAccess, asy
       }
     }
 
+    // Отключаем кеширование для этого эндпоинта
+    res.set('Cache-Control', 'no-store, no-cache, must-revalidate');
     res.json(searchQueries);
   } catch (error: any) {
     console.error('Failed to get search queries:', error);
