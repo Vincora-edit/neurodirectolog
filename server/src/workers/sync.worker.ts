@@ -6,6 +6,7 @@
  */
 
 import { Job } from 'bull';
+import cron from 'node-cron';
 import { queueService, SyncJobData, SyncJobResult } from '../services/queue.service';
 import { syncService } from '../services/sync.service';
 import { redisService } from '../services/redis.service';
@@ -141,22 +142,23 @@ function isRetryableError(error: any): boolean {
 }
 
 /**
- * Запуск периодической синхронизации всех подключений
+ * Запуск синхронизации по расписанию (cron)
+ * Синхронизация 3 раза в день:
+ * - 06:00 - свежие данные за вчера к утру
+ * - 12:00 - проверка кампаний в середине дня
+ * - 18:00 - промежуточные результаты за день
  */
-export function startScheduledSync(intervalMinutes: number = 60): NodeJS.Timeout {
-  console.log(`[SyncWorker] Starting scheduled sync every ${intervalMinutes} minutes`);
+export function startScheduledSync(): void {
+  console.log('[SyncWorker] Setting up scheduled sync at 06:00, 12:00, 18:00 (Moscow time)');
 
-  const intervalMs = intervalMinutes * 60 * 1000;
-
-  // Первый запуск через 5 минут после старта (дать серверу прогреться)
-  setTimeout(async () => {
+  // Синхронизация в 6:00, 12:00 и 18:00 по московскому времени
+  // Сервер работает в UTC, поэтому: 06:00 MSK = 03:00 UTC, 12:00 MSK = 09:00 UTC, 18:00 MSK = 15:00 UTC
+  cron.schedule('0 3,9,15 * * *', async () => {
+    console.log(`[SyncWorker] Scheduled sync triggered at ${new Date().toISOString()}`);
     await triggerScheduledSync();
-  }, 5 * 60 * 1000);
+  });
 
-  // Затем по расписанию
-  return setInterval(async () => {
-    await triggerScheduledSync();
-  }, intervalMs);
+  console.log('[SyncWorker] Cron jobs scheduled: 03:00, 09:00, 15:00 UTC (06:00, 12:00, 18:00 MSK)');
 }
 
 /**

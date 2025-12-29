@@ -51,7 +51,7 @@ function parseGoalIds(connection: any): string[] {
 
 /**
  * GET /api/yandex/search-queries/:projectId
- * Получить статистику по поисковым запросам
+ * Получить статистику по поисковым запросам (из ClickHouse)
  */
 router.get('/search-queries/:projectId', authenticate, requireProjectAccess, async (req: AuthRequest, res) => {
   try {
@@ -67,27 +67,12 @@ router.get('/search-queries/:projectId', authenticate, requireProjectAccess, asy
     const dateFrom = startDate.toISOString().split('T')[0];
     const dateTo = endDate.toISOString().split('T')[0];
 
-    let campaignIds: number[];
-    if (campaignId) {
-      campaignIds = [parseInt(campaignId as string)];
-    } else {
-      const campaigns = await clickhouseService.getCampaignsByConnectionId(connection.id);
-      campaignIds = campaigns.map(c => parseInt(c.externalId));
-    }
-
-    if (campaignIds.length === 0) {
-      return res.json([]);
-    }
-
-    const goalIds = parseGoalIds(connection);
-
-    const searchQueries = await yandexDirectService.getSearchQueryReport(
-      connection.accessToken,
-      connection.login,
-      campaignIds,
+    // Читаем из ClickHouse (данные синхронизируются автоматически)
+    const searchQueries = await clickhouseService.getSearchQueries(
+      connection.id,
       dateFrom,
       dateTo,
-      goalIds.length > 0 ? goalIds : undefined
+      campaignId as string | undefined
     );
 
     res.json(searchQueries);

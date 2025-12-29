@@ -160,7 +160,7 @@ app.listen(PORT, async () => {
     const queueReady = await queueService.waitForReady();
     if (queueReady) {
       initSyncWorker();
-      startScheduledSync(60); // Синхронизация каждые 60 минут
+      startScheduledSync(); // Синхронизация по расписанию: 06:00, 12:00, 18:00 MSK
       console.log('📋 Bull Queue worker запущен');
     } else {
       console.log('⚠️  Bull Queue недоступна, синхронизация через cron');

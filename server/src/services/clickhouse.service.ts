@@ -2129,9 +2129,25 @@ export const clickhouseService = {
     });
   },
 
-  async getSearchQueries(connectionId: string, _startDate?: string, _endDate?: string): Promise<any[]> {
+  async getSearchQueries(connectionId: string, startDate?: string, endDate?: string, campaignId?: string): Promise<any[]> {
     // Примечание: Yandex API не поддерживает конверсии с разбивкой по поисковым запросам
     // Возвращаем данные без конверсий
+    let whereClause = 'WHERE connection_id = {connectionId:String}';
+    const queryParams: Record<string, string> = { connectionId };
+
+    if (startDate) {
+      whereClause += ' AND date >= {startDate:Date}';
+      queryParams.startDate = startDate;
+    }
+    if (endDate) {
+      whereClause += ' AND date <= {endDate:Date}';
+      queryParams.endDate = endDate;
+    }
+    if (campaignId) {
+      whereClause += ' AND campaign_id = {campaignId:String}';
+      queryParams.campaignId = campaignId;
+    }
+
     const result = await client.query({
       query: `
         SELECT
@@ -2140,11 +2156,12 @@ export const clickhouseService = {
           SUM(clicks) as clicks,
           SUM(cost) as cost
         FROM search_queries
-        WHERE connection_id = {connectionId:String}
+        ${whereClause}
         GROUP BY query
         ORDER BY cost DESC
+        LIMIT 100
       `,
-      query_params: { connectionId },
+      query_params: queryParams,
       format: 'JSONEachRow',
     });
 
