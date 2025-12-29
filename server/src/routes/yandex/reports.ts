@@ -67,6 +67,8 @@ router.get('/search-queries/:projectId', authenticate, requireProjectAccess, asy
     const dateFrom = startDate.toISOString().split('T')[0];
     const dateTo = endDate.toISOString().split('T')[0];
 
+    console.log(`[SearchQueries] connectionId: ${connection.id}, dateFrom: ${dateFrom}, dateTo: ${dateTo}, campaignId: ${campaignId}`);
+
     // Читаем из ClickHouse (данные синхронизируются автоматически)
     const searchQueries = await clickhouseService.getSearchQueries(
       connection.id,
@@ -74,6 +76,8 @@ router.get('/search-queries/:projectId', authenticate, requireProjectAccess, asy
       dateTo,
       campaignId as string | undefined
     );
+
+    console.log(`[SearchQueries] Found ${searchQueries.length} results`);
 
     res.json(searchQueries);
   } catch (error: any) {
