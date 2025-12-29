@@ -21,6 +21,7 @@ export interface SyncJobData {
   userId: string;
   priority?: 'high' | 'normal' | 'low';
   triggeredBy?: 'manual' | 'schedule' | 'webhook';
+  currentStage?: string; // Текущий этап синхронизации (обновляется во время выполнения)
 }
 
 export interface SyncJobResult {
