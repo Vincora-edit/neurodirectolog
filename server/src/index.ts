@@ -167,9 +167,11 @@ app.listen(PORT, async () => {
     console.log('⚠️  Redis недоступен, работаем без кеша');
   }
 
-  // Start the cron job for Yandex.Direct sync (fallback без Redis)
-  startSyncJob();
-  console.log(`⏰ Yandex.Direct sync job started`);
+  // Start the cron job for Yandex.Direct sync ТОЛЬКО если Queue НЕ работает (fallback без Redis)
+  if (!redisConnected || !await queueService.isAvailable()) {
+    startSyncJob();
+    console.log(`⏰ Yandex.Direct sync job started (fallback cron)`);
+  }
 });
 
 // Graceful shutdown
