@@ -111,6 +111,8 @@ interface DashboardHeaderProps {
 
   // Sync
   isSyncing: boolean;
+  syncProgress?: number;
+  syncStage?: string | null;
   onSync: () => void;
   lastSyncAt?: string;
 
@@ -148,6 +150,8 @@ export function DashboardHeader({
   onAdGroupFilterChange,
   onAdIdFilterChange,
   isSyncing,
+  syncProgress = 0,
+  syncStage,
   onSync,
   lastSyncAt,
   isCompact,
@@ -418,19 +422,33 @@ export function DashboardHeader({
               )}
             </div>
 
-            {/* Кнопка обновления */}
-            <button
-              onClick={onSync}
-              disabled={isSyncing}
-              className="flex items-center gap-2 bg-primary-600 text-white px-4 py-2.5 rounded-lg hover:bg-primary-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed shrink-0 self-end"
-            >
-              {isSyncing ? (
-                <Loader2 className="animate-spin" size={18} />
-              ) : (
-                <RefreshCw size={18} />
+            {/* Кнопка обновления с прогрессом */}
+            <div className="flex flex-col items-end gap-1 shrink-0 self-end">
+              <button
+                onClick={onSync}
+                disabled={isSyncing}
+                className="flex items-center gap-2 bg-primary-600 text-white px-4 py-2.5 rounded-lg hover:bg-primary-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {isSyncing ? (
+                  <Loader2 className="animate-spin" size={18} />
+                ) : (
+                  <RefreshCw size={18} />
+                )}
+                {isSyncing ? (syncStage || 'Синхронизация...') : 'Обновить данные'}
+              </button>
+              {/* Прогресс-бар */}
+              {isSyncing && syncProgress > 0 && (
+                <div className="w-full">
+                  <div className="h-1.5 bg-gray-200 rounded-full overflow-hidden">
+                    <div
+                      className="h-full bg-primary-600 transition-all duration-300"
+                      style={{ width: `${syncProgress}%` }}
+                    />
+                  </div>
+                  <div className="text-xs text-gray-500 mt-0.5 text-right">{syncProgress}%</div>
+                </div>
               )}
-              {isSyncing ? 'Синхронизация...' : 'Обновить данные'}
-            </button>
+            </div>
           </div>
 
           {/* Вторая строка: Фильтры данных + Фильтры кампаний */}

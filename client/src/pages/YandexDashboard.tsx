@@ -119,6 +119,9 @@ export function YandexDashboard() {
   const [isHeaderCompact, setIsHeaderCompact] = useState(false);
   const [isHeaderCollapsed, setIsHeaderCollapsed] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
+  const [syncJobId, setSyncJobId] = useState<string | null>(null);
+  const [syncProgress, setSyncProgress] = useState<number>(0);
+  const [syncStage, setSyncStage] = useState<string | null>(null);
 
   // Scroll listener с гистерезисом и throttle для производительности
   useEffect(() => {
@@ -284,16 +287,71 @@ export function YandexDashboard() {
 
   const isLoading = hierarchicalLoading || connectionsLoading;
 
+  // Polling для отслеживания прогресса синхронизации
+  useEffect(() => {
+    if (!syncJobId || !isSyncing) return;
+
+    const pollInterval = setInterval(async () => {
+      try {
+        const status = await dashboardService.getSyncJobStatus(syncJobId);
+        if (!status) return;
+
+        setSyncProgress(status.progress);
+        setSyncStage(status.stage || null);
+
+        if (status.status === 'completed') {
+          clearInterval(pollInterval);
+          setIsSyncing(false);
+          setSyncJobId(null);
+          setSyncProgress(0);
+          setSyncStage(null);
+          refetchHierarchical();
+          refetchKpi();
+        } else if (status.status === 'failed') {
+          clearInterval(pollInterval);
+          setIsSyncing(false);
+          setSyncJobId(null);
+          setSyncProgress(0);
+          setSyncStage(null);
+          console.error('Sync failed:', status.error);
+        }
+      } catch (error) {
+        console.error('Failed to poll sync status:', error);
+      }
+    }, 2000); // Опрос каждые 2 секунды
+
+    return () => clearInterval(pollInterval);
+  }, [syncJobId, isSyncing, refetchHierarchical, refetchKpi]);
+
   // Handlers - wrapped in useCallback to prevent unnecessary re-renders
   const handleSync = useCallback(async () => {
     if (!activeProjectId) return;
     setIsSyncing(true);
+    setSyncProgress(0);
+    setSyncStage('Запуск синхронизации...');
+
     try {
-      await dashboardService.syncManual(activeProjectId);
-      refetchHierarchical();
-      refetchKpi();
-    } finally {
+      const result = await dashboardService.syncManual(activeProjectId);
+
+      if (result.jobId) {
+        // Асинхронная синхронизация через очередь
+        setSyncJobId(result.jobId);
+      } else {
+        // Fallback: прямая синхронизация (без очереди)
+        // Ждём немного и обновляем данные
+        setTimeout(() => {
+          setIsSyncing(false);
+          setSyncProgress(0);
+          setSyncStage(null);
+          refetchHierarchical();
+          refetchKpi();
+        }, 3000);
+      }
+    } catch (error) {
+      console.error('Sync failed:', error);
       setIsSyncing(false);
+      setSyncProgress(0);
+      setSyncStage(null);
     }
   }, [activeProjectId, refetchHierarchical, refetchKpi]);
 
@@ -396,6 +454,8 @@ export function YandexDashboard() {
         onAdGroupFilterChange={handleAdGroupFilterChange}
         onAdIdFilterChange={setGlobalFilterAdId}
         isSyncing={isSyncing}
+        syncProgress={syncProgress}
+        syncStage={syncStage}
         onSync={handleSync}
         lastSyncAt={activeConnection?.lastSyncAt}
         isCompact={isHeaderCompact}

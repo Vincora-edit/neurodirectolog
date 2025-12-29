@@ -46,12 +46,14 @@ export function initSyncWorker(): void {
       }
 
       try {
-        await job.progress(20);
-
-        // Выполняем синхронизацию
-        await syncService.syncConnection(connectionId);
-
-        await job.progress(100);
+        // Выполняем синхронизацию с callback для обновления прогресса
+        await syncService.syncConnection(connectionId, async (progress, stage) => {
+          await job.progress(progress);
+          // Сохраняем stage в data для отображения на клиенте
+          if (stage) {
+            await job.update({ ...job.data, currentStage: stage });
+          }
+        });
 
         const duration = Date.now() - startTime;
         console.log(`[SyncWorker] Job ${job.id} completed successfully in ${duration}ms`);

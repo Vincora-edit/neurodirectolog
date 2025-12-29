@@ -170,7 +170,24 @@
       "Bash(./scripts/deploy.sh:*)",
       "Skill(db-query)",
       "Skill(db-query:*)",
-      "Bash(git revert:*)"
+      "Bash(git revert:*)",
+      "Bash(sshpass -p 'c9R+eLvxtQJ-,x' ssh -o StrictHostKeyChecking=no root@91.222.239.217 \"docker exec neurodirectolog-clickhouse clickhouse-client --query \"\"SELECT id, email, name, is_verified FROM users WHERE email = ''vincora@yandex.ru'' ORDER BY updated_at DESC LIMIT 1\"\"\")",
+      "Bash(sshpass -p 'c9R+eLvxtQJ-,x' ssh -o StrictHostKeyChecking=no root@91.222.239.217 \"docker exec neurodirectolog-clickhouse clickhouse-client --query \"\"SELECT id, email, name, is_verified FROM neurodirectolog.users WHERE email = ''vincora@yandex.ru'' ORDER BY updated_at DESC LIMIT 1\"\"\")",
+      "Bash(sshpass -p 'c9R+eLvxtQJ-,x' ssh -o StrictHostKeyChecking=no root@91.222.239.217 \"docker exec neurodirectolog-clickhouse clickhouse-client --query \"\"INSERT INTO neurodirectolog.users \\(id, email, password_hash, name, is_admin, is_verified, created_at, updated_at\\) SELECT id, email, password_hash, name, is_admin, 1, created_at, now\\(\\) FROM neurodirectolog.users WHERE id = ''1766821611496'' ORDER BY updated_at DESC LIMIT 1\"\"\")",
+      "Bash(sshpass -p 'c9R+eLvxtQJ-,x' ssh -o StrictHostKeyChecking=no root@91.222.239.217 \"docker exec neurodirectolog-client ls -la /usr/share/nginx/html/assets/ | head -10\")",
+      "Bash(sshpass -p 'c9R+eLvxtQJ-,x' ssh -o StrictHostKeyChecking=no root@91.222.239.217 \"cd /root/neurodirectolog && git log --oneline -3\")",
+      "Bash(sshpass -p 'c9R+eLvxtQJ-,x' ssh -o StrictHostKeyChecking=no root@91.222.239.217 \"cd /root/neurodirectolog && docker-compose build --no-cache client && docker-compose up -d client && sleep 5 && docker exec neurodirectolog-client ls -la /usr/share/nginx/html/assets/ | head -5\")",
+      "Bash(sshpass -p 'c9R+eLvxtQJ-,x' ssh -o StrictHostKeyChecking=no root@91.222.239.217 \"cd /root/neurodirectolog && ls -la docker-compose*.yml\")",
+      "Bash(sshpass -p 'c9R+eLvxtQJ-,x' ssh -o StrictHostKeyChecking=no root@91.222.239.217 \"cd /root/neurodirectolog && docker-compose -f docker-compose.prod.yml build --no-cache && docker-compose -f docker-compose.prod.yml up -d\")",
+      "Bash(sshpass -p 'c9R+eLvxtQJ-,x' ssh -o StrictHostKeyChecking=no root@91.222.239.217 \"docker stop neurodirectolog-server neurodirectolog-client 2>/dev/null; docker rm neurodirectolog-server neurodirectolog-client 2>/dev/null; cd /root/neurodirectolog && docker-compose -f docker-compose.prod.yml up -d && sleep 3 && docker ps --format ''table {{.Names}}\\\\t{{.Status}}'' | grep neurodirectolog\")",
+      "Bash(sshpass -p 'c9R+eLvxtQJ-,x' ssh -o StrictHostKeyChecking=no root@91.222.239.217 \"docker exec neurodirectolog-server env | grep CLIENT_URL\")",
+      "Bash(sshpass -p 'c9R+eLvxtQJ-,x' ssh -o StrictHostKeyChecking=no root@91.222.239.217 \"docker stop neurodirectolog-server && docker rm neurodirectolog-server && docker run -d --name neurodirectolog-server --network neurodirectolog_neurodirectolog-network -p 3001:3001 --env-file /root/neurodirectolog/.env --restart unless-stopped neurodirectolog_server:latest && sleep 3 && docker exec neurodirectolog-server env | grep CLIENT_URL\")",
+      "Bash(sshpass -p 'c9R+eLvxtQJ-,x' ssh -o StrictHostKeyChecking=no root@91.222.239.217 \"docker ps --format ''table {{.Names}}\\\\t{{.Status}}'' | grep -E ''neurodirectolog-\\(client|server\\)\\\\s''\")",
+      "Bash(sshpass -p 'c9R+eLvxtQJ-,x' ssh -o StrictHostKeyChecking=no root@91.222.239.217 \"docker logs neurodirectolog-server --tail 30 2>&1 | grep -E ''PublicShares|Access denied''\")",
+      "Bash(sshpass -p 'c9R+eLvxtQJ-,x' ssh -o StrictHostKeyChecking=no root@91.222.239.217 \"docker logs neurodirectolog-server --tail 50 2>&1 | grep -E ''PublicShares|Access denied''\")",
+      "Bash(sshpass -p 'c9R+eLvxtQJ-,x' ssh -o StrictHostKeyChecking=no root@91.222.239.217 \"docker ps | grep neurodirectolog\")",
+      "Bash(sshpass -p 'c9R+eLvxtQJ-,x' ssh -o StrictHostKeyChecking=no root@91.222.239.217 \"docker logs neurodirectolog-server --tail 50 2>&1\")",
+      "Bash(sshpass -p 'c9R+eLvxtQJ-,x' ssh -o StrictHostKeyChecking=no root@91.222.239.217 \"docker logs neurodirectolog-server --tail 100 2>&1 | grep -E ''sync|Sync|timeout|error|Error'' | tail -30\")"
     ]
   }
 }

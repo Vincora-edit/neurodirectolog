@@ -7,16 +7,31 @@ import { usageService } from './usage.service';
 const YANDEX_CLIENT_ID = process.env.YANDEX_CLIENT_ID || '';
 const YANDEX_CLIENT_SECRET = process.env.YANDEX_CLIENT_SECRET || '';
 
+// Интерфейс для callback прогресса
+export interface SyncProgressCallback {
+  (progress: number, stage?: string): Promise<void> | void;
+}
+
 export const syncService = {
   /**
    * Синхронизация данных для одного подключения
+   * @param connectionId - ID подключения
+   * @param onProgress - callback для обновления прогресса (0-100)
    */
-  async syncConnection(connectionId: string): Promise<void> {
+  async syncConnection(connectionId: string, onProgress?: SyncProgressCallback): Promise<void> {
+    const updateProgress = async (progress: number, stage?: string) => {
+      if (onProgress) {
+        await onProgress(progress, stage);
+      }
+      if (stage) {
+        console.log(`[Sync] [${progress}%] ${stage}`);
+      }
+    };
     console.log(`[Sync] Starting sync for connection ${connectionId}`);
 
     try {
       // 1. Получаем данные подключения
-      console.log(`[Sync] Fetching connection from ClickHouse...`);
+      await updateProgress(5, 'Загрузка подключения...');
       const connection = await clickhouseService.getConnectionById(connectionId);
       if (!connection) {
         console.error(`[Sync] Connection ${connectionId} not found in ClickHouse`);
@@ -31,10 +46,10 @@ export const syncService = {
       }
 
       // 2. Обновляем access token если нужно
+      await updateProgress(10, 'Проверка токена доступа...');
       let accessToken = connection.accessToken;
       try {
         // Проверяем токен, пытаясь получить информацию о пользователе
-        console.log(`[Sync] Checking access token...`);
         await yandexDirectService.getUserInfo(accessToken);
         console.log(`[Sync] Access token is valid`);
       } catch (error) {
@@ -66,6 +81,7 @@ export const syncService = {
       }
 
       // 3. Получаем список кампаний из Яндекс.Директ
+      await updateProgress(15, 'Загрузка списка кампаний...');
       const campaigns = await yandexDirectService.getCampaigns(accessToken, connection.login);
       console.log(`[Sync] Found ${campaigns.length} campaigns`);
 
@@ -89,6 +105,7 @@ export const syncService = {
       await clickhouseService.upsertCampaigns(campaignData);
 
       // 5. Получаем детальную статистику за последние 90 дней (3 месяца)
+      await updateProgress(20, 'Загрузка статистики кампаний...');
       const today = new Date();
       const ninetyDaysAgo = new Date(today);
       ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
@@ -122,6 +139,7 @@ export const syncService = {
       }
 
       // 5.5. Получаем данные конверсий через отдельный CUSTOM_REPORT
+      await updateProgress(30, 'Загрузка данных конверсий...');
       let conversionsData: any[] = [];
       if (goalIds.length > 0) {
         console.log(`[Sync] Fetching conversions report for ${goalIds.length} goals`);
@@ -225,6 +243,7 @@ export const syncService = {
       }
 
       // 9.5. Получаем и сохраняем статистику по группам объявлений (с реальными конверсиями из API)
+      await updateProgress(45, 'Загрузка статистики групп объявлений...');
       console.log(`[Sync] Fetching ad group performance report with ${goalIds.length} goals...`);
       try {
         const adGroupData = await yandexDirectService.getAdGroupPerformanceReport(
@@ -299,6 +318,7 @@ export const syncService = {
       }
 
       // 9.6. Получаем и сохраняем статистику по объявлениям (с реальными конверсиями из API)
+      await updateProgress(60, 'Загрузка статистики объявлений...');
       console.log(`[Sync] Fetching ad performance report with ${goalIds.length} goals...`);
       try {
         const adData = await yandexDirectService.getAdPerformanceReport(
@@ -415,6 +435,7 @@ export const syncService = {
       }
 
       // 9.8. Синхронизируем поисковые запросы
+      await updateProgress(75, 'Загрузка поисковых запросов...');
       console.log(`[Sync] Fetching search queries report...`);
       try {
         const searchQueriesData = await yandexDirectService.getSearchQueryReport(
@@ -510,6 +531,7 @@ export const syncService = {
       await clickhouseService.insertCampaignStats(statsToInsert);
 
       // 12. Обновляем статус подключения
+      await updateProgress(90, 'Сохранение данных...');
       await clickhouseService.updateConnectionStatus(
         connection.id,
         'active',
@@ -517,6 +539,7 @@ export const syncService = {
       );
 
       // 13. Запускаем AI анализ для генерации рекомендаций
+      await updateProgress(95, 'AI анализ кампаний...');
       console.log(`[Sync] Running AI analysis for connection ${connectionId}`);
       try {
         await aiAnalysisService.analyzeAllCampaigns(connection.id);
@@ -524,6 +547,7 @@ export const syncService = {
         console.error(`[Sync] AI analysis failed, but sync completed:`, analysisError);
       }
 
+      await updateProgress(100, 'Синхронизация завершена');
       console.log(`[Sync] Successfully synced connection ${connectionId}`);
 
       // Трекинг использования: синхронизация + AI анализ

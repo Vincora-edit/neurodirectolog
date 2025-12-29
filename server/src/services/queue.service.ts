@@ -46,6 +46,7 @@ export interface JobStatus {
   connectionId: string;
   status: 'waiting' | 'active' | 'completed' | 'failed' | 'delayed';
   progress: number;
+  stage?: string; // Текущий этап синхронизации
   attempts: number;
   createdAt: Date;
   processedAt?: Date;
@@ -285,6 +286,7 @@ export const queueService = {
         connectionId: job.data.connectionId,
         status: state as JobStatus['status'],
         progress: job.progress() as number,
+        stage: (job.data as any).currentStage, // Текущий этап
         attempts: job.attemptsMade,
         createdAt: new Date(job.timestamp),
         processedAt: job.processedOn ? new Date(job.processedOn) : undefined,
@@ -323,6 +325,7 @@ export const queueService = {
               connectionId: job.data.connectionId,
               status: state as JobStatus['status'],
               progress: job.progress() as number,
+              stage: (job.data as any).currentStage,
               attempts: job.attemptsMade,
               createdAt: new Date(job.timestamp),
               processedAt: job.processedOn ? new Date(job.processedOn) : undefined,
