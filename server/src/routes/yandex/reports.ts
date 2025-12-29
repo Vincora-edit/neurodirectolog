@@ -51,7 +51,7 @@ function parseGoalIds(connection: any): string[] {
 
 /**
  * GET /api/yandex/search-queries/:projectId
- * Получить статистику по поисковым запросам (из ClickHouse)
+ * Получить статистику по поисковым запросам (из ClickHouse, fallback на API)
  */
 router.get('/search-queries/:projectId', authenticate, requireProjectAccess, async (req: AuthRequest, res) => {
   try {
@@ -69,15 +69,52 @@ router.get('/search-queries/:projectId', authenticate, requireProjectAccess, asy
 
     console.log(`[SearchQueries] connectionId: ${connection.id}, dateFrom: ${dateFrom}, dateTo: ${dateTo}, campaignId: ${campaignId}`);
 
-    // Читаем из ClickHouse (данные синхронизируются автоматически)
-    const searchQueries = await clickhouseService.getSearchQueries(
+    // Сначала пробуем из ClickHouse
+    let searchQueries = await clickhouseService.getSearchQueries(
       connection.id,
       dateFrom,
       dateTo,
       campaignId as string | undefined
     );
 
-    console.log(`[SearchQueries] Found ${searchQueries.length} results`);
+    console.log(`[SearchQueries] Found ${searchQueries.length} results from ClickHouse`);
+
+    // Если данных нет - fallback на API
+    if (searchQueries.length === 0) {
+      console.log(`[SearchQueries] No data in ClickHouse, falling back to API...`);
+
+      // Получаем campaign IDs для API запроса
+      let campaignIds: number[];
+      if (campaignId) {
+        campaignIds = [parseInt(campaignId as string)];
+      } else {
+        const campaigns = await clickhouseService.getCampaignsByConnectionId(connection.id);
+        campaignIds = campaigns.map(c => parseInt(c.externalId));
+      }
+
+      if (campaignIds.length > 0) {
+        const apiData = await yandexDirectService.getSearchQueryReport(
+          connection.accessToken,
+          connection.login,
+          campaignIds,
+          dateFrom,
+          dateTo
+        );
+
+        console.log(`[SearchQueries] Fetched ${apiData.length} results from API`);
+
+        searchQueries = apiData.map((row: any) => ({
+          query: row.query || '',
+          impressions: row.impressions || 0,
+          clicks: row.clicks || 0,
+          cost: row.cost || 0,
+          conversions: 0,
+          revenue: 0,
+          ctr: row.impressions > 0 ? (row.clicks / row.impressions * 100) : 0,
+          avgCpc: row.clicks > 0 ? (row.cost / row.clicks) : 0,
+        }));
+      }
+    }
 
     res.json(searchQueries);
   } catch (error: any) {
