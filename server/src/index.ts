@@ -71,6 +71,8 @@ const allowedOrigins = [
   'http://localhost:8080',
   'http://91.222.239.217:8080',
   'https://dashboard.vincora.ru',
+  'https://test-dashboard.vincora.ru',
+  'https://staging.vincora.ru',
   process.env.CORS_ORIGIN,
   process.env.PRODUCTION_URL
 ].filter(Boolean);
