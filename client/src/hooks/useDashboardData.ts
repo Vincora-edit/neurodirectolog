@@ -133,11 +133,25 @@ const dashboardService = {
     return response.json();
   },
 
-  async syncManual(projectId: string) {
+  async syncManual(projectId: string): Promise<{ success: boolean; message?: string; jobId?: string }> {
     const response = await fetch(`${API_BASE_URL}/api/yandex/sync/${projectId}`, {
       method: 'POST',
       headers: getAuthHeaders(),
     });
+    return response.json();
+  },
+
+  async getSyncJobStatus(jobId: string): Promise<{
+    id: string;
+    status: 'waiting' | 'active' | 'completed' | 'failed' | 'delayed';
+    progress: number;
+    stage?: string;
+    error?: string;
+  } | null> {
+    const response = await fetch(`${API_BASE_URL}/api/yandex/queue/job/${jobId}`, {
+      headers: getAuthHeaders(),
+    });
+    if (!response.ok) return null;
     return response.json();
   },
 
