@@ -11,6 +11,14 @@ import { requireProjectAccess } from '../../middleware/projectAccess';
 
 const router = express.Router();
 
+// Отключаем кеширование для всех отчётов
+router.use((_req, res, next) => {
+  res.set('Cache-Control', 'no-store, no-cache, must-revalidate');
+  res.set('Pragma', 'no-cache');
+  res.set('Expires', '0');
+  next();
+});
+
 // Хелпер для получения connection
 async function getConnection(projectId: string, connectionId?: string) {
   if (connectionId) {
@@ -116,8 +124,6 @@ router.get('/search-queries/:projectId', authenticate, requireProjectAccess, asy
       }
     }
 
-    // Отключаем кеширование для этого эндпоинта
-    res.set('Cache-Control', 'no-store, no-cache, must-revalidate');
     res.json(searchQueries);
   } catch (error: any) {
     console.error('Failed to get search queries:', error);
