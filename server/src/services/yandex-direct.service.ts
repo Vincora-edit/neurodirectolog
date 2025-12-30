@@ -198,9 +198,18 @@ export const yandexDirectService = {
   ): Promise<Array<{ id: number; name: string; type: string }>> {
     console.log(`[discoverCampaigns] Discovering all campaigns via Reports API for ${login} (${dateFrom} - ${dateTo})`);
 
-    // Увеличен timeout для больших аккаунтов - 30 попыток по 5 сек = 2.5 минуты
-    const maxRetries = 30;
-    const defaultRetryDelay = 5000;
+    // Используем короткий период (последние 7 дней) для быстрого discover
+    // Это найдёт активные кампании, включая МК которые не видны через Campaigns API
+    const today = new Date();
+    const sevenDaysAgo = new Date(today);
+    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+    const quickDateFrom = sevenDaysAgo.toISOString().split('T')[0];
+    const quickDateTo = today.toISOString().split('T')[0];
+
+    console.log(`[discoverCampaigns] Using quick 7-day range: ${quickDateFrom} - ${quickDateTo}`);
+
+    const maxRetries = 20;
+    const defaultRetryDelay = 3000;
     let response: any = null;
 
     try {
@@ -211,8 +220,8 @@ export const yandexDirectService = {
           {
             params: {
               SelectionCriteria: {
-                DateFrom: dateFrom,
-                DateTo: dateTo,
+                DateFrom: quickDateFrom,  // Используем короткий период для скорости
+                DateTo: quickDateTo,
               },
               FieldNames: ['CampaignId', 'CampaignName', 'CampaignType'],
               ReportName: `DiscoverCampaigns_${Date.now()}`,
@@ -230,7 +239,7 @@ export const yandexDirectService = {
               'returnMoneyInMicros': 'false',
               'skipReportHeader': 'true',
               'skipReportSummary': 'true',
-              'processingMode': 'auto', // Позволяет Яндексу выбрать оптимальный режим
+              'processingMode': 'auto',
             },
             validateStatus: (status) => status < 500, // Don't throw on 201/202
           }
