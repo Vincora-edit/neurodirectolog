@@ -196,36 +196,65 @@ export const yandexDirectService = {
     dateFrom: string,
     dateTo: string
   ): Promise<Array<{ id: number; name: string; type: string }>> {
-    console.log(`[discoverCampaigns] Discovering all campaigns via Reports API for ${login}`);
+    console.log(`[discoverCampaigns] Discovering all campaigns via Reports API for ${login} (${dateFrom} - ${dateTo})`);
+
+    const maxRetries = 10;
+    const retryDelay = 2000;
+    let response: any = null;
 
     try {
-      const response = await axios.post(
-        `${YANDEX_API_URL}/reports`,
-        {
-          params: {
-            SelectionCriteria: {
-              DateFrom: dateFrom,
-              DateTo: dateTo,
+      // Reports API может вернуть 201/202 если отчёт ещё строится
+      for (let attempt = 0; attempt < maxRetries; attempt++) {
+        response = await axios.post(
+          `${YANDEX_API_URL}/reports`,
+          {
+            params: {
+              SelectionCriteria: {
+                DateFrom: dateFrom,
+                DateTo: dateTo,
+              },
+              FieldNames: ['CampaignId', 'CampaignName', 'CampaignType'],
+              ReportName: `DiscoverCampaigns_${Date.now()}`,
+              ReportType: 'CAMPAIGN_PERFORMANCE_REPORT',
+              DateRangeType: 'CUSTOM_DATE',
+              Format: 'TSV',
+              IncludeVAT: 'YES',
             },
-            FieldNames: ['CampaignId', 'CampaignName', 'CampaignType'],
-            ReportName: `DiscoverCampaigns_${Date.now()}`,
-            ReportType: 'CAMPAIGN_PERFORMANCE_REPORT',
-            DateRangeType: 'CUSTOM_DATE',
-            Format: 'TSV',
-            IncludeVAT: 'YES',
           },
-        },
-        {
-          headers: {
-            'Authorization': `Bearer ${accessToken}`,
-            'Client-Login': login,
-            'Accept-Language': 'ru',
-            'returnMoneyInMicros': 'false',
-            'skipReportHeader': 'true',
-            'skipReportSummary': 'true',
-          },
+          {
+            headers: {
+              'Authorization': `Bearer ${accessToken}`,
+              'Client-Login': login,
+              'Accept-Language': 'ru',
+              'returnMoneyInMicros': 'false',
+              'skipReportHeader': 'true',
+              'skipReportSummary': 'true',
+            },
+            validateStatus: (status) => status < 500, // Don't throw on 201/202
+          }
+        );
+
+        if (response.status === 200) {
+          console.log(`[discoverCampaigns] Report ready on attempt ${attempt + 1}`);
+          break;
         }
-      );
+
+        if (response.status === 201 || response.status === 202) {
+          const retryIn = response.headers['retryin'] || retryDelay / 1000;
+          console.log(`[discoverCampaigns] Report in queue (status ${response.status}), waiting ${retryIn}s, attempt ${attempt + 1}/${maxRetries}`);
+          await new Promise(resolve => setTimeout(resolve, parseInt(retryIn) * 1000 || retryDelay));
+          continue;
+        }
+
+        // Other status - error
+        console.error(`[discoverCampaigns] Unexpected status ${response.status}`);
+        break;
+      }
+
+      if (!response || response.status !== 200) {
+        console.error('[discoverCampaigns] Failed to get report after all retries');
+        return [];
+      }
 
       const lines = response.data.split('\n').filter((line: string) => line.trim());
       const campaignsMap = new Map<number, { id: number; name: string; type: string }>();
