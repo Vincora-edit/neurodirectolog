@@ -198,8 +198,8 @@ export const yandexDirectService = {
   ): Promise<Array<{ id: number; name: string; type: string }>> {
     console.log(`[discoverCampaigns] Discovering all campaigns via Reports API for ${login} (${dateFrom} - ${dateTo})`);
 
-    const maxRetries = 10;
-    const retryDelay = 2000;
+    const maxRetries = 15;
+    const defaultRetryDelay = 3000;
     let response: any = null;
 
     try {
@@ -229,6 +229,7 @@ export const yandexDirectService = {
               'returnMoneyInMicros': 'false',
               'skipReportHeader': 'true',
               'skipReportSummary': 'true',
+              'processingMode': 'auto', // Позволяет Яндексу выбрать оптимальный режим
             },
             validateStatus: (status) => status < 500, // Don't throw on 201/202
           }
@@ -240,9 +241,11 @@ export const yandexDirectService = {
         }
 
         if (response.status === 201 || response.status === 202) {
-          const retryIn = response.headers['retryin'] || retryDelay / 1000;
-          console.log(`[discoverCampaigns] Report in queue (status ${response.status}), waiting ${retryIn}s, attempt ${attempt + 1}/${maxRetries}`);
-          await new Promise(resolve => setTimeout(resolve, parseInt(retryIn) * 1000 || retryDelay));
+          // Используем retryIn из заголовка или дефолтную задержку
+          const retryInHeader = response.headers['retryin'];
+          const retryIn = retryInHeader ? parseInt(retryInHeader) * 1000 : defaultRetryDelay;
+          console.log(`[discoverCampaigns] Report in queue (status ${response.status}), waiting ${retryIn/1000}s, attempt ${attempt + 1}/${maxRetries}`);
+          await new Promise(resolve => setTimeout(resolve, retryIn));
           continue;
         }
 
