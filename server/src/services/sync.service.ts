@@ -294,7 +294,13 @@ export const syncService = {
         console.log(`[Sync] Fetched ${adGroupData.length} ad group records`);
 
         if (adGroupData.length > 0) {
-          const adGroupRecords = adGroupData.map(row => {
+          // Фильтруем записи с ad_group_id = '--' (Мастер кампании не имеют реальных групп)
+          const validAdGroupData = adGroupData.filter(row =>
+            row.AdGroupId && row.AdGroupId !== '--' && row.AdGroupId !== ''
+          );
+          console.log(`[Sync] Filtered ad groups: ${adGroupData.length} -> ${validAdGroupData.length} (excluded Master campaigns placeholders)`);
+
+          const adGroupRecords = validAdGroupData.map(row => {
             const idString = `${connection.id}_${row.CampaignId}_${row.AdGroupId}_${row.Date}`;
             const id = crypto.createHash('md5').update(idString).digest('hex');
 
@@ -316,8 +322,10 @@ export const syncService = {
               revenue: 0,
             };
           });
-          await clickhouseService.insertAdGroupPerformance(adGroupRecords);
-          console.log(`[Sync] Inserted ${adGroupRecords.length} ad group records with real conversions`);
+          if (adGroupRecords.length > 0) {
+            await clickhouseService.insertAdGroupPerformance(adGroupRecords);
+            console.log(`[Sync] Inserted ${adGroupRecords.length} ad group records with real conversions`);
+          }
         }
 
         // 9.5.1. Сохраняем конверсии по группам с разбивкой по целям
@@ -332,7 +340,12 @@ export const syncService = {
           );
 
           if (adGroupConversionsData.length > 0) {
-            const adGroupConvRecords = adGroupConversionsData.map(row => {
+            // Фильтруем записи с ad_group_id = '--' (Мастер кампании)
+            const validConvData = adGroupConversionsData.filter(row =>
+              row.AdGroupId && row.AdGroupId !== '--' && row.AdGroupId !== ''
+            );
+
+            const adGroupConvRecords = validConvData.map(row => {
               const idString = `${connection.id}_${row.CampaignId}_${row.AdGroupId}_${row.GoalId}_${row.Date}`;
               const id = crypto.createHash('md5').update(idString).digest('hex');
               return {
@@ -346,8 +359,10 @@ export const syncService = {
                 revenue: row.Revenue || 0,
               };
             });
-            await clickhouseService.insertAdGroupConversions(adGroupConvRecords);
-            console.log(`[Sync] Inserted ${adGroupConvRecords.length} ad group conversion records by goal`);
+            if (adGroupConvRecords.length > 0) {
+              await clickhouseService.insertAdGroupConversions(adGroupConvRecords);
+              console.log(`[Sync] Inserted ${adGroupConvRecords.length} ad group conversion records by goal`);
+            }
           }
         }
       } catch (adGroupError) {
@@ -369,7 +384,14 @@ export const syncService = {
         console.log(`[Sync] Fetched ${adData.length} ad records`);
 
         if (adData.length > 0) {
-          const adRecords = adData.map(row => {
+          // Фильтруем записи с ad_id = '--' или ad_group_id = '--' (Мастер кампании)
+          const validAdData = adData.filter(row =>
+            row.AdId && row.AdId !== '--' && row.AdId !== '' &&
+            row.AdGroupId && row.AdGroupId !== '--' && row.AdGroupId !== ''
+          );
+          console.log(`[Sync] Filtered ads: ${adData.length} -> ${validAdData.length} (excluded Master campaigns placeholders)`);
+
+          const adRecords = validAdData.map(row => {
             const idString = `${connection.id}_${row.CampaignId}_${row.AdGroupId}_${row.AdId}_${row.Date}`;
             const id = crypto.createHash('md5').update(idString).digest('hex');
 
@@ -392,8 +414,10 @@ export const syncService = {
               revenue: 0,
             };
           });
-          await clickhouseService.insertAdPerformance(adRecords);
-          console.log(`[Sync] Inserted ${adRecords.length} ad records with real conversions`);
+          if (adRecords.length > 0) {
+            await clickhouseService.insertAdPerformance(adRecords);
+            console.log(`[Sync] Inserted ${adRecords.length} ad records with real conversions`);
+          }
 
           // 9.7. Получаем заголовки объявлений через Ads API
           console.log(`[Sync] Fetching ad titles...`);
@@ -448,7 +472,13 @@ export const syncService = {
           );
 
           if (adConversionsData.length > 0) {
-            const adConvRecords = adConversionsData.map(row => {
+            // Фильтруем записи с ad_id = '--' или ad_group_id = '--' (Мастер кампании)
+            const validAdConvData = adConversionsData.filter(row =>
+              row.AdId && row.AdId !== '--' && row.AdId !== '' &&
+              row.AdGroupId && row.AdGroupId !== '--' && row.AdGroupId !== ''
+            );
+
+            const adConvRecords = validAdConvData.map(row => {
               const idString = `${connection.id}_${row.CampaignId}_${row.AdGroupId}_${row.AdId}_${row.GoalId}_${row.Date}`;
               const id = crypto.createHash('md5').update(idString).digest('hex');
               return {
@@ -463,8 +493,10 @@ export const syncService = {
                 revenue: row.Revenue || 0,
               };
             });
-            await clickhouseService.insertAdConversions(adConvRecords);
-            console.log(`[Sync] Inserted ${adConvRecords.length} ad conversion records by goal`);
+            if (adConvRecords.length > 0) {
+              await clickhouseService.insertAdConversions(adConvRecords);
+              console.log(`[Sync] Inserted ${adConvRecords.length} ad conversion records by goal`);
+            }
           }
         }
       } catch (adError) {
