@@ -90,12 +90,8 @@ export const syncService = {
       await updateProgress(17, 'Поиск дополнительных кампаний...');
       const today = new Date();
 
-      // Для discover используем 30 дней - это быстрее
-      const thirtyDaysAgo = new Date(today);
-      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-      const discoverDateFrom = thirtyDaysAgo.toISOString().split('T')[0];
-
-      // Для статистики используем 90 дней
+      // Используем 90 дней для discover и статистики (одинаковый период)
+      // Чтобы найти все кампании, включая остановленные более 30 дней назад
       const ninetyDaysAgo = new Date(today);
       ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
       const dateFrom = ninetyDaysAgo.toISOString().split('T')[0];
@@ -104,7 +100,7 @@ export const syncService = {
       const discoveredCampaigns = await yandexDirectService.discoverAllCampaignsViaReports(
         accessToken,
         connection.login,
-        discoverDateFrom,  // 30 дней для быстрого обнаружения
+        dateFrom,  // 90 дней - тот же период что и для статистики
         dateTo
       );
 
