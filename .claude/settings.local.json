@@ -207,7 +207,9 @@
       "Bash(sshpass -p 'c9R+eLvxtQJ-,x' ssh -o StrictHostKeyChecking=no root@91.222.239.217 \"tail -50 /var/log/nginx/access.log | grep ''projects''\")",
       "Bash(sshpass -p 'c9R+eLvxtQJ-,x' ssh -o StrictHostKeyChecking=no root@91.222.239.217 \"tail -f /var/log/nginx/access.log 2>&1 | head -20 &\")",
       "Bash(sshpass -p 'c9R+eLvxtQJ-,x' ssh -o StrictHostKeyChecking=no root@91.222.239.217 \"tail -10 /var/log/nginx/access.log\")",
-      "Bash('https://dashboard.vincora.ru/api/auth/login')"
+      "Bash('https://dashboard.vincora.ru/api/auth/login')",
+      "Skill(deploy)",
+      "Skill(deploy:*)"
     ]
   }
 }

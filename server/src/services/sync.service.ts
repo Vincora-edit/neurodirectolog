@@ -158,6 +158,8 @@ export const syncService = {
         : [];
 
       console.log(`[Sync] Fetching detailed performance report for ${campaignIds.length} campaigns with ${goalIds.length} goals`);
+      console.log(`[Sync] Date range: ${dateFrom} to ${dateTo}`);
+      console.log(`[Sync] CampaignIds: ${campaignIds.slice(0, 10).join(', ')}${campaignIds.length > 10 ? '...' : ''}`);
 
       // Получаем детальный отчет с конверсиями
       const performanceData = await yandexDirectService.getCampaignPerformanceReport(
@@ -170,6 +172,24 @@ export const syncService = {
       );
 
       console.log(`[Sync] Fetched ${performanceData.length} performance records`);
+
+      // Группируем данные по кампаниям для debug
+      const campaignStats = new Map<string, { count: number; minDate: string; maxDate: string }>();
+      performanceData.forEach((row: any) => {
+        const campaignId = String(row.CampaignId);
+        const stats = campaignStats.get(campaignId) || { count: 0, minDate: row.Date, maxDate: row.Date };
+        stats.count++;
+        if (row.Date < stats.minDate) stats.minDate = row.Date;
+        if (row.Date > stats.maxDate) stats.maxDate = row.Date;
+        campaignStats.set(campaignId, stats);
+      });
+
+      // Логируем кампании с неполными данными (менее 30 записей)
+      campaignStats.forEach((stats, campaignId) => {
+        if (stats.count < 30) {
+          console.log(`[Sync] Campaign ${campaignId}: ${stats.count} records (${stats.minDate} - ${stats.maxDate})`);
+        }
+      });
 
       if (performanceData.length > 0) {
         console.log(`[Sync] Sample performance data:`, JSON.stringify(performanceData[0], null, 2));
