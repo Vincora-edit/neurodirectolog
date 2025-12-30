@@ -499,6 +499,9 @@ export const yandexDirectService = {
 
   /**
    * Получить детальную статистику с конверсиями (Campaign Performance Report)
+   *
+   * ВАЖНО: Для Мастер кампаний (МК) фильтр по CampaignId может не работать корректно.
+   * Поэтому запрашиваем ВСЕ данные без фильтра и фильтруем на стороне клиента.
    */
   async getCampaignPerformanceReport(
     accessToken: string,
@@ -531,21 +534,16 @@ export const yandexDirectService = {
       // Device, Age, Gender, IncomeGrade - могут не поддерживаться, проверим
     ];
 
-    // ВАЖНО: CAMPAIGN_PERFORMANCE_REPORT не поддерживает поля конверсий
-    // Конверсии нужно получать через отдельный Custom Report
-    // Временно отключаем поля конверсий чтобы хотя бы базовая статистика загрузилась
-    // TODO: Добавить отдельный запрос для конверсий
-    // goalIds.forEach(goalId => {
-    //   fields.push(`GOAL_${goalId}_AUTO_CONVERSIONS`);
-    //   fields.push(`GOAL_${goalId}_AUTO_REVENUE`);
-    // });
-
     let response;
     const maxRetries = 10;
     const retryDelay = 3000;
     const reportName = `CampPerf_${dateFrom}_${dateTo}_${Date.now()}`;
 
+    // Создаём Set для быстрой проверки
+    const campaignIdSet = new Set(campaignIds.map(String));
+
     // Retry loop для offline отчётов
+    // ВАЖНО: Запрашиваем БЕЗ фильтра по CampaignId чтобы получить данные по Мастер кампаниям
     for (let attempt = 0; attempt < maxRetries; attempt++) {
       try {
         response = await axios.post(
@@ -555,13 +553,7 @@ export const yandexDirectService = {
               SelectionCriteria: {
                 DateFrom: dateFrom,
                 DateTo: dateTo,
-                Filter: [
-                  {
-                    Field: 'CampaignId',
-                    Operator: 'IN',
-                    Values: campaignIds.map(String),
-                  },
-                ],
+                // НЕ используем Filter по CampaignId - это ограничивает данные для МК кампаний
               },
               FieldNames: fields,
               ReportName: reportName,
@@ -615,7 +607,7 @@ export const yandexDirectService = {
     console.log(`[getCampaignPerformanceReport] Response status: ${response.status}, data length: ${response.data?.length || 0}`);
 
     const lines = response.data.split('\n').filter((line: string) => line.trim());
-    console.log(`[getCampaignPerformanceReport] Parsed ${lines.length} lines`);
+    console.log(`[getCampaignPerformanceReport] Parsed ${lines.length} lines (before filtering)`);
     if (lines.length === 0) return [];
 
     // Первая строка - заголовки
@@ -633,12 +625,16 @@ export const yandexDirectService = {
 
       // Пропускаем строку если это дубликат заголовка (Date = "Date")
       if (row.Date === 'Date') {
-        console.log('[getCampaignPerformanceReport] Skipping header row at line', i);
         continue;
       }
 
-      results.push(row);
+      // Фильтруем по campaignIds (т.к. запрос без фильтра возвращает все кампании)
+      if (campaignIdSet.has(String(row.CampaignId))) {
+        results.push(row);
+      }
     }
+
+    console.log(`[getCampaignPerformanceReport] After filtering: ${results.length} records for ${campaignIds.length} campaigns`);
 
     return results;
   },
@@ -661,6 +657,7 @@ export const yandexDirectService = {
     const allResults: any[] = [];
     const maxRetries = 10;
     const retryDelay = 3000;
+    const campaignIdSet = new Set(campaignIds.map(String));
 
     for (const goalId of goalIds) {
       console.log(`[getConversionsReport] Fetching data for goal ${goalId}`);
@@ -670,6 +667,7 @@ export const yandexDirectService = {
         const reportName = `Conv_${goalId}_${dateFrom}_${dateTo}_${Date.now()}`;
 
         // Retry loop для offline отчётов
+        // БЕЗ фильтра по CampaignId для поддержки Мастер кампаний
         for (let attempt = 0; attempt < maxRetries; attempt++) {
           response = await axios.post(
             `${YANDEX_API_URL}/reports`,
@@ -678,13 +676,7 @@ export const yandexDirectService = {
                 SelectionCriteria: {
                   DateFrom: dateFrom,
                   DateTo: dateTo,
-                  Filter: [
-                    {
-                      Field: 'CampaignId',
-                      Operator: 'IN',
-                      Values: campaignIds.map(String),
-                    },
-                  ],
+                  // НЕ используем Filter - фильтруем на клиенте
                 },
                 FieldNames: ['Date', 'CampaignId', 'CampaignName', 'Conversions', 'Revenue'],
                 Goals: [goalId],
@@ -760,7 +752,10 @@ export const yandexDirectService = {
           const conversions = parseInt(row[conversionsKey]) || 0;
           const revenue = parseFloat(row[revenueKey]) || 0;
 
-          console.log(`[getConversionsReport] Row data - Date: ${row.Date}, ${conversionsKey}: ${conversions}, ${revenueKey}: ${revenue}`);
+          // Фильтруем по campaignIds
+          if (!campaignIdSet.has(String(row.CampaignId))) {
+            continue;
+          }
 
           // Добавляем строку только если есть конверсии
           if (conversions > 0 || revenue > 0) {
