@@ -198,8 +198,9 @@ export const yandexDirectService = {
   ): Promise<Array<{ id: number; name: string; type: string }>> {
     console.log(`[discoverCampaigns] Discovering all campaigns via Reports API for ${login} (${dateFrom} - ${dateTo})`);
 
-    const maxRetries = 15;
-    const defaultRetryDelay = 3000;
+    // Увеличен timeout для больших аккаунтов - 30 попыток по 5 сек = 2.5 минуты
+    const maxRetries = 30;
+    const defaultRetryDelay = 5000;
     let response: any = null;
 
     try {
@@ -540,7 +541,8 @@ export const yandexDirectService = {
     const reportName = `CampPerf_${dateFrom}_${dateTo}_${Date.now()}`;
 
     // Retry loop для offline отчётов
-    // ВАЖНО: Запрашиваем БЕЗ фильтра по CampaignId чтобы получить данные по Мастер кампаниям
+    // ВАЖНО: Используем Filter по CampaignId - без него API не возвращает полные данные для МК
+    // campaignIds должен включать все кампании, включая МК (обнаруженные через discoverAllCampaignsViaReports)
     for (let attempt = 0; attempt < maxRetries; attempt++) {
       try {
         response = await axios.post(
@@ -550,7 +552,13 @@ export const yandexDirectService = {
               SelectionCriteria: {
                 DateFrom: dateFrom,
                 DateTo: dateTo,
-                // НЕ используем Filter по CampaignId - это ограничивает данные для МК кампаний
+                Filter: [
+                  {
+                    Field: 'CampaignId',
+                    Operator: 'IN',
+                    Values: campaignIds.map(String),
+                  },
+                ],
               },
               FieldNames: fields,
               ReportName: reportName,
@@ -625,95 +633,10 @@ export const yandexDirectService = {
         continue;
       }
 
-      // НЕ фильтруем по campaignIds - сохраняем ВСЕ кампании включая Мастер Кампании,
-      // которые могут не быть в списке от Campaigns API
       results.push(row);
     }
 
-    console.log(`[getCampaignPerformanceReport] Parsed ${results.length} records (all campaigns, no filtering)`);
-
-    // Дополнительно: запрос через v501 API для Unified Campaigns (Мастер Кампаний)
-    // v501 API может возвращать больше данных для UNIFIED_CAMPAIGN
-    try {
-      console.log(`[getCampaignPerformanceReport] Trying v501 API for additional Unified Campaign data...`);
-      const v501ReportName = `V501_CampPerf_${dateFrom}_${dateTo}_${Date.now()}`;
-
-      let v501Response;
-      for (let attempt = 0; attempt < 5; attempt++) {
-        v501Response = await axios.post(
-          `${YANDEX_API_URL_V501}/reports`,
-          {
-            params: {
-              SelectionCriteria: {
-                DateFrom: dateFrom,
-                DateTo: dateTo,
-              },
-              FieldNames: fields,
-              ReportName: v501ReportName,
-              ReportType: 'CAMPAIGN_PERFORMANCE_REPORT',
-              DateRangeType: 'CUSTOM_DATE',
-              Format: 'TSV',
-              IncludeVAT: 'YES',
-              IncludeDiscount: 'NO',
-            },
-          },
-          {
-            headers: {
-              'Authorization': `Bearer ${accessToken}`,
-              'Client-Login': login,
-              'Accept-Language': 'ru',
-              'returnMoneyInMicros': 'false',
-              'skipReportHeader': 'true',
-              'skipReportSummary': 'true',
-            },
-          }
-        );
-
-        if (v501Response.status === 200) {
-          console.log(`[getCampaignPerformanceReport] v501 report ready`);
-          break;
-        }
-        if (v501Response.status === 201 || v501Response.status === 202) {
-          const retryIn = v501Response.headers['retryin'] || 3;
-          console.log(`[getCampaignPerformanceReport] v501 in queue, waiting ${retryIn}s...`);
-          await new Promise(resolve => setTimeout(resolve, parseInt(retryIn) * 1000 || 3000));
-          continue;
-        }
-      }
-
-      if (v501Response && v501Response.status === 200 && v501Response.data) {
-        const v501Lines = v501Response.data.split('\n').filter((line: string) => line.trim());
-        console.log(`[getCampaignPerformanceReport] v501 returned ${v501Lines.length} lines`);
-
-        if (v501Lines.length > 1) {
-          const v501Headers = v501Lines[0].split('\t');
-          const existingCampaignDates = new Set(results.map((r: any) => `${r.CampaignId}_${r.Date}`));
-          let addedFromV501 = 0;
-
-          for (let i = 1; i < v501Lines.length; i++) {
-            const values = v501Lines[i].split('\t');
-            const row: any = {};
-            v501Headers.forEach((header: string, index: number) => {
-              row[header] = values[index] || null;
-            });
-
-            if (row.Date === 'Date') continue;
-
-            const key = `${row.CampaignId}_${row.Date}`;
-            if (!existingCampaignDates.has(key)) {
-              results.push(row);
-              existingCampaignDates.add(key);
-              addedFromV501++;
-            }
-          }
-          console.log(`[getCampaignPerformanceReport] Added ${addedFromV501} new records from v501 API`);
-        }
-      }
-    } catch (v501Error: any) {
-      console.log(`[getCampaignPerformanceReport] v501 API request failed (this is okay, v5 data will be used):`, v501Error.message);
-    }
-
-    console.log(`[getCampaignPerformanceReport] Total records: ${results.length}`);
+    console.log(`[getCampaignPerformanceReport] Parsed ${results.length} records for ${campaignIds.length} campaigns`);
     return results;
   },
 
@@ -744,7 +667,7 @@ export const yandexDirectService = {
         const reportName = `Conv_${goalId}_${dateFrom}_${dateTo}_${Date.now()}`;
 
         // Retry loop для offline отчётов
-        // БЕЗ фильтра по CampaignId для поддержки Мастер кампаний
+        // Используем Filter по CampaignId - без него API не возвращает полные данные
         for (let attempt = 0; attempt < maxRetries; attempt++) {
           response = await axios.post(
             `${YANDEX_API_URL}/reports`,
@@ -753,7 +676,13 @@ export const yandexDirectService = {
                 SelectionCriteria: {
                   DateFrom: dateFrom,
                   DateTo: dateTo,
-                  // НЕ используем Filter - фильтруем на клиенте
+                  Filter: [
+                    {
+                      Field: 'CampaignId',
+                      Operator: 'IN',
+                      Values: campaignIds.map(String),
+                    },
+                  ],
                 },
                 FieldNames: ['Date', 'CampaignId', 'CampaignName', 'Conversions', 'Revenue'],
                 Goals: [goalId],
