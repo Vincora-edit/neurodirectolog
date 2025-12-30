@@ -241,9 +241,10 @@ export const yandexDirectService = {
         }
 
         if (response.status === 201 || response.status === 202) {
-          // Используем retryIn из заголовка или дефолтную задержку
+          // Используем retryIn из заголовка, но не меньше 3 секунд
           const retryInHeader = response.headers['retryin'];
-          const retryIn = retryInHeader ? parseInt(retryInHeader) * 1000 : defaultRetryDelay;
+          const retryInFromHeader = retryInHeader ? parseInt(retryInHeader) * 1000 : 0;
+          const retryIn = Math.max(retryInFromHeader, defaultRetryDelay);
           console.log(`[discoverCampaigns] Report in queue (status ${response.status}), waiting ${retryIn/1000}s, attempt ${attempt + 1}/${maxRetries}`);
           await new Promise(resolve => setTimeout(resolve, retryIn));
           continue;
