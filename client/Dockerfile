@@ -12,7 +12,12 @@ RUN npm install
 # Копируем исходники
 COPY . .
 
-# Переменная окружения для API URL
+# CRITICAL: VITE_API_URL ОБЯЗАТЕЛЕН при сборке!
+# Без этого аргумента клиент будет использовать localhost и не сможет подключиться к API.
+#
+# Production:  docker build --build-arg VITE_API_URL=https://dashboard.vincora.ru/api -t neurodirectolog_client:latest ./client
+# Staging:     docker build --build-arg VITE_API_URL=https://test-dashboard.vincora.ru/api -t neurodirectolog_client-staging:latest ./client
+#
 ARG VITE_API_URL
 ENV VITE_API_URL=$VITE_API_URL
 

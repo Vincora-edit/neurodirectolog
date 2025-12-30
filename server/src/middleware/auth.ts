@@ -50,14 +50,15 @@ export const authenticate = async (
       throw createError('Authentication required', 401);
     }
 
-    const decoded = jwt.verify(token, JWT_SECRET) as { userId: string; isAdmin?: boolean };
-    req.userId = decoded.userId;
+    const decoded = jwt.verify(token, JWT_SECRET) as { userId?: string; id?: string; isAdmin?: boolean };
+    // Поддержка старых токенов с полем 'id' и новых с 'userId'
+    req.userId = decoded.userId || decoded.id;
     // Проверяем isAdmin из токена, а если нет - читаем из ClickHouse (с кешем)
-    req.isAdmin = decoded.isAdmin ?? await getUserIsAdmin(decoded.userId);
+    req.isAdmin = decoded.isAdmin ?? await getUserIsAdmin(req.userId!);
 
     // Трекинг API запроса
     try {
-      usageService.trackApiRequest(decoded.userId);
+      usageService.trackApiRequest(req.userId!);
     } catch (e) {
       // Не прерываем запрос из-за ошибки трекинга
       console.error('Usage tracking error:', e);

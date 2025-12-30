@@ -186,6 +186,85 @@ export const yandexDirectService = {
   },
 
   /**
+   * Получить ВСЕ кампании через Reports API (включая Мастер кампаний)
+   * Reports API возвращает кампании, которые не доступны через Campaigns API
+   * Например: кампании созданные через "Мастер кампаний" в интерфейсе Яндекса
+   */
+  async discoverAllCampaignsViaReports(
+    accessToken: string,
+    login: string,
+    dateFrom: string,
+    dateTo: string
+  ): Promise<Array<{ id: number; name: string; type: string }>> {
+    console.log(`[discoverCampaigns] Discovering all campaigns via Reports API for ${login}`);
+
+    try {
+      const response = await axios.post(
+        `${YANDEX_API_URL}/reports`,
+        {
+          params: {
+            SelectionCriteria: {
+              DateFrom: dateFrom,
+              DateTo: dateTo,
+            },
+            FieldNames: ['CampaignId', 'CampaignName', 'CampaignType'],
+            ReportName: `DiscoverCampaigns_${Date.now()}`,
+            ReportType: 'CAMPAIGN_PERFORMANCE_REPORT',
+            DateRangeType: 'CUSTOM_DATE',
+            Format: 'TSV',
+            IncludeVAT: 'YES',
+          },
+        },
+        {
+          headers: {
+            'Authorization': `Bearer ${accessToken}`,
+            'Client-Login': login,
+            'Accept-Language': 'ru',
+            'returnMoneyInMicros': 'false',
+            'skipReportHeader': 'true',
+            'skipReportSummary': 'true',
+          },
+        }
+      );
+
+      const lines = response.data.split('\n').filter((line: string) => line.trim());
+      const campaignsMap = new Map<number, { id: number; name: string; type: string }>();
+
+      for (let i = 0; i < lines.length; i++) {
+        const line = lines[i];
+        const [campaignId, campaignName, campaignType] = line.split('\t');
+
+        // Skip header row
+        if (i === 0 && campaignId === 'CampaignId') continue;
+
+        const id = parseInt(campaignId);
+        if (!isNaN(id) && campaignName) {
+          campaignsMap.set(id, {
+            id,
+            name: campaignName,
+            type: campaignType || 'UNKNOWN',
+          });
+        }
+      }
+
+      const campaigns = Array.from(campaignsMap.values());
+      console.log(`[discoverCampaigns] Found ${campaigns.length} campaigns via Reports API`);
+
+      // Log types breakdown
+      const typeBreakdown = campaigns.reduce((acc, c) => {
+        acc[c.type] = (acc[c.type] || 0) + 1;
+        return acc;
+      }, {} as Record<string, number>);
+      console.log(`[discoverCampaigns] Types breakdown:`, typeBreakdown);
+
+      return campaigns;
+    } catch (error: any) {
+      console.error('[discoverCampaigns] Failed:', error.response?.data || error.message);
+      return [];
+    }
+  },
+
+  /**
    * Получить статистику по кампаниям
    */
   async getCampaignStats(

@@ -41,14 +41,20 @@ router.get('/list', authenticate, async (req, res, next) => {
     const authReq = req as AuthRequest;
     const userId = authReq.userId;
     const isAdmin = authReq.isAdmin || false;
+
+    console.log(`[Projects] /list called - userId: ${userId}, isAdmin: ${isAdmin}`);
+
     // Возвращаем проекты пользователя (админы видят все)
     const projects = await projectStore.getByUserIdLightweight(userId!, isAdmin);
+
+    console.log(`[Projects] Found ${projects.length} projects for user ${userId}`);
 
     res.json({
       success: true,
       data: projects
     });
   } catch (error) {
+    console.error(`[Projects] Error in /list:`, error);
     next(error);
   }
 });

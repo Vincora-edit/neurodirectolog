@@ -80,10 +80,50 @@ export const syncService = {
         }
       }
 
-      // 3. Получаем список кампаний из Яндекс.Директ
+      // 3. Получаем список кампаний из Яндекс.Директ (Campaigns API)
       await updateProgress(15, 'Загрузка списка кампаний...');
-      const campaigns = await yandexDirectService.getCampaigns(accessToken, connection.login);
-      console.log(`[Sync] Found ${campaigns.length} campaigns`);
+      const campaignsFromApi = await yandexDirectService.getCampaigns(accessToken, connection.login);
+      console.log(`[Sync] Found ${campaignsFromApi.length} campaigns from Campaigns API`);
+
+      // 3.5. Дополнительно обнаруживаем кампании через Reports API
+      // Это нужно для "Мастер кампаний", которые не возвращаются через Campaigns API
+      await updateProgress(17, 'Поиск дополнительных кампаний...');
+      const today = new Date();
+      const ninetyDaysAgo = new Date(today);
+      ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
+      const dateFrom = ninetyDaysAgo.toISOString().split('T')[0];
+      const dateTo = today.toISOString().split('T')[0];
+
+      const discoveredCampaigns = await yandexDirectService.discoverAllCampaignsViaReports(
+        accessToken,
+        connection.login,
+        dateFrom,
+        dateTo
+      );
+
+      // Мержим кампании: из Campaigns API + обнаруженные через Reports API
+      const campaignIdsFromApi = new Set(campaignsFromApi.map(c => c.Id));
+      const hiddenCampaigns = discoveredCampaigns.filter(c => !campaignIdsFromApi.has(c.id));
+
+      if (hiddenCampaigns.length > 0) {
+        console.log(`[Sync] Found ${hiddenCampaigns.length} additional campaigns via Reports API (Мастер кампаний и др.):`);
+        hiddenCampaigns.forEach(c => console.log(`  - ${c.id}: ${c.name} (${c.type})`));
+      }
+
+      // Объединяем все кампании
+      const campaigns = [
+        ...campaignsFromApi,
+        ...hiddenCampaigns.map(c => ({
+          Id: c.id,
+          Name: c.name,
+          Status: 'ACCEPTED' as const,
+          State: 'ON' as const, // Раз есть статистика, значит активна
+          Type: c.type as any,
+          DailyBudget: undefined,
+        })),
+      ];
+
+      console.log(`[Sync] Total campaigns after merge: ${campaigns.length}`);
 
       if (campaigns.length === 0) {
         console.log(`[Sync] No campaigns found for connection ${connectionId}`);
@@ -106,12 +146,6 @@ export const syncService = {
 
       // 5. Получаем детальную статистику за последние 90 дней (3 месяца)
       await updateProgress(20, 'Загрузка статистики кампаний...');
-      const today = new Date();
-      const ninetyDaysAgo = new Date(today);
-      ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
-
-      const dateFrom = ninetyDaysAgo.toISOString().split('T')[0];
-      const dateTo = today.toISOString().split('T')[0];
 
       const campaignIds = campaigns.map(c => c.Id);
 

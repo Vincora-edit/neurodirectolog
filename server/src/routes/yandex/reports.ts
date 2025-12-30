@@ -57,6 +57,29 @@ function parseGoalIds(connection: any): string[] {
   return goalIds;
 }
 
+// Максимальное количество campaignIds для Яндекс API
+const MAX_CAMPAIGN_IDS = 10000;
+
+// Хелпер для получения campaignIds с ограничением
+async function getCampaignIdsLimited(
+  connection: any,
+  campaignId?: string
+): Promise<{ campaignIds: number[]; truncated: boolean }> {
+  if (campaignId) {
+    return { campaignIds: [parseInt(campaignId)], truncated: false };
+  }
+
+  const campaigns = await clickhouseService.getCampaignsByConnectionId(connection.id);
+  const allIds = campaigns.map(c => parseInt(c.externalId));
+
+  if (allIds.length > MAX_CAMPAIGN_IDS) {
+    console.log(`[Reports] Too many campaigns (${allIds.length}), limiting to ${MAX_CAMPAIGN_IDS}`);
+    return { campaignIds: allIds.slice(0, MAX_CAMPAIGN_IDS), truncated: true };
+  }
+
+  return { campaignIds: allIds, truncated: false };
+}
+
 /**
  * GET /api/yandex/search-queries/:projectId
  * Получить статистику по поисковым запросам (из ClickHouse, fallback на API)
@@ -91,13 +114,10 @@ router.get('/search-queries/:projectId', authenticate, requireProjectAccess, asy
     if (searchQueries.length === 0) {
       console.log(`[SearchQueries] No data in ClickHouse, falling back to API...`);
 
-      // Получаем campaign IDs для API запроса
-      let campaignIds: number[];
-      if (campaignId) {
-        campaignIds = [parseInt(campaignId as string)];
-      } else {
-        const campaigns = await clickhouseService.getCampaignsByConnectionId(connection.id);
-        campaignIds = campaigns.map(c => parseInt(c.externalId));
+      // Получаем campaign IDs для API запроса (с ограничением)
+      const { campaignIds, truncated } = await getCampaignIdsLimited(connection, campaignId as string);
+      if (truncated) {
+        console.log(`[SearchQueries] Campaign list truncated to ${MAX_CAMPAIGN_IDS}`);
       }
 
       if (campaignIds.length > 0) {
@@ -149,13 +169,7 @@ router.get('/demographics/:projectId', authenticate, requireProjectAccess, async
     const dateFrom = startDate.toISOString().split('T')[0];
     const dateTo = endDate.toISOString().split('T')[0];
 
-    let campaignIds: number[];
-    if (campaignId) {
-      campaignIds = [parseInt(campaignId as string)];
-    } else {
-      const campaigns = await clickhouseService.getCampaignsByConnectionId(connection.id);
-      campaignIds = campaigns.map(c => parseInt(c.externalId));
-    }
+    const { campaignIds } = await getCampaignIdsLimited(connection, campaignId as string);
 
     if (campaignIds.length === 0) {
       return res.json([]);
@@ -197,8 +211,7 @@ router.get('/geo-stats/:projectId', authenticate, requireProjectAccess, async (r
     const dateFrom = startDate.toISOString().split('T')[0];
     const dateTo = endDate.toISOString().split('T')[0];
 
-    const campaigns = await clickhouseService.getCampaignsByConnectionId(connection.id);
-    const campaignIds = campaigns.map(c => parseInt(c.externalId));
+    const { campaignIds } = await getCampaignIdsLimited(connection);
 
     if (campaignIds.length === 0) {
       return res.json([]);
@@ -278,13 +291,7 @@ router.get('/geo-report/:projectId', authenticate, requireProjectAccess, async (
     const dateFrom = startDate.toISOString().split('T')[0];
     const dateTo = endDate.toISOString().split('T')[0];
 
-    let campaignIds: number[];
-    if (campaignId) {
-      campaignIds = [parseInt(campaignId as string)];
-    } else {
-      const campaigns = await clickhouseService.getCampaignsByConnectionId(connection.id);
-      campaignIds = campaigns.map(c => parseInt(c.externalId));
-    }
+    const { campaignIds } = await getCampaignIdsLimited(connection, campaignId as string);
 
     if (campaignIds.length === 0) {
       return res.json([]);
@@ -336,13 +343,7 @@ router.get('/device-stats/:projectId', authenticate, requireProjectAccess, async
     const dateFrom = startDate.toISOString().split('T')[0];
     const dateTo = endDate.toISOString().split('T')[0];
 
-    let campaignIds: number[];
-    if (campaignId) {
-      campaignIds = [parseInt(campaignId as string)];
-    } else {
-      const campaigns = await clickhouseService.getCampaignsByConnectionId(connection.id);
-      campaignIds = campaigns.map(c => parseInt(c.externalId));
-    }
+    const { campaignIds } = await getCampaignIdsLimited(connection, campaignId as string);
 
     if (campaignIds.length === 0) {
       return res.json([]);
@@ -432,13 +433,7 @@ router.get('/placements/:projectId', authenticate, requireProjectAccess, async (
     const dateFrom = startDate.toISOString().split('T')[0];
     const dateTo = endDate.toISOString().split('T')[0];
 
-    let campaignIds: number[];
-    if (campaignId) {
-      campaignIds = [parseInt(campaignId as string)];
-    } else {
-      const campaigns = await clickhouseService.getCampaignsByConnectionId(connection.id);
-      campaignIds = campaigns.map(c => parseInt(c.externalId));
-    }
+    const { campaignIds } = await getCampaignIdsLimited(connection, campaignId as string);
 
     if (campaignIds.length === 0) {
       return res.json([]);
@@ -480,13 +475,7 @@ router.get('/income/:projectId', authenticate, requireProjectAccess, async (req:
     const dateFrom = startDate.toISOString().split('T')[0];
     const dateTo = endDate.toISOString().split('T')[0];
 
-    let campaignIds: number[];
-    if (campaignId) {
-      campaignIds = [parseInt(campaignId as string)];
-    } else {
-      const campaigns = await clickhouseService.getCampaignsByConnectionId(connection.id);
-      campaignIds = campaigns.map(c => parseInt(c.externalId));
-    }
+    const { campaignIds } = await getCampaignIdsLimited(connection, campaignId as string);
 
     if (campaignIds.length === 0) {
       return res.json([]);
@@ -528,13 +517,7 @@ router.get('/targeting-categories/:projectId', authenticate, requireProjectAcces
     const dateFrom = startDate.toISOString().split('T')[0];
     const dateTo = endDate.toISOString().split('T')[0];
 
-    let campaignIds: number[];
-    if (campaignId) {
-      campaignIds = [parseInt(campaignId as string)];
-    } else {
-      const campaigns = await clickhouseService.getCampaignsByConnectionId(connection.id);
-      campaignIds = campaigns.map(c => parseInt(c.externalId));
-    }
+    const { campaignIds } = await getCampaignIdsLimited(connection, campaignId as string);
 
     if (campaignIds.length === 0) {
       return res.json([]);
@@ -576,13 +559,7 @@ router.get('/criteria/:projectId', authenticate, requireProjectAccess, async (re
     const dateFrom = startDate.toISOString().split('T')[0];
     const dateTo = endDate.toISOString().split('T')[0];
 
-    let campaignIds: number[];
-    if (campaignId) {
-      campaignIds = [parseInt(campaignId as string)];
-    } else {
-      const campaigns = await clickhouseService.getCampaignsByConnectionId(connection.id);
-      campaignIds = campaigns.map(c => parseInt(c.externalId));
-    }
+    const { campaignIds } = await getCampaignIdsLimited(connection, campaignId as string);
 
     if (campaignIds.length === 0) {
       return res.json([]);
@@ -636,13 +613,7 @@ router.get('/ad-texts/:projectId', authenticate, requireProjectAccess, async (re
     }
 
     // Fallback на Яндекс API
-    let campaignIds: number[];
-    if (campaignId) {
-      campaignIds = [parseInt(campaignId as string)];
-    } else {
-      const campaigns = await clickhouseService.getCampaignsByConnectionId(connection.id);
-      campaignIds = campaigns.map(c => parseInt(c.externalId));
-    }
+    const { campaignIds } = await getCampaignIdsLimited(connection, campaignId as string);
 
     if (campaignIds.length === 0) {
       return res.json([]);
