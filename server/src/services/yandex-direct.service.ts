@@ -539,9 +539,6 @@ export const yandexDirectService = {
     const retryDelay = 3000;
     const reportName = `CampPerf_${dateFrom}_${dateTo}_${Date.now()}`;
 
-    // Создаём Set для быстрой проверки
-    const campaignIdSet = new Set(campaignIds.map(String));
-
     // Retry loop для offline отчётов
     // ВАЖНО: Запрашиваем БЕЗ фильтра по CampaignId чтобы получить данные по Мастер кампаниям
     for (let attempt = 0; attempt < maxRetries; attempt++) {
@@ -628,13 +625,12 @@ export const yandexDirectService = {
         continue;
       }
 
-      // Фильтруем по campaignIds (т.к. запрос без фильтра возвращает все кампании)
-      if (campaignIdSet.has(String(row.CampaignId))) {
-        results.push(row);
-      }
+      // НЕ фильтруем по campaignIds - сохраняем ВСЕ кампании включая Мастер Кампании,
+      // которые могут не быть в списке от Campaigns API
+      results.push(row);
     }
 
-    console.log(`[getCampaignPerformanceReport] After filtering: ${results.length} records for ${campaignIds.length} campaigns`);
+    console.log(`[getCampaignPerformanceReport] Parsed ${results.length} records (all campaigns, no filtering)`);
 
     return results;
   },
@@ -657,7 +653,6 @@ export const yandexDirectService = {
     const allResults: any[] = [];
     const maxRetries = 10;
     const retryDelay = 3000;
-    const campaignIdSet = new Set(campaignIds.map(String));
 
     for (const goalId of goalIds) {
       console.log(`[getConversionsReport] Fetching data for goal ${goalId}`);
@@ -752,10 +747,7 @@ export const yandexDirectService = {
           const conversions = parseInt(row[conversionsKey]) || 0;
           const revenue = parseFloat(row[revenueKey]) || 0;
 
-          // Фильтруем по campaignIds
-          if (!campaignIdSet.has(String(row.CampaignId))) {
-            continue;
-          }
+          // НЕ фильтруем по campaignIds - сохраняем все кампании включая Мастер Кампании
 
           // Добавляем строку только если есть конверсии
           if (conversions > 0 || revenue > 0) {

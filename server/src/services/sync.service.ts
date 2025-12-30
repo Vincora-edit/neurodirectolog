@@ -223,6 +223,42 @@ export const syncService = {
       const userInfo = await yandexDirectService.getUserInfo(accessToken);
       const accountName = userInfo.login || connection.login;
 
+      // 6.5. Обнаруживаем и сохраняем кампании, которые есть в отчёте, но не в списке campaigns
+      // Это важно для Мастер Кампаний, которые могут не возвращаться через Campaigns API
+      const existingCampaignIds = new Set(campaigns.map(c => String(c.Id)));
+      const newCampaignsFromReport = new Map<string, { id: string; name: string; type: string }>();
+
+      performanceData.forEach((row: any) => {
+        const campaignId = String(row.CampaignId);
+        if (!existingCampaignIds.has(campaignId) && !newCampaignsFromReport.has(campaignId)) {
+          newCampaignsFromReport.set(campaignId, {
+            id: campaignId,
+            name: row.CampaignName || `Campaign ${campaignId}`,
+            type: row.CampaignType || 'UNKNOWN',
+          });
+        }
+      });
+
+      if (newCampaignsFromReport.size > 0) {
+        console.log(`[Sync] Found ${newCampaignsFromReport.size} new campaigns from performance report (Мастер кампании и др.):`);
+        newCampaignsFromReport.forEach((c, id) => console.log(`  - ${id}: ${c.name} (${c.type})`));
+
+        // Добавляем их в таблицу campaigns
+        const newCampaignData = Array.from(newCampaignsFromReport.values()).map(c => ({
+          connectionId: connection.id,
+          externalId: c.id,
+          name: c.name,
+          status: 'ON' as 'ON' | 'OFF' | 'ARCHIVED', // Раз есть статистика, значит активна
+          type: c.type,
+          dailyBudget: 0,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        }));
+
+        await clickhouseService.upsertCampaigns(newCampaignData);
+        console.log(`[Sync] Saved ${newCampaignData.length} new campaigns from report`);
+      }
+
       // 7. Преобразуем данные для campaign_performance
       const performanceRecords = performanceData.map(row => {
         // Генерируем детерминированный ID для предотвращения дубликатов
