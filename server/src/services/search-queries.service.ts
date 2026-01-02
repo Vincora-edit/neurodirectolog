@@ -820,8 +820,29 @@ ${JSON.stringify(queryData, null, 2)}
         isBigram: data.isBigram,
       }));
 
+    // Filter out clusters with good CPL - they don't need analysis
+    // A cluster is "good" if:
+    // 1. Has conversions AND CPL is below target (or target not set and CPL < 5000)
+    // 2. OR 100% target queries (no trash/review)
+    const targetCplThreshold = maxCpl || 5000;
+    const clustersNeedingReview = allClusters.filter(cluster => {
+      // If cluster is 100% target queries - skip it, everything is fine
+      if (cluster.targetCount > 0 && cluster.trashCount === 0 && cluster.reviewCount === 0) {
+        return false;
+      }
+      // If cluster has good CPL (below target) and mostly target queries - skip it
+      if (cluster.conversions > 0 && cluster.cpl <= targetCplThreshold && cluster.cpl > 0) {
+        // But still show if there's significant trash
+        const trashRatio = cluster.trashCount / cluster.queries;
+        if (trashRatio < 0.2) { // Less than 20% trash
+          return false;
+        }
+      }
+      return true;
+    });
+
     // Sort: bigrams first (if significant), then by query count
-    const clusters: QueryCluster[] = allClusters
+    const clusters: QueryCluster[] = clustersNeedingReview
       .sort((a, b) => {
         // Bigrams with decent data get priority
         if (a.isBigram && !b.isBigram && a.queries >= 5) return -1;
