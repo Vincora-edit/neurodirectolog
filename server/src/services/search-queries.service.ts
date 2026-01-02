@@ -61,12 +61,29 @@ export interface MinusWordSuggestion {
   category: 'irrelevant' | 'low_quality' | 'competitor' | 'informational' | 'other';
 }
 
+export interface QueryCluster {
+  keyword: string;
+  queries: number;
+  impressions: number;
+  clicks: number;
+  cost: number;
+  conversions: number;
+  ctr: number;
+  cpl: number;
+  avgCpc: number;
+  // Distribution across categories
+  targetCount: number;
+  trashCount: number;
+  reviewCount: number;
+}
+
 export interface AnalysisResult {
   totalQueries: number;
   targetQueries: QueryAnalysis[];
   trashQueries: QueryAnalysis[];
   reviewQueries: QueryAnalysis[];
   suggestedMinusWords: MinusWordSuggestion[];
+  clusters?: QueryCluster[]; // Keyword clusters for analysis
   summary: {
     totalCost: number;
     wastedCost: number;
@@ -569,12 +586,87 @@ ${JSON.stringify(queryData, null, 2)}
     const totalCost = significantQueries.reduce((sum, q) => sum + q.cost, 0);
     const wastedCost = trashQueries.reduce((sum, q) => sum + q.metrics.cost, 0);
 
+    // Build keyword clusters for analysis
+    // Group queries by significant words (length >= 4) to find patterns
+    const clusterMap = new Map<string, {
+      queries: Set<string>;
+      impressions: number;
+      clicks: number;
+      cost: number;
+      conversions: number;
+      targetCount: number;
+      trashCount: number;
+      reviewCount: number;
+    }>();
+
+    // Helper to add query to cluster
+    const addToCluster = (query: string, metrics: { impressions: number; clicks: number; cost: number; conversions: number }, category: 'target' | 'trash' | 'review') => {
+      const words = query.toLowerCase().split(/\s+/).filter(w => w.length >= 4);
+      for (const word of words) {
+        if (!clusterMap.has(word)) {
+          clusterMap.set(word, {
+            queries: new Set(),
+            impressions: 0,
+            clicks: 0,
+            cost: 0,
+            conversions: 0,
+            targetCount: 0,
+            trashCount: 0,
+            reviewCount: 0,
+          });
+        }
+        const cluster = clusterMap.get(word)!;
+        if (!cluster.queries.has(query)) {
+          cluster.queries.add(query);
+          cluster.impressions += metrics.impressions;
+          cluster.clicks += metrics.clicks;
+          cluster.cost += metrics.cost;
+          cluster.conversions += metrics.conversions;
+          if (category === 'target') cluster.targetCount++;
+          else if (category === 'trash') cluster.trashCount++;
+          else cluster.reviewCount++;
+        }
+      }
+    };
+
+    // Add all queries to clusters
+    for (const q of targetQueries) {
+      addToCluster(q.query, q.metrics, 'target');
+    }
+    for (const q of trashQueries) {
+      addToCluster(q.query, q.metrics, 'trash');
+    }
+    for (const q of reviewQueries) {
+      addToCluster(q.query, q.metrics, 'review');
+    }
+
+    // Convert to array and sort by total queries
+    const clusters: QueryCluster[] = Array.from(clusterMap.entries())
+      .filter(([_, data]) => data.queries.size >= 3) // At least 3 queries in cluster
+      .map(([keyword, data]) => ({
+        keyword,
+        queries: data.queries.size,
+        impressions: data.impressions,
+        clicks: data.clicks,
+        cost: data.cost,
+        conversions: data.conversions,
+        ctr: data.impressions > 0 ? (data.clicks / data.impressions) * 100 : 0,
+        cpl: data.conversions > 0 ? data.cost / data.conversions : 0,
+        avgCpc: data.clicks > 0 ? data.cost / data.clicks : 0,
+        targetCount: data.targetCount,
+        trashCount: data.trashCount,
+        reviewCount: data.reviewCount,
+      }))
+      .sort((a, b) => b.queries - a.queries)
+      .slice(0, 100); // Top 100 clusters
+
     return {
       totalQueries: significantQueries.length,
       targetQueries,
       trashQueries,
       reviewQueries,
       suggestedMinusWords,
+      clusters,
       summary: {
         totalCost,
         wastedCost,
