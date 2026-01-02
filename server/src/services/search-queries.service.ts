@@ -156,6 +156,7 @@ export const searchQueriesService = {
     // Prepare query data for AI
     const queryData = topQueries.map(q => ({
       query: q.query,
+      impressions: q.impressions,
       clicks: q.clicks,
       cost: Math.round(q.cost),
       conversions: q.conversions,
@@ -175,6 +176,8 @@ ${JSON.stringify(queryData, null, 2)}
 1. TARGET (целевой) - запросы с коммерческим интентом, соответствующие бизнесу
 2. TRASH (мусор) - нерелевантные запросы, информационные, конкуренты, ошибочные
 3. REVIEW (требует проверки) - неоднозначные запросы
+
+ВАЖНО: Обращай внимание на CTR! Запросы с высокими показами (100+), но очень низким CTR (<1%) или 0 кликов — скорее всего нерелевантные и должны быть помечены как TRASH или REVIEW.
 
 Для TRASH запросов предложи минус-слова.
 
@@ -321,6 +324,8 @@ ${JSON.stringify(queryData, null, 2)}
       maxCpl?: number;
       minConversionRate?: number;
       stopWords?: string[];
+      minImpressionsForLowCtr?: number;
+      lowCtrThreshold?: number;
     } = {}
   ): AnalysisResult {
     const {
@@ -328,6 +333,8 @@ ${JSON.stringify(queryData, null, 2)}
       maxCpl = 5000,
       // minConversionRate is reserved for future use
       stopWords = ['бесплатно', 'скачать', 'торрент', 'своими руками', 'отзывы', 'что это', 'как'],
+      minImpressionsForLowCtr = 100, // Минимум показов для проверки CTR
+      lowCtrThreshold = 1.0, // CTR ниже 1% считается низким
     } = config;
 
     const targetQueries: QueryAnalysis[] = [];
@@ -356,6 +363,48 @@ ${JSON.stringify(queryData, null, 2)}
           },
         });
         continue;
+      }
+
+      // Check for high impressions but low/no clicks (low CTR = likely irrelevant)
+      if (query.impressions >= minImpressionsForLowCtr && query.ctr < lowCtrThreshold) {
+        // Extract potential minus words from query
+        const words = query.query.toLowerCase().split(/\s+/).filter(w => w.length >= 3);
+
+        if (query.clicks === 0) {
+          // No clicks at all - likely trash
+          trashQueries.push({
+            query: query.query,
+            category: 'trash',
+            reason: `${query.impressions} показов, 0 кликов — нерелевантный запрос`,
+            suggestedMinusWords: words.slice(0, 3), // Suggest first 3 words
+            metrics: {
+              impressions: query.impressions,
+              clicks: query.clicks,
+              cost: query.cost,
+              conversions: query.conversions,
+              ctr: query.ctr,
+              cpl: query.cpl,
+            },
+          });
+          continue;
+        } else {
+          // Very low CTR - needs review
+          reviewQueries.push({
+            query: query.query,
+            category: 'review',
+            reason: `Низкий CTR (${query.ctr.toFixed(2)}%) при ${query.impressions} показах`,
+            suggestedMinusWords: [],
+            metrics: {
+              impressions: query.impressions,
+              clicks: query.clicks,
+              cost: query.cost,
+              conversions: query.conversions,
+              ctr: query.ctr,
+              cpl: query.cpl,
+            },
+          });
+          continue;
+        }
       }
 
       // Check conversion metrics
