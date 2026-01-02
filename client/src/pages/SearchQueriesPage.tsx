@@ -64,6 +64,8 @@ interface AnalysisResult {
 interface Connection {
   id: string;
   login: string;
+  projectId: string;
+  projectName: string;
 }
 
 type SourceMode = 'auto' | 'manual';
@@ -98,14 +100,19 @@ export default function SearchQueriesPage() {
   const [selectedMinusWords, setSelectedMinusWords] = useState<Set<string>>(new Set());
   const [expandedQueries, setExpandedQueries] = useState<Set<string>>(new Set());
 
+  const [connectionsLoading, setConnectionsLoading] = useState(true);
+
   // Load connections on mount
   useEffect(() => {
-    fetchConnections().then((conns) => {
-      setConnections(conns);
-      if (conns.length > 0) {
-        setActiveConnectionId(conns[0].id);
-      }
-    });
+    setConnectionsLoading(true);
+    fetchConnections()
+      .then((conns) => {
+        setConnections(conns);
+        if (conns.length > 0) {
+          setActiveConnectionId(conns[0].id);
+        }
+      })
+      .finally(() => setConnectionsLoading(false));
   }, []);
 
   // Auto mode mutation
@@ -317,6 +324,20 @@ export default function SearchQueriesPage() {
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
         {sourceMode === 'auto' ? (
           /* Auto mode form */
+          connectionsLoading ? (
+            <div className="flex items-center justify-center py-8">
+              <Loader2 className="animate-spin text-purple-600" size={24} />
+              <span className="ml-2 text-gray-600">Загрузка аккаунтов...</span>
+            </div>
+          ) : connections.length === 0 ? (
+            <div className="text-center py-8">
+              <AlertCircle className="mx-auto text-amber-500 mb-3" size={32} />
+              <p className="text-gray-700 font-medium">Нет подключённых аккаунтов</p>
+              <p className="text-gray-500 text-sm mt-1">
+                Подключите Яндекс.Директ в разделе проектов для автоматической загрузки запросов
+              </p>
+            </div>
+          ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
             {/* Connection selector */}
             <div>
@@ -328,7 +349,7 @@ export default function SearchQueriesPage() {
               >
                 {connections.map((conn) => (
                   <option key={conn.id} value={conn.id}>
-                    {conn.login}
+                    {conn.login} ({conn.projectName})
                   </option>
                 ))}
               </select>
@@ -378,6 +399,7 @@ export default function SearchQueriesPage() {
               </button>
             </div>
           </div>
+          )
         ) : (
           /* Manual mode form */
           <div className="space-y-4 mb-6">
@@ -435,7 +457,7 @@ export default function SearchQueriesPage() {
         )}
 
         {/* Business description for AI */}
-        {useAi && (
+        {useAi && !(sourceMode === 'auto' && (connectionsLoading || connections.length === 0)) && (
           <div className="mb-6">
             <label className="block text-sm font-medium text-gray-700 mb-1">
               Описание бизнеса (для AI)
@@ -451,18 +473,20 @@ export default function SearchQueriesPage() {
         )}
 
         {/* Analyze button */}
-        <button
-          onClick={handleAnalyze}
-          disabled={isAnalyzing || (sourceMode === 'auto' && !activeConnectionId) || (sourceMode === 'manual' && !manualQueries.trim())}
-          className="w-full flex items-center justify-center gap-2 bg-purple-600 text-white px-4 py-3 rounded-lg hover:bg-purple-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors font-medium"
-        >
-          {isAnalyzing ? (
-            <Loader2 className="animate-spin" size={20} />
-          ) : (
-            <Search size={20} />
-          )}
-          {isAnalyzing ? 'Анализируем...' : 'Анализировать'}
-        </button>
+        {!(sourceMode === 'auto' && (connectionsLoading || connections.length === 0)) && (
+          <button
+            onClick={handleAnalyze}
+            disabled={isAnalyzing || (sourceMode === 'auto' && !activeConnectionId) || (sourceMode === 'manual' && !manualQueries.trim())}
+            className="w-full flex items-center justify-center gap-2 bg-purple-600 text-white px-4 py-3 rounded-lg hover:bg-purple-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors font-medium"
+          >
+            {isAnalyzing ? (
+              <Loader2 className="animate-spin" size={20} />
+            ) : (
+              <Search size={20} />
+            )}
+            {isAnalyzing ? 'Анализируем...' : 'Анализировать'}
+          </button>
+        )}
       </div>
 
       {/* Results */}

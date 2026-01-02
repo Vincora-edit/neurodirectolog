@@ -11,6 +11,38 @@ import { requireProjectAccess, requireConnectionAccess } from '../../middleware/
 const router = express.Router();
 
 /**
+ * GET /api/yandex/connections
+ * Получить все подключения текущего пользователя (для анализа запросов)
+ */
+router.get('/connections', authenticate, async (req: AuthRequest, res) => {
+  try {
+    const userId = req.userId;
+
+    // Get all projects for user
+    const projects = await clickhouseService.getProjectsByUserId(userId);
+
+    // Get connections for all projects
+    const allConnections: any[] = [];
+    for (const project of projects) {
+      const connections = await clickhouseService.getConnectionsByProjectId(project.id);
+      for (const conn of connections) {
+        allConnections.push({
+          id: conn.id,
+          login: conn.login,
+          projectId: project.id,
+          projectName: project.name,
+        });
+      }
+    }
+
+    res.json({ success: true, data: allConnections });
+  } catch (error: any) {
+    console.error('Failed to get user connections:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+/**
  * GET /api/yandex/connections/:projectId
  * Получить все подключения для проекта (мультиаккаунтность)
  */
