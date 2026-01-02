@@ -403,7 +403,7 @@ export const clickhouseService = {
     console.log(`[ClickHouse] Upserting ${campaigns.length} campaigns`);
 
     const values = campaigns.map(c => ({
-      id: uuidv4(),
+      id: `${c.connectionId}-${c.externalId}`, // Deterministic ID based on connection and external ID
       connection_id: c.connectionId,
       external_id: c.externalId,
       name: c.name,
@@ -431,7 +431,7 @@ export const clickhouseService = {
   async getCampaignsByConnectionId(connectionId: string): Promise<Campaign[]> {
     const result = await client.query({
       query: `
-        SELECT * FROM campaigns FINAL
+        SELECT * FROM campaigns
         WHERE connection_id = {connectionId:String}
         ORDER BY updated_at DESC
       `,
