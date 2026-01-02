@@ -16,7 +16,7 @@ const router = express.Router();
  */
 router.get('/connections', authenticate, async (req: AuthRequest, res) => {
   try {
-    const userId = req.userId;
+    const userId = req.userId!;
 
     // Get all projects for user
     const projects = await clickhouseService.getProjectsByUserId(userId);
