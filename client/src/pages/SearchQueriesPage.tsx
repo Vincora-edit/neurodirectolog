@@ -63,6 +63,7 @@ interface QueryCluster {
   targetCount: number;
   trashCount: number;
   reviewCount: number;
+  isBigram?: boolean;
 }
 
 interface AnalysisResult {
@@ -699,13 +700,24 @@ export default function SearchQueriesPage() {
                     <div key={index} className="p-4 hover:bg-gray-50">
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-3">
-                          <div className="w-10 h-10 rounded-lg bg-blue-50 flex items-center justify-center">
-                            <span className="text-lg font-bold text-blue-600">
-                              {cluster.keyword.charAt(0).toUpperCase()}
+                          <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${
+                            cluster.isBigram ? 'bg-purple-50' : 'bg-blue-50'
+                          }`}>
+                            <span className={`text-lg font-bold ${
+                              cluster.isBigram ? 'text-purple-600' : 'text-blue-600'
+                            }`}>
+                              {cluster.isBigram ? '2' : cluster.keyword.charAt(0).toUpperCase()}
                             </span>
                           </div>
                           <div>
-                            <p className="font-semibold text-gray-900">{cluster.keyword}</p>
+                            <div className="flex items-center gap-2">
+                              <p className="font-semibold text-gray-900">{cluster.keyword}</p>
+                              {cluster.isBigram && (
+                                <span className="px-1.5 py-0.5 text-xs rounded bg-purple-100 text-purple-600">
+                                  биграмма
+                                </span>
+                              )}
+                            </div>
                             <p className="text-sm text-gray-500">{cluster.queries} запросов</p>
                           </div>
                         </div>

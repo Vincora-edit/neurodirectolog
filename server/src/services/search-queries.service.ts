@@ -75,6 +75,110 @@ export interface QueryCluster {
   targetCount: number;
   trashCount: number;
   reviewCount: number;
+  isBigram?: boolean; // Is this a bigram (two words)?
+}
+
+// Permanently target words - always good, don't cluster them separately
+// These words appear in 90%+ target queries, so clustering them wastes resources
+const PERMANENTLY_TARGET_WORDS = new Set([
+  'гражданство', 'гражданства', 'гражданству',
+  'рвп',
+  'внж',
+  'получить', 'получение', 'получения', 'получению',
+  'сделать', 'сделаю',
+  'оформить', 'оформление', 'оформления',
+]);
+
+// Russian word endings to strip for stemming
+// This is a simplified stemmer for Russian - handles common noun/adjective endings
+const RUSSIAN_ENDINGS = [
+  // Adjective endings (long forms)
+  'ого', 'его', 'ому', 'ему', 'ым', 'им', 'ой', 'ей', 'ую', 'юю', 'ая', 'яя', 'ое', 'ее',
+  'ые', 'ие', 'ых', 'их', 'ами', 'ями',
+  // Noun endings
+  'ов', 'ев', 'ей', 'ий', 'ам', 'ям', 'ах', 'ях', 'ом', 'ем', 'ой', 'ей',
+  // Verb endings
+  'ть', 'ти', 'ешь', 'ет', 'ем', 'ете', 'ут', 'ют', 'ишь', 'ит', 'им', 'ите', 'ат', 'ят',
+  // Common suffixes
+  'ение', 'ании', 'ство', 'ства',
+];
+
+/**
+ * Simple Russian stemmer - removes common endings to normalize words
+ * "миграционный" и "миграционного" → "миграционн"
+ * "юрист" и "юриста" → "юрист"
+ */
+function stemRussian(word: string): string {
+  if (word.length < 4) return word;
+
+  let stem = word.toLowerCase();
+
+  // Sort endings by length (longest first) to avoid partial matches
+  const sortedEndings = [...RUSSIAN_ENDINGS].sort((a, b) => b.length - a.length);
+
+  for (const ending of sortedEndings) {
+    if (stem.endsWith(ending) && stem.length - ending.length >= 3) {
+      stem = stem.slice(0, -ending.length);
+      break; // Only remove one ending
+    }
+  }
+
+  return stem;
+}
+
+/**
+ * Extract bigrams from a query
+ * "миграционная помощь в москве" → ["миграционная помощь", "помощь в", "в москве"]
+ * But we only want meaningful bigrams (both words >= 4 chars)
+ */
+function extractBigrams(query: string): string[] {
+  const words = query.toLowerCase().split(/\s+/).filter(w => w.length >= 3);
+  const bigrams: string[] = [];
+
+  for (let i = 0; i < words.length - 1; i++) {
+    // Only create bigram if both words are significant (>= 4 chars)
+    if (words[i].length >= 4 && words[i + 1].length >= 4) {
+      bigrams.push(`${words[i]} ${words[i + 1]}`);
+    }
+  }
+
+  return bigrams;
+}
+
+/**
+ * Check if a word is permanently target (should not be clustered)
+ */
+function isPermanentlyTargetWord(word: string): boolean {
+  const lower = word.toLowerCase();
+  // Check exact match
+  if (PERMANENTLY_TARGET_WORDS.has(lower)) return true;
+  // Check stem match
+  const stem = stemRussian(lower);
+  for (const targetWord of PERMANENTLY_TARGET_WORDS) {
+    if (stemRussian(targetWord) === stem) return true;
+  }
+  return false;
+}
+
+/**
+ * Extract significant words from a query for clustering
+ * Handles compound phrases by extracting key nouns
+ * "миграционный юрист" → extracts "юрист" as key word
+ * "помощь в получении" → extracts "помощь" as key word
+ */
+function extractClusterWords(query: string): string[] {
+  const words = query.toLowerCase().split(/\s+/).filter(w => w.length >= 4);
+  const result: string[] = [];
+
+  for (const word of words) {
+    // Skip permanently target words
+    if (isPermanentlyTargetWord(word)) continue;
+    // Skip prepositions and common particles
+    if (['через', 'после', 'перед', 'между', 'около'].includes(word)) continue;
+    result.push(word);
+  }
+
+  return result;
 }
 
 export interface AnalysisResult {
@@ -587,8 +691,11 @@ ${JSON.stringify(queryData, null, 2)}
     const wastedCost = trashQueries.reduce((sum, q) => sum + q.metrics.cost, 0);
 
     // Build keyword clusters for analysis
-    // Group queries by significant words (length >= 4) to find patterns
-    const clusterMap = new Map<string, {
+    // Uses stemming to group "миграционный" and "миграционного" together
+    // Uses bigrams for compound phrases like "миграционная помощь"
+    // Excludes permanently target words that don't need analysis
+
+    interface ClusterData {
       queries: Set<string>;
       impressions: number;
       clicks: number;
@@ -597,35 +704,74 @@ ${JSON.stringify(queryData, null, 2)}
       targetCount: number;
       trashCount: number;
       reviewCount: number;
-    }>();
+      displayWord: string; // Most common form of the word for display
+      isBigram: boolean;
+    }
 
-    // Helper to add query to cluster
+    const clusterMap = new Map<string, ClusterData>();
+    const stemToDisplayCount = new Map<string, Map<string, number>>(); // stem -> {display -> count}
+
+    // Helper to add query to cluster by stem
+    const addToClusterByStem = (
+      stem: string,
+      displayWord: string,
+      query: string,
+      metrics: { impressions: number; clicks: number; cost: number; conversions: number },
+      category: 'target' | 'trash' | 'review',
+      isBigram: boolean = false
+    ) => {
+      if (!clusterMap.has(stem)) {
+        clusterMap.set(stem, {
+          queries: new Set(),
+          impressions: 0,
+          clicks: 0,
+          cost: 0,
+          conversions: 0,
+          targetCount: 0,
+          trashCount: 0,
+          reviewCount: 0,
+          displayWord,
+          isBigram,
+        });
+        stemToDisplayCount.set(stem, new Map());
+      }
+
+      const cluster = clusterMap.get(stem)!;
+
+      // Track display word frequency to pick the most common one
+      const displayCounts = stemToDisplayCount.get(stem)!;
+      displayCounts.set(displayWord, (displayCounts.get(displayWord) || 0) + 1);
+
+      if (!cluster.queries.has(query)) {
+        cluster.queries.add(query);
+        cluster.impressions += metrics.impressions;
+        cluster.clicks += metrics.clicks;
+        cluster.cost += metrics.cost;
+        cluster.conversions += metrics.conversions;
+        if (category === 'target') cluster.targetCount++;
+        else if (category === 'trash') cluster.trashCount++;
+        else cluster.reviewCount++;
+      }
+    };
+
+    // Helper to add query to clusters (both single words and bigrams)
     const addToCluster = (query: string, metrics: { impressions: number; clicks: number; cost: number; conversions: number }, category: 'target' | 'trash' | 'review') => {
-      const words = query.toLowerCase().split(/\s+/).filter(w => w.length >= 4);
+      // Extract single words (filtered for permanently target words)
+      const words = extractClusterWords(query);
       for (const word of words) {
-        if (!clusterMap.has(word)) {
-          clusterMap.set(word, {
-            queries: new Set(),
-            impressions: 0,
-            clicks: 0,
-            cost: 0,
-            conversions: 0,
-            targetCount: 0,
-            trashCount: 0,
-            reviewCount: 0,
-          });
-        }
-        const cluster = clusterMap.get(word)!;
-        if (!cluster.queries.has(query)) {
-          cluster.queries.add(query);
-          cluster.impressions += metrics.impressions;
-          cluster.clicks += metrics.clicks;
-          cluster.cost += metrics.cost;
-          cluster.conversions += metrics.conversions;
-          if (category === 'target') cluster.targetCount++;
-          else if (category === 'trash') cluster.trashCount++;
-          else cluster.reviewCount++;
-        }
+        const stem = stemRussian(word);
+        addToClusterByStem(stem, word, query, metrics, category, false);
+      }
+
+      // Extract bigrams
+      const bigrams = extractBigrams(query);
+      for (const bigram of bigrams) {
+        const bigramWords = bigram.split(' ');
+        // Skip bigrams where both words are permanently target
+        if (bigramWords.every(w => isPermanentlyTargetWord(w))) continue;
+        // Create stem for bigram (stem both words)
+        const bigramStem = bigramWords.map(w => stemRussian(w)).join(' ');
+        addToClusterByStem(bigramStem, bigram, query, metrics, category, true);
       }
     };
 
@@ -640,11 +786,26 @@ ${JSON.stringify(queryData, null, 2)}
       addToCluster(q.query, q.metrics, 'review');
     }
 
+    // Update display words to most common form
+    for (const [stem, cluster] of clusterMap.entries()) {
+      const displayCounts = stemToDisplayCount.get(stem)!;
+      let maxCount = 0;
+      let bestDisplay = cluster.displayWord;
+      for (const [display, count] of displayCounts.entries()) {
+        if (count > maxCount) {
+          maxCount = count;
+          bestDisplay = display;
+        }
+      }
+      cluster.displayWord = bestDisplay;
+    }
+
     // Convert to array and sort by total queries
-    const clusters: QueryCluster[] = Array.from(clusterMap.entries())
+    // Separate bigrams and single words, prioritize bigrams slightly
+    const allClusters = Array.from(clusterMap.entries())
       .filter(([_, data]) => data.queries.size >= 3) // At least 3 queries in cluster
-      .map(([keyword, data]) => ({
-        keyword,
+      .map(([_stem, data]) => ({
+        keyword: data.displayWord,
         queries: data.queries.size,
         impressions: data.impressions,
         clicks: data.clicks,
@@ -656,8 +817,18 @@ ${JSON.stringify(queryData, null, 2)}
         targetCount: data.targetCount,
         trashCount: data.trashCount,
         reviewCount: data.reviewCount,
-      }))
-      .sort((a, b) => b.queries - a.queries)
+        isBigram: data.isBigram,
+      }));
+
+    // Sort: bigrams first (if significant), then by query count
+    const clusters: QueryCluster[] = allClusters
+      .sort((a, b) => {
+        // Bigrams with decent data get priority
+        if (a.isBigram && !b.isBigram && a.queries >= 5) return -1;
+        if (!a.isBigram && b.isBigram && b.queries >= 5) return 1;
+        // Then sort by queries count
+        return b.queries - a.queries;
+      })
       .slice(0, 100); // Top 100 clusters
 
     return {
