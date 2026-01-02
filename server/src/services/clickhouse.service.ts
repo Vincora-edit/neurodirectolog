@@ -431,7 +431,7 @@ export const clickhouseService = {
   async getCampaignsByConnectionId(connectionId: string): Promise<Campaign[]> {
     const result = await client.query({
       query: `
-        SELECT * FROM campaigns
+        SELECT * FROM campaigns FINAL
         WHERE connection_id = {connectionId:String}
         ORDER BY updated_at DESC
       `,
