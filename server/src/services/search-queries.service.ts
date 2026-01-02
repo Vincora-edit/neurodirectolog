@@ -374,16 +374,13 @@ ${JSON.stringify(queryData, null, 2)}
 
       // Check for high impressions but low/no clicks (low CTR = likely irrelevant)
       if (query.impressions >= minImpressionsForLowCtr && query.ctr < lowCtrThreshold) {
-        // Extract potential minus words from query
-        const words = query.query.toLowerCase().split(/\s+/).filter(w => w.length >= 3);
-
         if (query.clicks === 0) {
           // No clicks at all - likely trash
           trashQueries.push({
             query: query.query,
             category: 'trash',
             reason: `${query.impressions} показов, 0 кликов — нерелевантный запрос`,
-            suggestedMinusWords: words.slice(0, 3), // Suggest first 3 words
+            suggestedMinusWords: [], // Will be filled after we know target words
             metrics: {
               impressions: query.impressions,
               clicks: query.clicks,
@@ -498,6 +495,29 @@ ${JSON.stringify(queryData, null, 2)}
       }
     }
 
+    // Extract words from target queries - these should NEVER be minus words
+    const targetWords = new Set<string>();
+    for (const target of targetQueries) {
+      const words = target.query.toLowerCase().split(/\s+/);
+      for (const word of words) {
+        if (word.length >= 3) {
+          targetWords.add(word);
+        }
+      }
+    }
+
+    // Also extract from review queries with conversions - these are likely good words too
+    for (const review of reviewQueries) {
+      if (review.metrics.conversions > 0) {
+        const words = review.query.toLowerCase().split(/\s+/);
+        for (const word of words) {
+          if (word.length >= 3) {
+            targetWords.add(word);
+          }
+        }
+      }
+    }
+
     // Extract minus words from trash queries
     const minusWordCounts = new Map<string, { count: number; cost: number }>();
 
@@ -505,6 +525,8 @@ ${JSON.stringify(queryData, null, 2)}
       const words = trash.query.toLowerCase().split(/\s+/);
       for (const word of words) {
         if (word.length < 3) continue;
+        // Skip if word appears in target queries - this is critical!
+        if (targetWords.has(word)) continue;
         const existing = minusWordCounts.get(word) || { count: 0, cost: 0 };
         existing.count++;
         existing.cost += trash.metrics.cost;
