@@ -79,6 +79,15 @@ const fetchConnections = async (): Promise<Connection[]> => {
   return data.data || [];
 };
 
+const fetchBrief = async (connectionId: string): Promise<{ description: string; targetCpl: number | null } | null> => {
+  const token = localStorage.getItem('token');
+  const response = await fetch(`${API_BASE_URL}/yandex/connection/${connectionId}/brief`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  const data = await response.json();
+  return data.data || null;
+};
+
 export default function SearchQueriesPage() {
   // Source mode
   const [sourceMode, setSourceMode] = useState<SourceMode>('auto');
@@ -94,6 +103,7 @@ export default function SearchQueriesPage() {
   // Common state
   const [useAi, setUseAi] = useState(false);
   const [businessDescription, setBusinessDescription] = useState('');
+  const [briefDescription, setBriefDescription] = useState<string | null>(null); // From project brief
   const [targetCpl, setTargetCpl] = useState<number | undefined>();
   const [analysisResult, setAnalysisResult] = useState<AnalysisResult | null>(null);
   const [activeTab, setActiveTab] = useState<'target' | 'trash' | 'review'>('trash');
@@ -114,6 +124,26 @@ export default function SearchQueriesPage() {
       })
       .finally(() => setConnectionsLoading(false));
   }, []);
+
+  // Load brief when connection changes
+  useEffect(() => {
+    if (activeConnectionId) {
+      fetchBrief(activeConnectionId).then((brief) => {
+        if (brief) {
+          setBriefDescription(brief.description);
+          // Auto-fill if fields are empty
+          if (!businessDescription && brief.description) {
+            setBusinessDescription(brief.description);
+          }
+          if (!targetCpl && brief.targetCpl) {
+            setTargetCpl(brief.targetCpl);
+          }
+        } else {
+          setBriefDescription(null);
+        }
+      });
+    }
+  }, [activeConnectionId]);
 
   // Auto mode mutation
   const autoAnalyzeMutation = useMutation({
@@ -459,13 +489,27 @@ export default function SearchQueriesPage() {
         {/* Business description for AI */}
         {useAi && !(sourceMode === 'auto' && (connectionsLoading || connections.length === 0)) && (
           <div className="mb-6">
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Описание бизнеса (для AI)
-            </label>
+            <div className="flex items-center justify-between mb-1">
+              <label className="block text-sm font-medium text-gray-700">
+                Описание бизнеса (для AI)
+              </label>
+              {sourceMode === 'auto' && briefDescription && (
+                <button
+                  type="button"
+                  onClick={() => setBusinessDescription(briefDescription)}
+                  className="text-xs text-purple-600 hover:text-purple-700"
+                >
+                  Заполнить из брифа
+                </button>
+              )}
+            </div>
+            {sourceMode === 'auto' && briefDescription && businessDescription === briefDescription && (
+              <p className="text-xs text-green-600 mb-1">✓ Загружено из брифа проекта</p>
+            )}
             <textarea
               value={businessDescription}
               onChange={(e) => setBusinessDescription(e.target.value)}
-              placeholder="Опишите ваш бизнес, чтобы AI мог точнее определить целевые запросы..."
+              placeholder={briefDescription || "Опишите ваш бизнес, чтобы AI мог точнее определить целевые запросы..."}
               rows={2}
               className="w-full border border-gray-300 rounded-lg px-3 py-2"
             />

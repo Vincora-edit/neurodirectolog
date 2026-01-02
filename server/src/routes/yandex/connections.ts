@@ -43,6 +43,48 @@ router.get('/connections', authenticate, async (req: AuthRequest, res) => {
 });
 
 /**
+ * GET /api/yandex/connection/:connectionId/brief
+ * Получить бриф проекта по connectionId (для AI анализа)
+ */
+router.get('/connection/:connectionId/brief', authenticate, async (req: AuthRequest, res) => {
+  try {
+    const { connectionId } = req.params;
+
+    const connection = await clickhouseService.getConnectionById(connectionId);
+    if (!connection) {
+      return res.status(404).json({ success: false, error: 'Connection not found' });
+    }
+
+    const project = await clickhouseService.getProjectById(connection.projectId);
+    if (!project?.brief) {
+      return res.json({ success: true, data: null });
+    }
+
+    const brief = typeof project.brief === 'string' ? JSON.parse(project.brief) : project.brief;
+
+    // Build description from brief
+    const parts = [];
+    if (brief.businessName) parts.push(brief.businessName);
+    if (brief.niche) parts.push(`(${brief.niche})`);
+    if (brief.businessDescription) parts.push(brief.businessDescription);
+    if (brief.geo) parts.push(`География: ${brief.geo}`);
+    if (brief.advantages?.length) parts.push(`Преимущества: ${brief.advantages.join(', ')}`);
+
+    res.json({
+      success: true,
+      data: {
+        description: parts.join('. '),
+        targetCpl: brief.targetCPA || null,
+        raw: brief,
+      },
+    });
+  } catch (error: any) {
+    console.error('Failed to get brief:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+/**
  * GET /api/yandex/connections/:projectId
  * Получить все подключения для проекта (мультиаккаунтность)
  */

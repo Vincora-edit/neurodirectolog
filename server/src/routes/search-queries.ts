@@ -59,7 +59,7 @@ router.post('/:connectionId/analyze', async (req, res) => {
   try {
     const userId = (req as any).userId;
     const { connectionId } = req.params;
-    const { dateFrom, dateTo, campaignId, businessDescription, targetCpl, useAi = true } = req.body;
+    let { dateFrom, dateTo, campaignId, businessDescription, targetCpl, useAi = true } = req.body;
 
     // Get queries
     const queries = await searchQueriesService.getSearchQueries(
@@ -87,6 +87,35 @@ router.post('/:connectionId/analyze', async (req, res) => {
           },
         },
       });
+    }
+
+    // If AI mode but no description provided, try to get from project brief
+    if (useAi && !businessDescription) {
+      try {
+        const connection = await clickhouseService.getConnectionById(connectionId);
+        if (connection?.projectId) {
+          const project = await clickhouseService.getProjectById(connection.projectId);
+          if (project?.brief) {
+            const brief = typeof project.brief === 'string' ? JSON.parse(project.brief) : project.brief;
+            // Build description from brief
+            const parts = [];
+            if (brief.businessName) parts.push(brief.businessName);
+            if (brief.niche) parts.push(`(${brief.niche})`);
+            if (brief.businessDescription) parts.push(brief.businessDescription);
+            if (brief.geo) parts.push(`География: ${brief.geo}`);
+            if (brief.advantages?.length) parts.push(`Преимущества: ${brief.advantages.join(', ')}`);
+
+            businessDescription = parts.join('. ');
+
+            // Also use targetCPA from brief if not provided
+            if (!targetCpl && brief.targetCPA) {
+              targetCpl = brief.targetCPA;
+            }
+          }
+        }
+      } catch (e) {
+        console.log('[SearchQueries] Could not load brief, proceeding without:', e);
+      }
     }
 
     let analysis;
