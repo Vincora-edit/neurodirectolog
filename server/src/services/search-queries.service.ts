@@ -118,16 +118,17 @@ export const searchQueriesService = {
         goalIds.length > 0 ? goalIds : undefined
       );
 
+      // getSearchQueryReport returns data with lowercase keys
       return queries.map((q: any) => ({
-        query: q.Query || q.query || '',
-        impressions: parseInt(q.Impressions) || 0,
-        clicks: parseInt(q.Clicks) || 0,
-        cost: parseFloat(q.Cost) || 0,
-        conversions: parseInt(q.Conversions) || 0,
-        ctr: parseFloat(q.Ctr) || 0,
-        avgCpc: parseFloat(q.AvgCpc) || 0,
+        query: q.query || q.Query || '',
+        impressions: q.impressions || parseInt(q.Impressions) || 0,
+        clicks: q.clicks || parseInt(q.Clicks) || 0,
+        cost: q.cost || parseFloat(q.Cost) || 0,
+        conversions: q.conversions || parseInt(q.Conversions) || 0,
+        ctr: q.ctr || parseFloat(q.Ctr) || 0,
+        avgCpc: q.avgCpc || parseFloat(q.AvgCpc) || 0,
         cpl: 0, // Will be calculated
-        bounceRate: parseFloat(q.BounceRate) || undefined,
+        bounceRate: q.bounceRate || parseFloat(q.BounceRate) || undefined,
       })).map((q: SearchQuery) => ({
         ...q,
         cpl: q.conversions > 0 ? q.cost / q.conversions : 0,

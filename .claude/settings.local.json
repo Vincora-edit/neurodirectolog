@@ -211,7 +211,9 @@
       "Skill(deploy)",
       "Skill(deploy:*)",
       "Bash(sshpass -p 'c9R+eLvxtQJ-,x' ssh -o StrictHostKeyChecking=no root@91.222.239.217 \"docker logs neurodirectolog-server --tail 50 2>&1 | grep -E ''SearchQueries|search-queries|error|Error''\")",
-      "Bash(sshpass -p 'c9R+eLvxtQJ-,x' ssh -o StrictHostKeyChecking=no root@91.222.239.217 \"docker exec neurodirectolog-clickhouse clickhouse-client --query \"\"SHOW CREATE TABLE neurodirectolog.search_query_analyses\"\" 2>&1\")"
+      "Bash(sshpass -p 'c9R+eLvxtQJ-,x' ssh -o StrictHostKeyChecking=no root@91.222.239.217 \"docker exec neurodirectolog-clickhouse clickhouse-client --query \"\"SHOW CREATE TABLE neurodirectolog.search_query_analyses\"\" 2>&1\")",
+      "Bash(sshpass -p 'c9R+eLvxtQJ-,x' ssh -o StrictHostKeyChecking=no root@91.222.239.217 \"cd /root/neurodirectolog && git pull && docker build -t neurodirectolog_server:latest ./server && docker stop neurodirectolog-server && docker rm neurodirectolog-server && docker run -d --name neurodirectolog-server --network neurodirectolog_neurodirectolog-network -p 3001:3001 --env-file /root/neurodirectolog/.env --restart unless-stopped neurodirectolog_server:latest\")",
+      "Bash(sshpass -p 'c9R+eLvxtQJ-,x' ssh -o StrictHostKeyChecking=no root@91.222.239.217 \"docker logs neurodirectolog-server --tail 30 2>&1 | grep -E ''SearchQuery|getSearchQuery''\")"
     ]
   }
 }
