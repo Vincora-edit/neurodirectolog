@@ -17,7 +17,11 @@ function getOpenAI(): OpenAI {
     if (!apiKey) {
       throw new Error('OPENAI_API_KEY environment variable is not set. AI analysis features are disabled.');
     }
-    openaiClient = new OpenAI({ apiKey });
+    const baseURL = process.env.OPENAI_BASE_URL;
+    openaiClient = new OpenAI({
+      apiKey,
+      ...(baseURL && { baseURL })
+    });
   }
   return openaiClient;
 }
@@ -201,7 +205,10 @@ ${JSON.stringify(queryData, null, 2)}
 }`;
 
     try {
-      const response = await getOpenAI().chat.completions.create({
+      // Check if OpenAI is configured with baseURL for regions where it's blocked
+      const openai = getOpenAI();
+
+      const response = await openai.chat.completions.create({
         model: 'gpt-4o-mini',
         messages: [{ role: 'user', content: prompt }],
         temperature: 0.3,

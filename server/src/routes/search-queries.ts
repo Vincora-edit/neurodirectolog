@@ -119,14 +119,24 @@ router.post('/:connectionId/analyze', async (req, res) => {
     }
 
     let analysis;
+    let usedFallback = false;
 
     if (useAi && businessDescription) {
-      // AI-powered analysis
-      analysis = await searchQueriesService.analyzeQueries(
-        queries,
-        businessDescription,
-        targetCpl
-      );
+      try {
+        // AI-powered analysis
+        analysis = await searchQueriesService.analyzeQueries(
+          queries,
+          businessDescription,
+          targetCpl
+        );
+      } catch (aiError: any) {
+        // Fallback to quick analysis if AI is unavailable (e.g., region blocked)
+        console.log('[SearchQueries] AI unavailable, falling back to quick analysis:', aiError.message);
+        usedFallback = true;
+        analysis = searchQueriesService.quickAnalysis(queries, {
+          maxCpl: targetCpl || 5000,
+        });
+      }
     } else {
       // Quick rule-based analysis
       analysis = searchQueriesService.quickAnalysis(queries, {
@@ -143,7 +153,11 @@ router.post('/:connectionId/analyze', async (req, res) => {
       dateTo
     );
 
-    res.json({ success: true, data: analysis });
+    res.json({
+      success: true,
+      data: analysis,
+      ...(usedFallback && { warning: 'AI анализ недоступен в вашем регионе. Использован быстрый анализ.' })
+    });
   } catch (error: any) {
     console.error('Failed to analyze search queries:', error);
     res.status(500).json({ success: false, error: error.message });

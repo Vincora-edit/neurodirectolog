@@ -4,8 +4,10 @@ let openaiClient: OpenAI | null = null;
 
 const getOpenAI = () => {
   if (!openaiClient) {
+    const baseURL = process.env.OPENAI_BASE_URL;
     openaiClient = new OpenAI({
-      apiKey: process.env.OPENAI_API_KEY
+      apiKey: process.env.OPENAI_API_KEY,
+      ...(baseURL && { baseURL })
     });
   }
   return openaiClient;

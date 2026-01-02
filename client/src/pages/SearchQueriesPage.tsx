@@ -109,6 +109,7 @@ export default function SearchQueriesPage() {
   const [activeTab, setActiveTab] = useState<'target' | 'trash' | 'review'>('trash');
   const [selectedMinusWords, setSelectedMinusWords] = useState<Set<string>>(new Set());
   const [expandedQueries, setExpandedQueries] = useState<Set<string>>(new Set());
+  const [analysisWarning, setAnalysisWarning] = useState<string | null>(null);
 
   const [connectionsLoading, setConnectionsLoading] = useState(true);
 
@@ -175,11 +176,12 @@ export default function SearchQueriesPage() {
 
       const data = await response.json();
       if (!data.success) throw new Error(data.error);
-      return data.data as AnalysisResult;
+      return { result: data.data as AnalysisResult, warning: data.warning as string | undefined };
     },
-    onSuccess: (data) => {
-      setAnalysisResult(data);
-      const words = new Set(data.suggestedMinusWords.map((mw) => mw.word));
+    onSuccess: ({ result, warning }) => {
+      setAnalysisResult(result);
+      setAnalysisWarning(warning || null);
+      const words = new Set(result.suggestedMinusWords.map((mw) => mw.word));
       setSelectedMinusWords(words);
     },
   });
@@ -218,17 +220,19 @@ export default function SearchQueriesPage() {
 
       const data = await response.json();
       if (!data.success) throw new Error(data.error);
-      return data.data as AnalysisResult;
+      return { result: data.data as AnalysisResult, warning: data.warning as string | undefined };
     },
-    onSuccess: (data) => {
-      setAnalysisResult(data);
-      const words = new Set(data.suggestedMinusWords.map((mw) => mw.word));
+    onSuccess: ({ result, warning }) => {
+      setAnalysisResult(result);
+      setAnalysisWarning(warning || null);
+      const words = new Set(result.suggestedMinusWords.map((mw) => mw.word));
       setSelectedMinusWords(words);
     },
   });
 
   const handleAnalyze = () => {
     setAnalysisResult(null);
+    setAnalysisWarning(null);
     if (sourceMode === 'auto') {
       autoAnalyzeMutation.mutate();
     } else {
@@ -536,6 +540,17 @@ export default function SearchQueriesPage() {
       {/* Results */}
       {analysisResult && (
         <>
+          {/* Warning if AI was unavailable */}
+          {analysisWarning && (
+            <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 flex items-start gap-3">
+              <AlertCircle className="text-amber-500 flex-shrink-0 mt-0.5" size={20} />
+              <div>
+                <p className="text-amber-800 font-medium">Ограничение</p>
+                <p className="text-amber-700 text-sm">{analysisWarning}</p>
+              </div>
+            </div>
+          )}
+
           {/* Summary */}
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
             <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4">
