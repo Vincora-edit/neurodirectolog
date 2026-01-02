@@ -341,7 +341,8 @@ ${JSON.stringify(queryData, null, 2)}
       minClicks = 5,
       maxCpl = 5000,
       // minConversionRate is reserved for future use
-      stopWords = ['бесплатно', 'скачать', 'торрент', 'своими руками', 'отзывы', 'что это', 'как'],
+      // Note: removed "как" - it's too common and appears in many converting queries
+      stopWords = ['бесплатно', 'скачать', 'торрент', 'своими руками', 'что это'],
       minImpressionsForLowCtr = 100, // Минимум показов для проверки CTR
       lowCtrThreshold = 1.0, // CTR ниже 1% считается низким
       minImpressions = 5, // Запросы с менее чем 5 показами - статистически незначимы
@@ -369,10 +370,11 @@ ${JSON.stringify(queryData, null, 2)}
     for (const query of significantQueries) {
       const lowerQuery = query.query.toLowerCase();
 
-      // Check for stop words
+      // Check for stop words - but NEVER mark as trash if query has conversions!
       const matchedStopWords = stopWords.filter(sw => lowerQuery.includes(sw.toLowerCase()));
 
-      if (matchedStopWords.length > 0) {
+      if (matchedStopWords.length > 0 && query.conversions === 0) {
+        // Only trash if no conversions - queries with conversions are valuable regardless of stop words
         trashQueries.push({
           query: query.query,
           category: 'trash',
