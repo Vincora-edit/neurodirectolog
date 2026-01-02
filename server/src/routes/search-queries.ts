@@ -198,6 +198,53 @@ router.get('/:connectionId/history', async (req, res) => {
 });
 
 /**
+ * POST /api/search-queries/manual/analyze
+ * Analyze manually pasted search queries
+ */
+router.post('/manual/analyze', async (req, res) => {
+  try {
+    const { queries, businessDescription, targetCpl, useAi = false } = req.body;
+
+    if (!queries || !Array.isArray(queries) || queries.length === 0) {
+      return res.status(400).json({ success: false, error: 'queries array is required' });
+    }
+
+    // Convert manual queries to SearchQuery format
+    const searchQueries = queries.map((q: any) => ({
+      query: q.query || '',
+      impressions: q.impressions || 0,
+      clicks: q.clicks || 0,
+      cost: q.cost || 0,
+      conversions: q.conversions || 0,
+      ctr: q.clicks > 0 && q.impressions > 0 ? (q.clicks / q.impressions) * 100 : 0,
+      avgCpc: q.clicks > 0 ? q.cost / q.clicks : 0,
+      cpl: q.conversions > 0 ? q.cost / q.conversions : 0,
+    }));
+
+    let analysis;
+
+    if (useAi && businessDescription) {
+      // AI-powered analysis
+      analysis = await searchQueriesService.analyzeQueries(
+        searchQueries,
+        businessDescription,
+        targetCpl
+      );
+    } else {
+      // Quick rule-based analysis
+      analysis = searchQueriesService.quickAnalysis(searchQueries, {
+        maxCpl: targetCpl || 5000,
+      });
+    }
+
+    res.json({ success: true, data: analysis });
+  } catch (error: any) {
+    console.error('Failed to analyze manual queries:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+/**
  * POST /api/search-queries/:connectionId/export-minus-words
  * Export minus words to text file
  */

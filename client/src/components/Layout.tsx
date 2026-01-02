@@ -9,7 +9,6 @@ import {
   Lightbulb,
   MessageSquare,
   Target,
-  Filter,
   LogOut,
   PanelLeftClose,
   PanelLeft,
@@ -42,7 +41,6 @@ export default function Layout() {
     // Семантика и ключевые слова
     { name: 'Семантика', href: '/semantics', icon: FileText, available: isAdmin },
     { name: 'Анализ запросов', href: '/search-queries', icon: Search, available: true },
-    { name: 'Минус-слова', href: '/minus-words', icon: Filter, available: isAdmin },
     // Создание кампаний
     { name: 'Кампании', href: '/campaign', icon: Megaphone, available: isAdmin },
     { name: 'Объявления', href: '/ads', icon: MessageSquare, available: isAdmin },

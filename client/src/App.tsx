@@ -15,7 +15,7 @@ const Campaign = lazy(() => import('./pages/Campaign'));
 const Creatives = lazy(() => import('./pages/Creatives'));
 const Ads = lazy(() => import('./pages/Ads'));
 const Strategy = lazy(() => import('./pages/Strategy'));
-const MinusWords = lazy(() => import('./pages/MinusWords'));
+const SearchQueriesPage = lazy(() => import('./pages/SearchQueriesPage'));
 const KeywordAnalysis = lazy(() => import('./pages/KeywordAnalysis'));
 const Projects = lazy(() => import('./pages/Projects'));
 const ProjectForm = lazy(() => import('./pages/ProjectForm'));
@@ -27,7 +27,6 @@ const AdminPanel = lazy(() => import('./pages/AdminPanel'));
 const PublicDashboard = lazy(() => import('./pages/PublicDashboard'));
 const Management = lazy(() => import('./pages/Management'));
 const Alerts = lazy(() => import('./pages/Alerts'));
-const SearchQueriesAnalysis = lazy(() => import('./pages/SearchQueriesAnalysis'));
 
 const queryClient = new QueryClient();
 
@@ -75,7 +74,7 @@ function App() {
               <Route path="creatives" element={<Creatives />} />
               <Route path="ads" element={<Ads />} />
               <Route path="strategy" element={<Strategy />} />
-              <Route path="minus-words" element={<MinusWords />} />
+              <Route path="search-queries" element={<SearchQueriesPage />} />
               <Route path="connect-yandex" element={<ConnectYandex />} />
               <Route path="connect-yandex-simple" element={<ConnectYandexSimple />} />
               <Route path="yandex/callback" element={<ConnectYandex />} />
@@ -83,7 +82,6 @@ function App() {
               <Route path="admin" element={<AdminPanel />} />
               <Route path="management" element={<Management />} />
               <Route path="alerts" element={<Alerts />} />
-              <Route path="search-queries" element={<SearchQueriesAnalysis />} />
             </Route>
           </Routes>
         </Suspense>

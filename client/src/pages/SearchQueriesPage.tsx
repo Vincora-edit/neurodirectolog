@@ -17,9 +17,10 @@ import {
   DollarSign,
   TrendingUp,
   TrendingDown,
+  Upload,
+  Zap,
 } from 'lucide-react';
 
-// API_BASE_URL уже содержит /api в конце
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001/api';
 
 interface QueryAnalysis {
@@ -65,6 +66,8 @@ interface Connection {
   login: string;
 }
 
+type SourceMode = 'auto' | 'manual';
+
 const fetchConnections = async (): Promise<Connection[]> => {
   const token = localStorage.getItem('token');
   const response = await fetch(`${API_BASE_URL}/yandex/connections`, {
@@ -74,10 +77,26 @@ const fetchConnections = async (): Promise<Connection[]> => {
   return data.data || [];
 };
 
-export default function SearchQueriesAnalysis() {
+export default function SearchQueriesPage() {
+  // Source mode
+  const [sourceMode, setSourceMode] = useState<SourceMode>('auto');
+
+  // Auto mode state
   const [connections, setConnections] = useState<Connection[]>([]);
   const [activeConnectionId, setActiveConnectionId] = useState<string | null>(null);
   const [dateRange, setDateRange] = useState(30);
+
+  // Manual mode state
+  const [manualQueries, setManualQueries] = useState('');
+
+  // Common state
+  const [useAi, setUseAi] = useState(false);
+  const [businessDescription, setBusinessDescription] = useState('');
+  const [targetCpl, setTargetCpl] = useState<number | undefined>();
+  const [analysisResult, setAnalysisResult] = useState<AnalysisResult | null>(null);
+  const [activeTab, setActiveTab] = useState<'target' | 'trash' | 'review'>('trash');
+  const [selectedMinusWords, setSelectedMinusWords] = useState<Set<string>>(new Set());
+  const [expandedQueries, setExpandedQueries] = useState<Set<string>>(new Set());
 
   // Load connections on mount
   useEffect(() => {
@@ -88,15 +107,9 @@ export default function SearchQueriesAnalysis() {
       }
     });
   }, []);
-  const [useAi, setUseAi] = useState(true);
-  const [businessDescription, setBusinessDescription] = useState('');
-  const [targetCpl, setTargetCpl] = useState<number | undefined>();
-  const [analysisResult, setAnalysisResult] = useState<AnalysisResult | null>(null);
-  const [activeTab, setActiveTab] = useState<'target' | 'trash' | 'review'>('trash');
-  const [selectedMinusWords, setSelectedMinusWords] = useState<Set<string>>(new Set());
-  const [expandedQueries, setExpandedQueries] = useState<Set<string>>(new Set());
 
-  const analyzeMutation = useMutation({
+  // Auto mode mutation
+  const autoAnalyzeMutation = useMutation({
     mutationFn: async () => {
       if (!activeConnectionId) throw new Error('No connection selected');
 
@@ -129,11 +142,64 @@ export default function SearchQueriesAnalysis() {
     },
     onSuccess: (data) => {
       setAnalysisResult(data);
-      // Auto-select suggested minus words
       const words = new Set(data.suggestedMinusWords.map((mw) => mw.word));
       setSelectedMinusWords(words);
     },
   });
+
+  // Manual mode mutation
+  const manualAnalyzeMutation = useMutation({
+    mutationFn: async () => {
+      // Parse queries from text
+      const lines = manualQueries.split('\n').filter((line) => line.trim());
+      const queries = lines.map((line) => {
+        const parts = line.split(/[,\t]/).map((p) => p.trim());
+        return {
+          query: parts[0] || '',
+          clicks: parts[1] ? parseInt(parts[1]) : 0,
+          cost: parts[2] ? parseFloat(parts[2]) : 0,
+          conversions: parts[3] ? parseInt(parts[3]) : 0,
+        };
+      });
+
+      if (queries.length === 0) throw new Error('No queries to analyze');
+
+      const token = localStorage.getItem('token');
+      const response = await fetch(`${API_BASE_URL}/search-queries/manual/analyze`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          queries,
+          useAi,
+          businessDescription,
+          targetCpl,
+        }),
+      });
+
+      const data = await response.json();
+      if (!data.success) throw new Error(data.error);
+      return data.data as AnalysisResult;
+    },
+    onSuccess: (data) => {
+      setAnalysisResult(data);
+      const words = new Set(data.suggestedMinusWords.map((mw) => mw.word));
+      setSelectedMinusWords(words);
+    },
+  });
+
+  const handleAnalyze = () => {
+    setAnalysisResult(null);
+    if (sourceMode === 'auto') {
+      autoAnalyzeMutation.mutate();
+    } else {
+      manualAnalyzeMutation.mutate();
+    }
+  };
+
+  const isAnalyzing = autoAnalyzeMutation.isPending || manualAnalyzeMutation.isPending;
 
   const handleExport = () => {
     if (selectedMinusWords.size === 0) return;
@@ -203,95 +269,174 @@ export default function SearchQueriesAnalysis() {
             <Search className="text-purple-600" size={24} />
           </div>
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">Анализ поисковых запросов</h1>
+            <h1 className="text-2xl font-bold text-gray-900">Анализ запросов</h1>
             <p className="text-gray-600">Найдите нецелевые запросы и сформируйте минус-слова</p>
           </div>
         </div>
       </div>
 
+      {/* Source Mode Selector */}
+      <div className="flex gap-3">
+        <button
+          onClick={() => {
+            setSourceMode('auto');
+            setAnalysisResult(null);
+          }}
+          className={`flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-lg font-medium transition-all ${
+            sourceMode === 'auto'
+              ? 'bg-purple-600 text-white shadow-lg'
+              : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50'
+          }`}
+        >
+          <Zap size={20} />
+          <div>
+            <span className="block">Из Яндекс.Директ</span>
+            <span className="text-xs opacity-80">Автоматическая загрузка</span>
+          </div>
+        </button>
+        <button
+          onClick={() => {
+            setSourceMode('manual');
+            setAnalysisResult(null);
+          }}
+          className={`flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-lg font-medium transition-all ${
+            sourceMode === 'manual'
+              ? 'bg-purple-600 text-white shadow-lg'
+              : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50'
+          }`}
+        >
+          <Upload size={20} />
+          <div>
+            <span className="block">Ручной ввод</span>
+            <span className="text-xs opacity-80">Вставить из файла</span>
+          </div>
+        </button>
+      </div>
+
       {/* Analysis Form */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 mb-6">
-          {/* Connection selector */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Аккаунт</label>
-            <select
-              value={activeConnectionId || ''}
-              onChange={(e) => setActiveConnectionId(e.target.value)}
-              className="w-full border border-gray-300 rounded-lg px-3 py-2"
-            >
-              {connections.map((conn) => (
-                <option key={conn.id} value={conn.id}>
-                  {conn.login}
-                </option>
-              ))}
-            </select>
-          </div>
+        {sourceMode === 'auto' ? (
+          /* Auto mode form */
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+            {/* Connection selector */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Аккаунт</label>
+              <select
+                value={activeConnectionId || ''}
+                onChange={(e) => setActiveConnectionId(e.target.value)}
+                className="w-full border border-gray-300 rounded-lg px-3 py-2"
+              >
+                {connections.map((conn) => (
+                  <option key={conn.id} value={conn.id}>
+                    {conn.login}
+                  </option>
+                ))}
+              </select>
+            </div>
 
-          {/* Date range */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Период</label>
-            <select
-              value={dateRange}
-              onChange={(e) => setDateRange(parseInt(e.target.value))}
-              className="w-full border border-gray-300 rounded-lg px-3 py-2"
-            >
-              <option value={7}>7 дней</option>
-              <option value={14}>14 дней</option>
-              <option value={30}>30 дней</option>
-              <option value={60}>60 дней</option>
-              <option value={90}>90 дней</option>
-            </select>
-          </div>
+            {/* Date range */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Период</label>
+              <select
+                value={dateRange}
+                onChange={(e) => setDateRange(parseInt(e.target.value))}
+                className="w-full border border-gray-300 rounded-lg px-3 py-2"
+              >
+                <option value={7}>7 дней</option>
+                <option value={14}>14 дней</option>
+                <option value={30}>30 дней</option>
+                <option value={60}>60 дней</option>
+                <option value={90}>90 дней</option>
+              </select>
+            </div>
 
-          {/* Target CPL */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Целевой CPL</label>
-            <input
-              type="number"
-              value={targetCpl || ''}
-              onChange={(e) => setTargetCpl(e.target.value ? parseInt(e.target.value) : undefined)}
-              placeholder="5000"
-              className="w-full border border-gray-300 rounded-lg px-3 py-2"
-            />
-          </div>
+            {/* Target CPL */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Целевой CPL</label>
+              <input
+                type="number"
+                value={targetCpl || ''}
+                onChange={(e) => setTargetCpl(e.target.value ? parseInt(e.target.value) : undefined)}
+                placeholder="5000"
+                className="w-full border border-gray-300 rounded-lg px-3 py-2"
+              />
+            </div>
 
-          {/* AI Toggle */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Метод анализа</label>
-            <button
-              onClick={() => setUseAi(!useAi)}
-              className={`w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg border transition-colors ${
-                useAi
-                  ? 'bg-purple-50 border-purple-300 text-purple-700'
-                  : 'bg-gray-50 border-gray-300 text-gray-700'
-              }`}
-            >
-              {useAi ? <Sparkles size={18} /> : <Filter size={18} />}
-              {useAi ? 'AI анализ' : 'Быстрый анализ'}
-            </button>
+            {/* AI Toggle */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Метод</label>
+              <button
+                onClick={() => setUseAi(!useAi)}
+                className={`w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg border transition-colors ${
+                  useAi
+                    ? 'bg-purple-50 border-purple-300 text-purple-700'
+                    : 'bg-gray-50 border-gray-300 text-gray-700'
+                }`}
+              >
+                {useAi ? <Sparkles size={18} /> : <Filter size={18} />}
+                {useAi ? 'AI анализ' : 'Быстрый'}
+              </button>
+            </div>
           </div>
+        ) : (
+          /* Manual mode form */
+          <div className="space-y-4 mb-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* Target CPL */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Целевой CPL</label>
+                <input
+                  type="number"
+                  value={targetCpl || ''}
+                  onChange={(e) => setTargetCpl(e.target.value ? parseInt(e.target.value) : undefined)}
+                  placeholder="5000"
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2"
+                />
+              </div>
 
-          {/* Analyze button */}
-          <div className="flex items-end">
-            <button
-              onClick={() => analyzeMutation.mutate()}
-              disabled={analyzeMutation.isPending || !activeConnectionId}
-              className="w-full flex items-center justify-center gap-2 bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
-            >
-              {analyzeMutation.isPending ? (
-                <Loader2 className="animate-spin" size={18} />
-              ) : (
-                <Search size={18} />
-              )}
-              Анализировать
-            </button>
+              {/* AI Toggle */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Метод</label>
+                <button
+                  onClick={() => setUseAi(!useAi)}
+                  className={`w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg border transition-colors ${
+                    useAi
+                      ? 'bg-purple-50 border-purple-300 text-purple-700'
+                      : 'bg-gray-50 border-gray-300 text-gray-700'
+                  }`}
+                >
+                  {useAi ? <Sparkles size={18} /> : <Filter size={18} />}
+                  {useAi ? 'AI анализ' : 'Быстрый'}
+                </button>
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Поисковые запросы
+              </label>
+              <div className="mb-2 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                <p className="text-xs text-blue-800">
+                  Формат: <code className="bg-blue-100 px-1 rounded">запрос, клики, расход, конверсии</code>
+                </p>
+                <p className="text-xs text-blue-600 mt-1">
+                  Пример: автошкола уфа, 45, 2250, 3
+                </p>
+              </div>
+              <textarea
+                value={manualQueries}
+                onChange={(e) => setManualQueries(e.target.value)}
+                rows={8}
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 font-mono text-sm"
+                placeholder="автошкола уфа, 45, 2250, 3&#10;права категории b, 120, 1800, 0&#10;обучение вождению бесплатно, 30, 900, 0"
+              />
+            </div>
           </div>
-        </div>
+        )}
 
         {/* Business description for AI */}
         {useAi && (
-          <div>
+          <div className="mb-6">
             <label className="block text-sm font-medium text-gray-700 mb-1">
               Описание бизнеса (для AI)
             </label>
@@ -304,6 +449,20 @@ export default function SearchQueriesAnalysis() {
             />
           </div>
         )}
+
+        {/* Analyze button */}
+        <button
+          onClick={handleAnalyze}
+          disabled={isAnalyzing || (sourceMode === 'auto' && !activeConnectionId) || (sourceMode === 'manual' && !manualQueries.trim())}
+          className="w-full flex items-center justify-center gap-2 bg-purple-600 text-white px-4 py-3 rounded-lg hover:bg-purple-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors font-medium"
+        >
+          {isAnalyzing ? (
+            <Loader2 className="animate-spin" size={20} />
+          ) : (
+            <Search size={20} />
+          )}
+          {isAnalyzing ? 'Анализируем...' : 'Анализировать'}
+        </button>
       </div>
 
       {/* Results */}
@@ -511,15 +670,16 @@ export default function SearchQueriesAnalysis() {
       )}
 
       {/* Empty state */}
-      {!analysisResult && !analyzeMutation.isPending && (
+      {!analysisResult && !isAnalyzing && (
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-12 text-center">
           <Search className="mx-auto text-gray-300 mb-4" size={48} />
           <h3 className="text-lg font-medium text-gray-900 mb-2">
             Анализ поисковых запросов
           </h3>
           <p className="text-gray-500 max-w-md mx-auto">
-            Запустите анализ, чтобы найти нецелевые запросы и сформировать список минус-слов для
-            оптимизации рекламных кампаний.
+            {sourceMode === 'auto'
+              ? 'Выберите аккаунт и период, затем запустите анализ для поиска нецелевых запросов.'
+              : 'Вставьте поисковые запросы с метриками и запустите анализ.'}
           </p>
         </div>
       )}

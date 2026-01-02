@@ -11,7 +11,7 @@ import {
   Lightbulb,
   Megaphone,
   Target,
-  Filter,
+  Search,
   FolderOpen,
   Plus,
   ArrowRight,
@@ -161,17 +161,14 @@ export default function Dashboard() {
       available: isAdmin,
     },
     {
-      id: 'minusWords',
-      name: 'Минус-слова',
-      description: 'Автоматический подбор',
-      icon: Filter,
-      href: '/minus-words',
+      id: 'searchQueries',
+      name: 'Анализ запросов',
+      description: 'Поиск нецелевых запросов',
+      icon: Search,
+      href: '/search-queries',
       color: 'bg-cyan-500',
-      status: getModuleStatus('minusWords'),
-      stats: activeProject?.minusWords ? {
-        count: activeProject.minusWords.words.length,
-      } : null,
-      available: isAdmin,
+      status: 'empty',
+      available: true,
     },
   ];
 
