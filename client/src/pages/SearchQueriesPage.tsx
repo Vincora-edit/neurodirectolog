@@ -110,6 +110,7 @@ export default function SearchQueriesPage() {
   const [selectedMinusWords, setSelectedMinusWords] = useState<Set<string>>(new Set());
   const [expandedQueries, setExpandedQueries] = useState<Set<string>>(new Set());
   const [analysisWarning, setAnalysisWarning] = useState<string | null>(null);
+  const [filteredInfo, setFilteredInfo] = useState<{ raw: number; filtered: number } | null>(null);
 
   const [connectionsLoading, setConnectionsLoading] = useState(true);
 
@@ -179,11 +180,21 @@ export default function SearchQueriesPage() {
 
       const data = await response.json();
       if (!data.success) throw new Error(data.error);
-      return { result: data.data as AnalysisResult, warning: data.warning as string | undefined };
+      return {
+        result: data.data as AnalysisResult,
+        warning: data.warning as string | undefined,
+        rawQueriesCount: data.rawQueriesCount as number | undefined,
+        filteredCount: data.filteredCount as number | undefined,
+      };
     },
-    onSuccess: ({ result, warning }) => {
+    onSuccess: ({ result, warning, rawQueriesCount, filteredCount }) => {
       setAnalysisResult(result);
       setAnalysisWarning(warning || null);
+      if (rawQueriesCount !== undefined && filteredCount !== undefined) {
+        setFilteredInfo({ raw: rawQueriesCount, filtered: filteredCount });
+      } else {
+        setFilteredInfo(null);
+      }
       const words = new Set(result.suggestedMinusWords.map((mw) => mw.word));
       setSelectedMinusWords(words);
     },
@@ -236,6 +247,7 @@ export default function SearchQueriesPage() {
   const handleAnalyze = () => {
     setAnalysisResult(null);
     setAnalysisWarning(null);
+    setFilteredInfo(null);
     if (sourceMode === 'auto') {
       autoAnalyzeMutation.mutate();
     } else {
@@ -564,6 +576,11 @@ export default function SearchQueriesPage() {
               <div className="text-2xl font-bold text-gray-900">
                 {analysisResult.totalQueries.toLocaleString('ru-RU')}
               </div>
+              {filteredInfo && filteredInfo.filtered > 0 && (
+                <div className="text-xs text-gray-400 mt-1">
+                  Отфильтровано {filteredInfo.filtered.toLocaleString('ru-RU')} шумовых
+                </div>
+              )}
             </div>
 
             <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4">

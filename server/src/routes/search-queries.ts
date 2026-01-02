@@ -59,7 +59,7 @@ router.post('/:connectionId/analyze', async (req, res) => {
   try {
     const userId = (req as any).userId;
     const { connectionId } = req.params;
-    let { dateFrom, dateTo, campaignId, businessDescription, targetCpl, useAi = true } = req.body;
+    let { dateFrom, dateTo, campaignId, businessDescription, targetCpl, useAi = true, minImpressions = 5 } = req.body;
 
     // Get queries
     const queries = await searchQueriesService.getSearchQueries(
@@ -135,12 +135,14 @@ router.post('/:connectionId/analyze', async (req, res) => {
         usedFallback = true;
         analysis = searchQueriesService.quickAnalysis(queries, {
           maxCpl: targetCpl || 5000,
+          minImpressions,
         });
       }
     } else {
       // Quick rule-based analysis
       analysis = searchQueriesService.quickAnalysis(queries, {
         maxCpl: targetCpl || 5000,
+        minImpressions,
       });
     }
 
@@ -153,9 +155,14 @@ router.post('/:connectionId/analyze', async (req, res) => {
       dateTo
     );
 
+    // Add info about filtered queries
+    const filteredCount = queries.length - analysis.totalQueries;
+
     res.json({
       success: true,
       data: analysis,
+      rawQueriesCount: queries.length,
+      filteredCount,
       ...(usedFallback && { warning: 'AI анализ недоступен в вашем регионе. Использован быстрый анализ.' })
     });
   } catch (error: any) {

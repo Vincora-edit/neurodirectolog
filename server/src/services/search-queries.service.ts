@@ -333,6 +333,8 @@ ${JSON.stringify(queryData, null, 2)}
       stopWords?: string[];
       minImpressionsForLowCtr?: number;
       lowCtrThreshold?: number;
+      minImpressions?: number; // Minimum impressions to consider query
+      minCost?: number; // Minimum cost to consider query
     } = {}
   ): AnalysisResult {
     const {
@@ -342,13 +344,29 @@ ${JSON.stringify(queryData, null, 2)}
       stopWords = ['бесплатно', 'скачать', 'торрент', 'своими руками', 'отзывы', 'что это', 'как'],
       minImpressionsForLowCtr = 100, // Минимум показов для проверки CTR
       lowCtrThreshold = 1.0, // CTR ниже 1% считается низким
+      minImpressions = 5, // Запросы с менее чем 5 показами - статистически незначимы
+      minCost = 0, // Минимальный расход для учёта запроса
     } = config;
+
+    // Filter out statistically insignificant queries (noise)
+    // Queries with few impressions and no clicks don't provide useful data
+    const significantQueries = queries.filter(q => {
+      // Always include queries with clicks or conversions - they have real data
+      if (q.clicks > 0 || q.conversions > 0) return true;
+      // Always include queries with significant cost
+      if (q.cost >= minCost && minCost > 0) return true;
+      // Exclude queries with very few impressions and no engagement
+      if (q.impressions < minImpressions) return false;
+      return true;
+    });
+
+    console.log(`[QuickAnalysis] Filtered ${queries.length} -> ${significantQueries.length} queries (removed ${queries.length - significantQueries.length} noise queries)`);
 
     const targetQueries: QueryAnalysis[] = [];
     const trashQueries: QueryAnalysis[] = [];
     const reviewQueries: QueryAnalysis[] = [];
 
-    for (const query of queries) {
+    for (const query of significantQueries) {
       const lowerQuery = query.query.toLowerCase();
 
       // Check for stop words
@@ -546,11 +564,11 @@ ${JSON.stringify(queryData, null, 2)}
       .sort((a, b) => b.potentialSavings - a.potentialSavings)
       .slice(0, 50);
 
-    const totalCost = queries.reduce((sum, q) => sum + q.cost, 0);
+    const totalCost = significantQueries.reduce((sum, q) => sum + q.cost, 0);
     const wastedCost = trashQueries.reduce((sum, q) => sum + q.metrics.cost, 0);
 
     return {
-      totalQueries: queries.length,
+      totalQueries: significantQueries.length,
       targetQueries,
       trashQueries,
       reviewQueries,
