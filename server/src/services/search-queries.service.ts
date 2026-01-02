@@ -499,7 +499,8 @@ ${JSON.stringify(queryData, null, 2)}
     const id = uuidv4();
 
     try {
-      await clickhouseService.query(`
+      // Use exec() for INSERT - query() adds FORMAT which breaks INSERT
+      await clickhouseService.exec(`
         INSERT INTO search_query_analyses (
           id, connection_id, user_id, date_from, date_to,
           total_queries, target_count, trash_count, review_count,

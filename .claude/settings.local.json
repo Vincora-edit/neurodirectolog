@@ -209,7 +209,9 @@
       "Bash(sshpass -p 'c9R+eLvxtQJ-,x' ssh -o StrictHostKeyChecking=no root@91.222.239.217 \"tail -10 /var/log/nginx/access.log\")",
       "Bash('https://dashboard.vincora.ru/api/auth/login')",
       "Skill(deploy)",
-      "Skill(deploy:*)"
+      "Skill(deploy:*)",
+      "Bash(sshpass -p 'c9R+eLvxtQJ-,x' ssh -o StrictHostKeyChecking=no root@91.222.239.217 \"docker logs neurodirectolog-server --tail 50 2>&1 | grep -E ''SearchQueries|search-queries|error|Error''\")",
+      "Bash(sshpass -p 'c9R+eLvxtQJ-,x' ssh -o StrictHostKeyChecking=no root@91.222.239.217 \"docker exec neurodirectolog-clickhouse clickhouse-client --query \"\"SHOW CREATE TABLE neurodirectolog.search_query_analyses\"\" 2>&1\")"
     ]
   }
 }
