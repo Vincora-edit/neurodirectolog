@@ -132,15 +132,18 @@ export default function SearchQueriesPage() {
       fetchBrief(activeConnectionId).then((brief) => {
         if (brief) {
           setBriefDescription(brief.description);
-          // Auto-fill if fields are empty
-          if (!businessDescription && brief.description) {
+          // Always update from brief when connection changes
+          if (brief.description) {
             setBusinessDescription(brief.description);
           }
-          if (!targetCpl && brief.targetCpl) {
+          if (brief.targetCpl) {
             setTargetCpl(brief.targetCpl);
           }
         } else {
+          // No brief for this connection - clear fields
           setBriefDescription(null);
+          setBusinessDescription('');
+          setTargetCpl(undefined);
         }
       });
     }
