@@ -27,6 +27,7 @@ const AdminPanel = lazy(() => import('./pages/AdminPanel'));
 const PublicDashboard = lazy(() => import('./pages/PublicDashboard'));
 const Management = lazy(() => import('./pages/Management'));
 const Alerts = lazy(() => import('./pages/Alerts'));
+const Antifraud = lazy(() => import('./pages/Antifraud'));
 
 const queryClient = new QueryClient();
 
@@ -82,6 +83,7 @@ function App() {
               <Route path="admin" element={<AdminPanel />} />
               <Route path="management" element={<Management />} />
               <Route path="alerts" element={<Alerts />} />
+              <Route path="antifraud" element={<Antifraud />} />
             </Route>
           </Routes>
         </Suspense>

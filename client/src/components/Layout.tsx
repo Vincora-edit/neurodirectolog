@@ -13,6 +13,7 @@ import {
   PanelLeftClose,
   PanelLeft,
   Shield,
+  ShieldAlert,
   Lock,
   BarChart3,
   LayoutGrid,
@@ -37,6 +38,7 @@ export default function Layout() {
     { name: 'Аналитика кампаний', href: '/yandex-dashboard', icon: BarChart3, available: true },
     { name: 'Управление', href: '/management', icon: LayoutGrid, available: true },
     { name: 'Уведомления', href: '/alerts', icon: Bell, available: true },
+    { name: 'Антифрод', href: '/antifraud', icon: ShieldAlert, available: true },
     { name: 'Аналитика', href: '/analytics', icon: TrendingUp, available: isAdmin },
     // Семантика и ключевые слова
     { name: 'Семантика', href: '/semantics', icon: FileText, available: isAdmin },
