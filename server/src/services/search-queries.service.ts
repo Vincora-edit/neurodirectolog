@@ -769,9 +769,11 @@ export const searchQueriesService = {
       return quickResult;
     }
 
-    // Step 3: Build safe words set - words from CONVERTING queries
-    // These words are PROVEN to lead to conversions - never minus them
+    // Step 3: Build safe words set - words from CONVERTING queries AND TARGET queries
+    // These words are PROVEN to lead to conversions OR are in target queries - never minus them
     const safeWords = new Set<string>();
+
+    // Add words from converting queries (highest priority)
     for (const q of queries) {
       if (q.conversions > 0) {
         const words = q.query.toLowerCase().split(/\s+/);
@@ -782,7 +784,21 @@ export const searchQueriesService = {
         }
       }
     }
-    console.log(`[QuickMinusAnalysis] Safe words (from converting queries): ${safeWords.size}`);
+    const convertingSafeWordsCount = safeWords.size;
+
+    // CRITICAL: Also add words from TARGET queries classified by quickAnalysis
+    // This prevents minusing words like "гражданство", "квота", "продлить"
+    // which appear in target queries even without conversions yet
+    for (const target of quickResult.targetQueries) {
+      const words = target.query.toLowerCase().split(/\s+/);
+      for (const word of words) {
+        if (word.length > 2) {
+          safeWords.add(word);
+        }
+      }
+    }
+
+    console.log(`[QuickMinusAnalysis] Safe words: ${safeWords.size} (${convertingSafeWordsCount} from converting, ${safeWords.size - convertingSafeWordsCount} added from target queries)`);
 
     // Step 4: Extract words from NON-converting queries and build statistics
     const wordStats = new Map<string, {
