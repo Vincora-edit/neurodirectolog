@@ -89,6 +89,21 @@ router.post('/:connectionId/analyze', async (req, res) => {
       });
     }
 
+    // Get targetCpl from KPI if not provided
+    if (!targetCpl) {
+      try {
+        const now = new Date();
+        const month = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+        const kpi = await clickhouseService.getAccountKpi(connectionId, month);
+        if (kpi?.targetCpl) {
+          targetCpl = kpi.targetCpl;
+          console.log(`[SearchQueries] Using targetCpl from KPI: ${targetCpl}`);
+        }
+      } catch (e) {
+        console.log('[SearchQueries] Could not load KPI:', e);
+      }
+    }
+
     // If AI mode but no description provided, try to get from project brief
     if (useAi && !businessDescription) {
       try {
@@ -106,11 +121,6 @@ router.post('/:connectionId/analyze', async (req, res) => {
             if (brief.advantages?.length) parts.push(`Преимущества: ${brief.advantages.join(', ')}`);
 
             businessDescription = parts.join('. ');
-
-            // Also use targetCPA from brief if not provided
-            if (!targetCpl && brief.targetCPA) {
-              targetCpl = brief.targetCPA;
-            }
           }
         }
       } catch (e) {

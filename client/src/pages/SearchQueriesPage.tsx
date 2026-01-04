@@ -109,6 +109,18 @@ const fetchBrief = async (connectionId: string): Promise<{ description: string; 
   return data.data || null;
 };
 
+const fetchKpi = async (connectionId: string): Promise<{ targetCpl: number } | null> => {
+  const token = localStorage.getItem('token');
+  const response = await fetch(`${API_BASE_URL}/yandex/kpi/${connectionId}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  const data = await response.json();
+  if (data.success && data.data?.kpi) {
+    return { targetCpl: data.data.kpi.targetCpl || 0 };
+  }
+  return null;
+};
+
 export default function SearchQueriesPage() {
   // Source mode
   const [sourceMode, setSourceMode] = useState<SourceMode>('auto');
@@ -116,7 +128,7 @@ export default function SearchQueriesPage() {
   // Auto mode state
   const [connections, setConnections] = useState<Connection[]>([]);
   const [activeConnectionId, setActiveConnectionId] = useState<string | null>(null);
-  const [dateRange, setDateRange] = useState(30);
+  const [dateRange, setDateRange] = useState(7);
 
   // Manual mode state
   const [manualQueries, setManualQueries] = useState('');
@@ -148,23 +160,27 @@ export default function SearchQueriesPage() {
       .finally(() => setConnectionsLoading(false));
   }, []);
 
-  // Load brief when connection changes
+  // Load brief and KPI when connection changes
   useEffect(() => {
     if (activeConnectionId) {
+      // Load brief for business description
       fetchBrief(activeConnectionId).then((brief) => {
         if (brief) {
           setBriefDescription(brief.description);
-          // Always update from brief when connection changes
           if (brief.description) {
             setBusinessDescription(brief.description);
           }
-          if (brief.targetCpl) {
-            setTargetCpl(brief.targetCpl);
-          }
         } else {
-          // No brief for this connection - clear fields
           setBriefDescription(null);
           setBusinessDescription('');
+        }
+      });
+
+      // Load KPI for targetCpl
+      fetchKpi(activeConnectionId).then((kpi) => {
+        if (kpi?.targetCpl && kpi.targetCpl > 0) {
+          setTargetCpl(kpi.targetCpl);
+        } else {
           setTargetCpl(undefined);
         }
       });
