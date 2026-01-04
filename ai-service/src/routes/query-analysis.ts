@@ -208,4 +208,119 @@ ${JSON.stringify(queryData, null, 2)}
   }
 });
 
+/**
+ * POST /api/ai/queries/analyze-words
+ * Analyze individual words for minus-word candidates
+ *
+ * This endpoint evaluates words (not full queries) against business description
+ * to find words that should be added as minus-words
+ */
+router.post('/analyze-words', async (req, res) => {
+  try {
+    const { words, businessDescription, safeWords } = req.body as {
+      words: Array<{
+        word: string;
+        totalCost: number;
+        totalClicks: number;
+        queriesCount: number;
+        exampleQueries: string[];
+      }>;
+      businessDescription: string;
+      safeWords: string[];
+    };
+
+    if (!words || !Array.isArray(words) || words.length === 0) {
+      return res.status(400).json({
+        success: false,
+        error: 'words array is required',
+      });
+    }
+
+    if (!businessDescription) {
+      return res.status(400).json({
+        success: false,
+        error: 'businessDescription is required',
+      });
+    }
+
+    // Prepare data for AI - top 100 by cost
+    const topWords = words
+      .sort((a, b) => b.totalCost - a.totalCost)
+      .slice(0, 100);
+
+    const wordData = topWords.map(w => ({
+      word: w.word,
+      cost: Math.round(w.totalCost),
+      clicks: w.totalClicks,
+      queries: w.queriesCount,
+      examples: w.exampleQueries.slice(0, 2),
+    }));
+
+    const prompt = `Ты - эксперт по контекстной рекламе Яндекс.Директ. Проанализируй слова из поисковых запросов БЕЗ конверсий.
+
+Бизнес: ${businessDescription}
+
+ЗАДАЧА: Определи, какие слова являются мусорными и должны быть добавлены как минус-слова.
+
+Мусорные слова - это:
+- Слова указывающие на информационный интент (новости, изменения, закон, статья, форум)
+- Слова указывающие на другой бизнес (курсы, обучение, выучить)
+- Слова указывающие на госорганы если мы не госорган (федеральная, служба, управление)
+- Слова указывающие на самостоятельное решение (самостоятельно, своими руками, инструкция)
+- Географические слова если бизнес локальный
+- Слова конкурентов
+
+ВАЖНО: НИКОГДА не добавляй слова которые могут быть частью целевого запроса!
+Например, для миграционных услуг слова "рвп", "внж", "гражданство", "оформить", "получить" - это ЦЕЛЕВЫЕ слова.
+
+Безопасные слова (есть в конвертирующих запросах, НЕ минусовать): ${safeWords.slice(0, 50).join(', ')}
+
+Слова для анализа (отсортированы по затратам):
+${JSON.stringify(wordData, null, 2)}
+
+Верни JSON со словами которые ТОЧНО нужно заминусовать:
+{
+  "minusWords": [
+    {
+      "word": "слово",
+      "reason": "почему это мусор (коротко)",
+      "confidence": "high|medium|low"
+    }
+  ]
+}
+
+ВАЖНО:
+- confidence: "high" - 100% мусор, можно минусовать без проверки
+- confidence: "medium" - скорее всего мусор, но стоит проверить
+- confidence: "low" - возможно мусор, требует ручной проверки
+- Верни ТОЛЬКО те слова, которые действительно мусорные
+- НЕ добавляй слова если не уверен`;
+
+    interface WordAnalysisResult {
+      minusWords: Array<{
+        word: string;
+        reason: string;
+        confidence: 'high' | 'medium' | 'low';
+      }>;
+    }
+
+    const aiResult = await chatCompletionJson<WordAnalysisResult>(prompt);
+
+    console.log(`[WordAnalysis] AI recommended ${aiResult.minusWords?.length || 0} minus words`);
+
+    res.json({
+      success: true,
+      data: {
+        minusWords: aiResult.minusWords || [],
+      },
+    });
+  } catch (error: any) {
+    console.error('[WordAnalysis] Failed:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message,
+    });
+  }
+});
+
 export default router;

@@ -726,20 +726,21 @@ export const searchQueriesService = {
   },
 
   /**
-   * Hybrid analysis: Quick analysis + AI for finding trash patterns
+   * Quick Minus Analysis - Fast analysis to find obvious minus-words
    *
    * Logic:
-   * 1. Quick analysis classifies queries by rules (stop-words, conversions, CPL)
-   * 2. AI analyzes top-50 expensive queries WITHOUT conversions
-   * 3. AI returns trash words/bigrams (e.g., "новости", "изменения 2024")
-   * 4. Apply AI-found trash words to ALL queries
+   * 1. Extract all unique words from non-converting queries
+   * 2. Build word statistics (cost, clicks, frequency)
+   * 3. Build safe words set (words from converting queries)
+   * 4. AI evaluates top expensive words against business description
+   * 5. Apply AI-recommended minus words
    */
-  async hybridAnalysis(
+  async quickMinusAnalysis(
     queries: SearchQuery[],
     businessDescription: string,
     targetCpl?: number
   ): Promise<AnalysisResult> {
-    // Step 1: Run quick analysis on all queries
+    // Step 1: Run quick analysis on all queries (basic rules)
     const quickResult = this.quickAnalysis(queries, {
       maxCpl: targetCpl || 5000,
       minImpressions: 3,
@@ -747,99 +748,117 @@ export const searchQueriesService = {
 
     // Step 2: Check if AI is available
     if (!aiClientService.isConfigured()) {
-      console.log('[HybridAnalysis] AI not configured, using quick result only');
+      console.log('[QuickMinusAnalysis] AI not configured, using quick result only');
       return quickResult;
     }
 
-    // Step 3: Select top-50 expensive queries WITHOUT conversions for AI analysis
-    // These are the most problematic - spending money but not converting
-    const expensiveNoConversions = queries
-      .filter(q => q.conversions === 0 && q.cost > 0)
-      .sort((a, b) => b.cost - a.cost)
-      .slice(0, 50);
-
-    if (expensiveNoConversions.length === 0) {
-      console.log('[HybridAnalysis] No expensive queries without conversions, using quick result');
-      return quickResult;
-    }
-
-    console.log(`[HybridAnalysis] Sending ${expensiveNoConversions.length} expensive queries (no conversions) to AI`);
-    console.log(`[HybridAnalysis] Top queries: ${expensiveNoConversions.slice(0, 5).map(q => `"${q.query}" (${q.cost.toFixed(0)}₽)`).join(', ')}`);
-
-    // Step 4: Send to AI to find trash patterns
-    try {
-      const aiResult = await aiClientService.analyzeQueries(
-        expensiveNoConversions,
-        businessDescription,
-        targetCpl
-      );
-
-      console.log(`[HybridAnalysis] AI analyzed ${aiResult.analyzedQueries} queries`);
-      console.log(`[HybridAnalysis] AI found ${aiResult.suggestedMinusWords?.length || 0} minus words`);
-
-      // Step 5: Build set of AI-found trash words
-      const aiTrashWords = new Set<string>();
-      for (const minus of aiResult.suggestedMinusWords || []) {
-        aiTrashWords.add(minus.word.toLowerCase());
-      }
-
-      // Also extract trash words from AI's trash queries analysis
-      for (const trashQuery of aiResult.trashQueries || []) {
-        for (const word of trashQuery.suggestedMinusWords || []) {
-          aiTrashWords.add(word.toLowerCase());
-        }
-      }
-
-      console.log(`[HybridAnalysis] Total AI trash words: ${aiTrashWords.size}`);
-      if (aiTrashWords.size > 0) {
-        console.log(`[HybridAnalysis] AI trash words: ${Array.from(aiTrashWords).slice(0, 10).join(', ')}`);
-      }
-
-      // Step 6: Build safe words set FIRST - words from converting queries
-      // CRITICAL: Never mark a query as trash if it contains words from converting queries
-      const safeWords = new Set<string>();
-      for (const q of queries) {
-        if (q.conversions > 0) {
-          const words = q.query.toLowerCase().split(/\s+/);
-          for (const word of words) {
-            if (word.length > 2) {
-              safeWords.add(word);
-            }
+    // Step 3: Build safe words set - words from CONVERTING queries
+    // These words are PROVEN to lead to conversions - never minus them
+    const safeWords = new Set<string>();
+    for (const q of queries) {
+      if (q.conversions > 0) {
+        const words = q.query.toLowerCase().split(/\s+/);
+        for (const word of words) {
+          if (word.length > 2) {
+            safeWords.add(word);
           }
         }
       }
-      console.log(`[HybridAnalysis] Safe words (from converting queries): ${safeWords.size}`);
+    }
+    console.log(`[QuickMinusAnalysis] Safe words (from converting queries): ${safeWords.size}`);
 
-      // Filter AI trash words - remove any that appear in converting queries
-      const filteredTrashWords = new Set<string>();
-      for (const trashWord of aiTrashWords) {
-        if (safeWords.has(trashWord)) {
-          console.log(`[HybridAnalysis] Filtering out "${trashWord}" - appears in converting queries`);
-        } else {
-          filteredTrashWords.add(trashWord);
+    // Step 4: Extract words from NON-converting queries and build statistics
+    const wordStats = new Map<string, {
+      totalCost: number;
+      totalClicks: number;
+      queriesCount: number;
+      exampleQueries: string[];
+    }>();
+
+    const nonConvertingQueries = queries.filter(q => q.conversions === 0 && q.cost > 0);
+
+    for (const q of nonConvertingQueries) {
+      const words = q.query.toLowerCase().split(/\s+/).filter(w => w.length > 2);
+
+      for (const word of words) {
+        // Skip safe words entirely
+        if (safeWords.has(word)) continue;
+
+        const existing = wordStats.get(word) || {
+          totalCost: 0,
+          totalClicks: 0,
+          queriesCount: 0,
+          exampleQueries: [],
+        };
+
+        existing.totalCost += q.cost;
+        existing.totalClicks += q.clicks;
+        existing.queriesCount += 1;
+        if (existing.exampleQueries.length < 3) {
+          existing.exampleQueries.push(q.query);
+        }
+
+        wordStats.set(word, existing);
+      }
+    }
+
+    console.log(`[QuickMinusAnalysis] Found ${wordStats.size} unique words in non-converting queries`);
+
+    // Step 5: Select top words by cost for AI analysis
+    const topWords = Array.from(wordStats.entries())
+      .map(([word, stats]) => ({ word, ...stats }))
+      .sort((a, b) => b.totalCost - a.totalCost)
+      .slice(0, 100); // Top 100 by cost
+
+    if (topWords.length === 0) {
+      console.log('[QuickMinusAnalysis] No words to analyze, using quick result');
+      return quickResult;
+    }
+
+    console.log(`[QuickMinusAnalysis] Sending ${topWords.length} words to AI for evaluation`);
+    console.log(`[QuickMinusAnalysis] Top words: ${topWords.slice(0, 10).map(w => `"${w.word}" (${w.totalCost.toFixed(0)}₽)`).join(', ')}`);
+
+    // Step 6: Send words to AI for evaluation
+    try {
+      const aiResult = await aiClientService.analyzeWordsForMinus(
+        topWords,
+        businessDescription,
+        Array.from(safeWords)
+      );
+
+      const minusWords = aiResult.minusWords || [];
+      console.log(`[QuickMinusAnalysis] AI recommended ${minusWords.length} minus words`);
+
+      if (minusWords.length > 0) {
+        console.log(`[QuickMinusAnalysis] Minus words: ${minusWords.slice(0, 10).map(m => `"${m.word}" (${m.confidence})`).join(', ')}`);
+      }
+
+      // Step 7: Build set of AI-recommended minus words (only high/medium confidence)
+      const aiMinusWords = new Set<string>();
+      for (const minus of minusWords) {
+        if (minus.confidence === 'high' || minus.confidence === 'medium') {
+          aiMinusWords.add(minus.word.toLowerCase());
         }
       }
-      console.log(`[HybridAnalysis] Filtered trash words: ${filteredTrashWords.size} (was ${aiTrashWords.size})`);
 
-      // Step 7: Re-classify queries using FILTERED AI trash words
+      // Step 8: Re-classify queries using AI minus words
       const finalTarget: QueryAnalysis[] = [];
       const finalTrash: QueryAnalysis[] = [];
       const finalReview: QueryAnalysis[] = [];
 
-      // Helper to check if query contains any filtered AI trash word
-      const containsAiTrashWord = (query: string): string | null => {
+      // Helper to check if query contains any AI minus word
+      const containsMinusWord = (query: string): string | null => {
         const lowerQuery = query.toLowerCase();
-        for (const trashWord of filteredTrashWords) {
-          // Match whole word or phrase
-          const regex = new RegExp(`\\b${trashWord.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i');
+        for (const minusWord of aiMinusWords) {
+          const regex = new RegExp(`\\b${minusWord.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i');
           if (regex.test(lowerQuery)) {
-            return trashWord;
+            return minusWord;
           }
         }
         return null;
       };
 
-      // Process target queries - they stay target (have conversions)
+      // Process target queries - they stay target
       for (const q of quickResult.targetQueries) {
         finalTarget.push(q);
       }
@@ -849,58 +868,44 @@ export const searchQueriesService = {
         finalTrash.push(q);
       }
 
-      // Process review queries - apply filtered AI trash words
+      // Process review queries - apply AI minus words
       for (const q of quickResult.reviewQueries) {
-        const trashWord = containsAiTrashWord(q.query);
-        if (trashWord) {
+        const minusWord = containsMinusWord(q.query);
+        if (minusWord) {
+          const aiMinus = minusWords.find(m => m.word.toLowerCase() === minusWord);
           finalTrash.push({
             ...q,
             category: 'trash',
-            reason: `AI: содержит "${trashWord}"`,
-            suggestedMinusWords: [trashWord],
+            reason: aiMinus?.reason || `AI: содержит "${minusWord}"`,
+            suggestedMinusWords: [minusWord],
           });
         } else {
           finalReview.push(q);
         }
       }
 
-      console.log(`[HybridAnalysis] After AI: target=${finalTarget.length}, trash=${finalTrash.length}, review=${finalReview.length}`);
+      console.log(`[QuickMinusAnalysis] After AI: target=${finalTarget.length}, trash=${finalTrash.length}, review=${finalReview.length}`);
 
-      // Step 8: Merge minus words with SAFETY CHECK (reusing safeWords from above)
+      // Step 9: Build minus word suggestions list
       const allMinusWords = [...quickResult.suggestedMinusWords];
       const existingWords = new Set(allMinusWords.map(m => m.word.toLowerCase()));
 
-      for (const aiMinus of aiResult.suggestedMinusWords || []) {
+      for (const aiMinus of minusWords) {
         const wordLower = aiMinus.word.toLowerCase();
+        if (existingWords.has(wordLower)) continue;
+        if (aiMinus.confidence === 'low') continue; // Skip low confidence
 
-        // SAFETY CHECK: Skip if word appears in converting queries
-        if (safeWords.has(wordLower)) {
-          console.log(`[HybridAnalysis] Skipping "${aiMinus.word}" - appears in converting queries`);
-          continue;
-        }
+        const stats = wordStats.get(wordLower);
+        if (!stats) continue;
 
-        if (!existingWords.has(wordLower)) {
-          // Count how many queries this word affects (only non-converting!)
-          const affectedQueries = queries.filter(q =>
-            q.conversions === 0 && q.query.toLowerCase().includes(wordLower)
-          );
-
-          if (affectedQueries.length === 0) {
-            console.log(`[HybridAnalysis] Skipping "${aiMinus.word}" - no non-converting queries affected`);
-            continue;
-          }
-
-          const savings = affectedQueries.reduce((sum, q) => sum + q.cost, 0);
-
-          allMinusWords.push({
-            word: aiMinus.word,
-            reason: aiMinus.reason || 'AI: нецелевой запрос',
-            queriesAffected: affectedQueries.length,
-            potentialSavings: savings,
-            category: aiMinus.category || 'other',
-          });
-          existingWords.add(wordLower);
-        }
+        allMinusWords.push({
+          word: aiMinus.word,
+          reason: aiMinus.reason,
+          queriesAffected: stats.queriesCount,
+          potentialSavings: stats.totalCost,
+          category: 'other',
+        });
+        existingWords.add(wordLower);
       }
 
       // Recalculate summary
@@ -923,7 +928,7 @@ export const searchQueriesService = {
         },
       };
     } catch (aiError: any) {
-      console.error('[HybridAnalysis] AI failed, using quick result:', aiError.message);
+      console.error('[QuickMinusAnalysis] AI failed, using quick result:', aiError.message);
       return quickResult;
     }
   },

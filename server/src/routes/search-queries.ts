@@ -132,9 +132,9 @@ router.post('/:connectionId/analyze', async (req, res) => {
     let usedAi = false;
 
     if (useAi && businessDescription) {
-      // Use hybrid analysis: quick rules + AI for complex cases
-      // This sends only ~100-150 queries to AI instead of all 47000
-      analysis = await searchQueriesService.hybridAnalysis(
+      // Quick minus analysis: extract words, AI evaluates them against business
+      // Sends ~100 words to AI (not full queries) - fast and focused
+      analysis = await searchQueriesService.quickMinusAnalysis(
         queries,
         businessDescription,
         targetCpl

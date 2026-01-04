@@ -170,6 +170,34 @@ export const aiClientService = {
     });
   },
 
+  /**
+   * Analyze words for minus-word candidates
+   * AI evaluates individual words/phrases against business description
+   */
+  async analyzeWordsForMinus(
+    words: Array<{
+      word: string;
+      totalCost: number;
+      totalClicks: number;
+      queriesCount: number;
+      exampleQueries: string[];
+    }>,
+    businessDescription: string,
+    safeWords: string[] // Words that appear in converting queries - never minus these
+  ): Promise<{
+    minusWords: Array<{
+      word: string;
+      reason: string;
+      confidence: 'high' | 'medium' | 'low';
+    }>;
+  }> {
+    return fetchAI('/api/ai/queries/analyze-words', {
+      words,
+      businessDescription,
+      safeWords,
+    });
+  },
+
   // === Campaign Analysis ===
 
   /**
