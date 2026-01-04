@@ -739,27 +739,21 @@ export const searchQueriesService = {
    */
   async quickMinusAnalysis(
     queries: SearchQuery[],
-    businessDescription: string,
-    targetCpl?: number
+    businessDescription: string
   ): Promise<AnalysisResult> {
-    // Step 0: Filter out noise - queries that don't have enough data
-    // Balance between removing noise and keeping actionable data
+    // Step 0: Simple filtering - clicks > 1 AND impressions > 5
+    // Focus on finding obvious trash, not deep analysis
     const significantQueries = queries.filter(q => {
-      // Always include queries with conversions - they are valuable
+      // Always include queries with conversions
       if (q.conversions > 0) return true;
-      // Include queries with any clicks - they have data
-      if (q.clicks > 0) return true;
-      // Filter out queries with <5 impressions AND no clicks (pure noise)
-      if (q.impressions < 5 && q.clicks === 0) return false;
-      // Include remaining queries (have impressions but no clicks yet)
-      return true;
+      // Include queries with clicks > 1 AND impressions > 5
+      return q.clicks > 1 && q.impressions > 5;
     });
 
-    console.log(`[QuickMinusAnalysis] Filtered ${queries.length} -> ${significantQueries.length} queries (removed ${queries.length - significantQueries.length} noise)`);
+    console.log(`[QuickMinusAnalysis] Filtered ${queries.length} -> ${significantQueries.length} queries (clicks>1 AND impressions>5)`);
 
     // Step 1: Run quick analysis on filtered queries (basic rules)
     const quickResult = this.quickAnalysis(significantQueries, {
-      maxCpl: targetCpl || 5000,
       minImpressions: 5,
     });
 
@@ -769,11 +763,11 @@ export const searchQueriesService = {
       return quickResult;
     }
 
-    // Step 3: Build safe words set - words from CONVERTING queries AND TARGET queries
-    // These words are PROVEN to lead to conversions OR are in target queries - never minus them
+    // Step 3: Build safe words set - words that should NEVER be minus words
+    // Sources: converting queries, queries with good CTR, queries with clicks
     const safeWords = new Set<string>();
 
-    // Add words from converting queries (highest priority)
+    // 1. Add words from converting queries (highest priority - proven to work)
     for (const q of queries) {
       if (q.conversions > 0) {
         const words = q.query.toLowerCase().split(/\s+/);
@@ -786,9 +780,21 @@ export const searchQueriesService = {
     }
     const convertingSafeWordsCount = safeWords.size;
 
-    // CRITICAL: Also add words from TARGET queries classified by quickAnalysis
-    // This prevents minusing words like "гражданство", "квота", "продлить"
-    // which appear in target queries even without conversions yet
+    // 2. Add words from queries with good CTR (>3%) and some clicks
+    // These are likely target queries even without conversions yet
+    for (const q of queries) {
+      if (q.clicks >= 2 && q.ctr >= 3.0) {
+        const words = q.query.toLowerCase().split(/\s+/);
+        for (const word of words) {
+          if (word.length > 2) {
+            safeWords.add(word);
+          }
+        }
+      }
+    }
+    const afterCtrCount = safeWords.size;
+
+    // 3. Add words from TARGET queries classified by quickAnalysis
     for (const target of quickResult.targetQueries) {
       const words = target.query.toLowerCase().split(/\s+/);
       for (const word of words) {
@@ -798,7 +804,7 @@ export const searchQueriesService = {
       }
     }
 
-    console.log(`[QuickMinusAnalysis] Safe words: ${safeWords.size} (${convertingSafeWordsCount} from converting, ${safeWords.size - convertingSafeWordsCount} added from target queries)`);
+    console.log(`[QuickMinusAnalysis] Safe words: ${safeWords.size} (${convertingSafeWordsCount} from converting, ${afterCtrCount - convertingSafeWordsCount} from high CTR, ${safeWords.size - afterCtrCount} from target queries)`);
 
     // Step 4: Extract words from NON-converting queries and build statistics
     const wordStats = new Map<string, {

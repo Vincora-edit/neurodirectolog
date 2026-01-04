@@ -59,7 +59,7 @@ router.post('/:connectionId/analyze', async (req, res) => {
   try {
     const userId = (req as any).userId;
     const { connectionId } = req.params;
-    let { dateFrom, dateTo, campaignId, businessDescription, targetCpl, useAi = true, minImpressions = 5 } = req.body;
+    let { dateFrom, dateTo, campaignId, businessDescription } = req.body;
 
     // Get queries
     const queries = await searchQueriesService.getSearchQueries(
@@ -89,23 +89,8 @@ router.post('/:connectionId/analyze', async (req, res) => {
       });
     }
 
-    // Get targetCpl from KPI if not provided
-    if (!targetCpl) {
-      try {
-        const now = new Date();
-        const month = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-        const kpi = await clickhouseService.getAccountKpi(connectionId, month);
-        if (kpi?.targetCpl) {
-          targetCpl = kpi.targetCpl;
-          console.log(`[SearchQueries] Using targetCpl from KPI: ${targetCpl}`);
-        }
-      } catch (e) {
-        console.log('[SearchQueries] Could not load KPI:', e);
-      }
-    }
-
-    // If AI mode but no description provided, try to get from project brief
-    if (useAi && !businessDescription) {
+    // If no description provided, try to get from project brief
+    if (!businessDescription) {
       try {
         const connection = await clickhouseService.getConnectionById(connectionId);
         if (connection?.projectId) {
@@ -131,21 +116,17 @@ router.post('/:connectionId/analyze', async (req, res) => {
     let analysis;
     let usedAi = false;
 
-    if (useAi && businessDescription) {
+    if (businessDescription) {
       // Quick minus analysis: extract words, AI evaluates them against business
       // Sends ~100 words to AI (not full queries) - fast and focused
       analysis = await searchQueriesService.quickMinusAnalysis(
         queries,
-        businessDescription,
-        targetCpl
+        businessDescription
       );
       usedAi = true;
     } else {
-      // Quick rule-based analysis only
-      analysis = searchQueriesService.quickAnalysis(queries, {
-        maxCpl: targetCpl || 5000,
-        minImpressions,
-      });
+      // Quick rule-based analysis only (no AI)
+      analysis = searchQueriesService.quickAnalysis(queries, {});
     }
 
     // Save analysis result

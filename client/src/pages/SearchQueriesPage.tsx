@@ -6,18 +6,16 @@ import {
   HelpCircle,
   Download,
   Loader2,
-  XCircle,
   AlertCircle,
   ChevronDown,
   ChevronUp,
-  Sparkles,
-  Filter,
-  DollarSign,
-  TrendingUp,
-  TrendingDown,
   Upload,
   Zap,
   Bug,
+  DollarSign,
+  TrendingDown,
+  TrendingUp,
+  XCircle,
 } from 'lucide-react';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001/api';
@@ -89,19 +87,6 @@ const fetchBrief = async (connectionId: string): Promise<{ description: string; 
   return data.data || null;
 };
 
-const fetchKpi = async (connectionId: string): Promise<{ targetCpl: number } | null> => {
-  const token = localStorage.getItem('token');
-  const response = await fetch(`${API_BASE_URL}/yandex/kpi/${connectionId}`, {
-    headers: { Authorization: `Bearer ${token}` },
-  });
-  const data = await response.json();
-  if (data.success && data.data?.kpi) {
-    return { targetCpl: data.data.kpi.targetCpl || 0 };
-  }
-  return null;
-};
-
-
 export default function SearchQueriesPage() {
   // Source mode
   const [sourceMode, setSourceMode] = useState<SourceMode>('auto');
@@ -115,10 +100,8 @@ export default function SearchQueriesPage() {
   const [manualQueries, setManualQueries] = useState('');
 
   // Common state
-  const [useAi, setUseAi] = useState(false);
   const [businessDescription, setBusinessDescription] = useState('');
   const [briefDescription, setBriefDescription] = useState<string | null>(null);
-  const [targetCpl, setTargetCpl] = useState<number | undefined>();
   const [analysisResult, setAnalysisResult] = useState<AnalysisResult | null>(null);
   const [activeTab, setActiveTab] = useState<'trash' | 'review' | 'debug'>('trash');
   const [selectedMinusWords, setSelectedMinusWords] = useState<Set<string>>(new Set());
@@ -155,14 +138,6 @@ export default function SearchQueriesPage() {
           setBusinessDescription('');
         }
       });
-
-      fetchKpi(activeConnectionId).then((kpi) => {
-        if (kpi?.targetCpl && kpi.targetCpl > 0) {
-          setTargetCpl(kpi.targetCpl);
-        } else {
-          setTargetCpl(undefined);
-        }
-      });
     }
   }, [activeConnectionId]);
 
@@ -187,9 +162,7 @@ export default function SearchQueriesPage() {
           body: JSON.stringify({
             dateFrom: startDate.toISOString().split('T')[0],
             dateTo: endDate.toISOString().split('T')[0],
-            useAi,
-            businessDescription,
-            targetCpl,
+            businessDescription: businessDescription || undefined,
           }),
         }
       );
@@ -241,9 +214,7 @@ export default function SearchQueriesPage() {
         },
         body: JSON.stringify({
           queries,
-          useAi,
-          businessDescription,
-          targetCpl,
+          businessDescription: businessDescription || undefined,
         }),
       });
 
@@ -394,7 +365,7 @@ export default function SearchQueriesPage() {
               </p>
             </div>
           ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Аккаунт</label>
               <select
@@ -424,64 +395,10 @@ export default function SearchQueriesPage() {
                 <option value={90}>90 дней</option>
               </select>
             </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Целевой CPL</label>
-              <input
-                type="number"
-                value={targetCpl || ''}
-                onChange={(e) => setTargetCpl(e.target.value ? parseInt(e.target.value) : undefined)}
-                placeholder="5000"
-                className="w-full border border-gray-300 rounded-lg px-3 py-2"
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Метод</label>
-              <button
-                onClick={() => setUseAi(!useAi)}
-                className={`w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg border transition-colors ${
-                  useAi
-                    ? 'bg-purple-50 border-purple-300 text-purple-700'
-                    : 'bg-gray-50 border-gray-300 text-gray-700'
-                }`}
-              >
-                {useAi ? <Sparkles size={18} /> : <Filter size={18} />}
-                {useAi ? 'AI анализ' : 'Быстрый'}
-              </button>
-            </div>
           </div>
           )
         ) : (
           <div className="space-y-4 mb-6">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Целевой CPL</label>
-                <input
-                  type="number"
-                  value={targetCpl || ''}
-                  onChange={(e) => setTargetCpl(e.target.value ? parseInt(e.target.value) : undefined)}
-                  placeholder="5000"
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Метод</label>
-                <button
-                  onClick={() => setUseAi(!useAi)}
-                  className={`w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg border transition-colors ${
-                    useAi
-                      ? 'bg-purple-50 border-purple-300 text-purple-700'
-                      : 'bg-gray-50 border-gray-300 text-gray-700'
-                  }`}
-                >
-                  {useAi ? <Sparkles size={18} /> : <Filter size={18} />}
-                  {useAi ? 'AI анализ' : 'Быстрый'}
-                </button>
-              </div>
-            </div>
-
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
                 Поисковые запросы
@@ -506,11 +423,11 @@ export default function SearchQueriesPage() {
         )}
 
         {/* Business description for AI */}
-        {useAi && !(sourceMode === 'auto' && (connectionsLoading || connections.length === 0)) && (
+        {!(sourceMode === 'auto' && (connectionsLoading || connections.length === 0)) && (
           <div className="mb-6">
             <div className="flex items-center justify-between mb-1">
               <label className="block text-sm font-medium text-gray-700">
-                Описание бизнеса (для AI)
+                Описание бизнеса <span className="text-gray-400 font-normal">(для AI-анализа)</span>
               </label>
               {sourceMode === 'auto' && briefDescription && (
                 <button
@@ -528,10 +445,15 @@ export default function SearchQueriesPage() {
             <textarea
               value={businessDescription}
               onChange={(e) => setBusinessDescription(e.target.value)}
-              placeholder={briefDescription || "Опишите ваш бизнес, чтобы AI мог точнее определить целевые запросы..."}
+              placeholder={briefDescription || "Опишите ваш бизнес для более точного AI-анализа (опционально)..."}
               rows={2}
               className="w-full border border-gray-300 rounded-lg px-3 py-2"
             />
+            {!businessDescription && (
+              <p className="text-xs text-gray-500 mt-1">
+                Без описания будет использован только базовый анализ
+              </p>
+            )}
           </div>
         )}
 
