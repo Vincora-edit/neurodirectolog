@@ -44,6 +44,7 @@ interface MinusWordSuggestion {
   potentialSavings: number;
   category: string;
   confidence?: 'high' | 'medium' | 'low';
+  exampleQueries?: Array<{ query: string; cost: number; clicks: number }>;
 }
 
 interface AnalysisResult {
@@ -100,16 +101,6 @@ const fetchKpi = async (connectionId: string): Promise<{ targetCpl: number } | n
   return null;
 };
 
-// Helper: Find queries containing a word
-const findQueriesWithWord = (queries: QueryAnalysis[], word: string): QueryAnalysis[] => {
-  const cleanWord = word.replace(/^[!"]+|[!"]+$/g, '').toLowerCase();
-  return queries.filter(q => {
-    const lowerQuery = q.query.toLowerCase();
-    // Check if word is in query (as whole word)
-    const regex = new RegExp(`\\b${cleanWord.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`, 'i');
-    return regex.test(lowerQuery);
-  });
-};
 
 export default function SearchQueriesPage() {
   // Source mode
@@ -332,11 +323,6 @@ export default function SearchQueriesPage() {
     return [];
   };
 
-  // Get all queries (trash + review) for finding examples
-  const getAllQueries = (): QueryAnalysis[] => {
-    if (!analysisResult) return [];
-    return [...analysisResult.trashQueries, ...analysisResult.reviewQueries];
-  };
 
   return (
     <div className="space-y-6">
@@ -705,7 +691,7 @@ export default function SearchQueriesPage() {
                   </div>
                 ) : (
                   getMinusWordsForTab().map((mw, index) => {
-                    const relatedQueries = findQueriesWithWord(getAllQueries(), mw.word);
+                    const exampleQueries = mw.exampleQueries || [];
                     const isExpanded = expandedWords.has(mw.word);
 
                     return (
@@ -747,11 +733,13 @@ export default function SearchQueriesPage() {
                                   <span className="text-red-600 font-medium">
                                     -{mw.potentialSavings.toLocaleString('ru-RU')}₽
                                   </span>
-                                  {isExpanded ? (
-                                    <ChevronUp size={16} className="text-gray-400" />
-                                  ) : (
-                                    <ChevronDown size={16} className="text-gray-400" />
-                                  )}
+                                  {exampleQueries.length > 0 ? (
+                                    isExpanded ? (
+                                      <ChevronUp size={16} className="text-gray-400" />
+                                    ) : (
+                                      <ChevronDown size={16} className="text-gray-400" />
+                                    )
+                                  ) : null}
                                 </div>
                               </div>
                               <p className="text-sm text-gray-600 mt-1">{mw.reason}</p>
@@ -762,25 +750,25 @@ export default function SearchQueriesPage() {
                           </div>
                         </div>
 
-                        {/* Expanded: show queries containing this word */}
-                        {isExpanded && relatedQueries.length > 0 && (
+                        {/* Expanded: show example queries */}
+                        {isExpanded && exampleQueries.length > 0 && (
                           <div className="bg-gray-50 border-t border-gray-200 p-4">
                             <p className="text-sm font-medium text-gray-700 mb-3">
-                              Запросы с этим словом:
+                              Примеры запросов с этим словом:
                             </p>
                             <div className="space-y-2 max-h-[200px] overflow-y-auto">
-                              {relatedQueries.slice(0, 20).map((q, qi) => (
+                              {exampleQueries.map((q, qi) => (
                                 <div key={qi} className="flex items-center justify-between p-2 bg-white rounded border border-gray-200">
                                   <span className="text-sm text-gray-800 truncate flex-1">{q.query}</span>
                                   <div className="flex items-center gap-3 text-xs text-gray-500 ml-2">
-                                    <span>{q.metrics.clicks} кл.</span>
-                                    <span>{q.metrics.cost.toFixed(0)}₽</span>
+                                    <span>{q.clicks} кл.</span>
+                                    <span>{q.cost.toFixed(0)}₽</span>
                                   </div>
                                 </div>
                               ))}
-                              {relatedQueries.length > 20 && (
+                              {mw.queriesAffected > exampleQueries.length && (
                                 <p className="text-xs text-gray-400 text-center">
-                                  ...и ещё {relatedQueries.length - 20} запросов
+                                  ...и ещё {mw.queriesAffected - exampleQueries.length} запросов
                                 </p>
                               )}
                             </div>

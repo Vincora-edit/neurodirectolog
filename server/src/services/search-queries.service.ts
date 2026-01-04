@@ -42,6 +42,7 @@ export interface MinusWordSuggestion {
   potentialSavings: number;
   category: 'irrelevant' | 'low_quality' | 'competitor' | 'informational' | 'other';
   confidence?: 'high' | 'medium' | 'low';
+  exampleQueries?: Array<{ query: string; cost: number; clicks: number }>;
 }
 
 export interface QueryCluster {
@@ -774,6 +775,7 @@ export const searchQueriesService = {
       totalClicks: number;
       queriesCount: number;
       exampleQueries: string[];
+      exampleQueriesWithMetrics: Array<{ query: string; cost: number; clicks: number }>;
     }>();
 
     const nonConvertingQueries = queries.filter(q => q.conversions === 0 && q.cost > 0);
@@ -790,6 +792,7 @@ export const searchQueriesService = {
           totalClicks: 0,
           queriesCount: 0,
           exampleQueries: [],
+          exampleQueriesWithMetrics: [],
         };
 
         existing.totalCost += q.cost;
@@ -797,6 +800,14 @@ export const searchQueriesService = {
         existing.queriesCount += 1;
         if (existing.exampleQueries.length < 3) {
           existing.exampleQueries.push(q.query);
+        }
+        // Store up to 10 example queries with metrics for UI display
+        if (existing.exampleQueriesWithMetrics.length < 10) {
+          existing.exampleQueriesWithMetrics.push({
+            query: q.query,
+            cost: q.cost,
+            clicks: q.clicks,
+          });
         }
 
         wordStats.set(word, existing);
@@ -893,10 +904,11 @@ export const searchQueriesService = {
       const existingWords = new Set(allMinusWords.map(m => m.word.toLowerCase()));
 
       for (const aiMinus of minusWords) {
-        const wordLower = aiMinus.word.toLowerCase();
-        if (existingWords.has(wordLower)) continue;
+        // Clean word from operators to look up stats
+        const cleanWord = aiMinus.word.replace(/^[!"]+|[!"]+$/g, '').toLowerCase();
+        if (existingWords.has(cleanWord)) continue;
 
-        const stats = wordStats.get(wordLower);
+        const stats = wordStats.get(cleanWord);
         if (!stats) continue;
 
         allMinusWords.push({
@@ -905,9 +917,10 @@ export const searchQueriesService = {
           queriesAffected: stats.queriesCount,
           potentialSavings: stats.totalCost,
           category: 'other',
-          confidence: aiMinus.confidence, // Pass confidence to frontend
+          confidence: aiMinus.confidence,
+          exampleQueries: stats.exampleQueriesWithMetrics, // Include example queries for UI
         });
-        existingWords.add(wordLower);
+        existingWords.add(cleanWord);
       }
 
       // Step 10: Send top review queries to AI for full classification
