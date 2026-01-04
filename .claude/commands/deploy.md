@@ -89,12 +89,35 @@ sshpass -p 'c9R+eLvxtQJ-,x' ssh -o StrictHostKeyChecking=no root@91.222.239.217 
 sshpass -p 'c9R+eLvxtQJ-,x' ssh -o StrictHostKeyChecking=no root@91.222.239.217 "docker exec clickhouse clickhouse-client --query \"SELECT id, name, user_id FROM neurodirectolog.projects FINAL\""
 ```
 
+## AI Service Deployment (Amsterdam Server)
+
+AI service runs on Amsterdam server (147.45.187.16) to access OpenAI API.
+
+```bash
+# 1. Create archive locally
+cd /Users/artemsubbotin/Desktop/Neurodirectolog/ai-service
+tar -czvf /tmp/ai-service.tar.gz --exclude='node_modules' --exclude='dist' --exclude='.git' .
+
+# 2. Upload to Amsterdam
+sshpass -p 'y.oDEt5*Hqc.Z_' scp -o StrictHostKeyChecking=no /tmp/ai-service.tar.gz root@147.45.187.16:/root/
+
+# 3. Deploy
+sshpass -p 'y.oDEt5*Hqc.Z_' ssh -o StrictHostKeyChecking=no root@147.45.187.16 "cd /opt/ai-service && rm -rf src Dockerfile *.json && tar -xzf /root/ai-service.tar.gz && docker build -t ai-service:latest . && docker stop ai-service && docker rm ai-service && docker run -d --name ai-service -p 3002:3002 --env-file /opt/ai-service/.env --restart unless-stopped ai-service:latest && docker logs ai-service --tail 5"
+```
+
+### Verify AI Service
+```bash
+curl -s http://147.45.187.16:3002/health -H "Authorization: Bearer 9fec8346ccf002678a9d05358360355b1cd7798e0a43158c22fd0a7291701c08"
+```
+
 ## Server Details
 - Production URL: https://dashboard.vincora.ru
 - Staging URL: https://test-dashboard.vincora.ru
-- Server IP: 91.222.239.217
+- Main Server IP: 91.222.239.217
+- AI Server IP: 147.45.187.16 (Amsterdam)
 - Server port: 3001
 - Client port: 3000
+- AI Service port: 3002
 - Docker network: neurodirectolog_neurodirectolog-network
 
 ## Arguments
