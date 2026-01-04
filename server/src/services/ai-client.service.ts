@@ -198,6 +198,34 @@ export const aiClientService = {
     });
   },
 
+  /**
+   * Classify review queries as target or trash
+   * AI evaluates full queries (not just words) to determine intent
+   */
+  async classifyQueries(
+    queries: Array<{
+      query: string;
+      cost: number;
+      clicks: number;
+      impressions: number;
+    }>,
+    businessDescription: string,
+    safeWords: string[]
+  ): Promise<{
+    results: Array<{
+      query: string;
+      category: 'target' | 'trash';
+      reason: string;
+      minusWord?: string;
+    }>;
+  }> {
+    return fetchAI('/api/ai/queries/classify-queries', {
+      queries,
+      businessDescription,
+      safeWords,
+    });
+  },
+
   // === Campaign Analysis ===
 
   /**

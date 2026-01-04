@@ -323,4 +323,120 @@ ${JSON.stringify(wordData, null, 2)}
   }
 });
 
+/**
+ * POST /api/ai/queries/classify-queries
+ * Classify review queries as target or trash
+ *
+ * This endpoint evaluates full queries (not words) to determine
+ * if they are target (commercial intent) or trash (irrelevant)
+ */
+router.post('/classify-queries', async (req, res) => {
+  try {
+    const { queries, businessDescription, safeWords } = req.body as {
+      queries: Array<{
+        query: string;
+        cost: number;
+        clicks: number;
+        impressions: number;
+      }>;
+      businessDescription: string;
+      safeWords: string[];
+    };
+
+    if (!queries || !Array.isArray(queries) || queries.length === 0) {
+      return res.status(400).json({
+        success: false,
+        error: 'queries array is required',
+      });
+    }
+
+    if (!businessDescription) {
+      return res.status(400).json({
+        success: false,
+        error: 'businessDescription is required',
+      });
+    }
+
+    // Take top 50 by cost
+    const topQueries = queries
+      .sort((a, b) => b.cost - a.cost)
+      .slice(0, 50);
+
+    const queryData = topQueries.map(q => ({
+      query: q.query,
+      cost: Math.round(q.cost),
+      clicks: q.clicks,
+    }));
+
+    const prompt = `Ты - эксперт по контекстной рекламе Яндекс.Директ. Проанализируй поисковые запросы.
+
+Бизнес: ${businessDescription}
+
+ЗАДАЧА: Определи категорию каждого запроса - TARGET или TRASH.
+
+TARGET (целевой) - запросы от людей, которые ХОТЯТ КУПИТЬ услугу:
+- Коммерческий интент (оформить, получить, заказать, цена, стоимость)
+- Релевантны бизнесу
+- Могут привести к конверсии
+
+TRASH (мусор) - запросы которые НЕ приведут к покупке:
+- Информационный интент (что это, как, почему, новости, закон, статья)
+- Запросы про другие услуги/регионы
+- Непонятные/бессмысленные запросы
+- Запросы про госорганы (если бизнес не госорган)
+- Запросы про самостоятельное оформление
+
+Безопасные слова (есть в конвертирующих запросах): ${safeWords.slice(0, 30).join(', ')}
+
+Запросы для анализа:
+${JSON.stringify(queryData, null, 2)}
+
+Верни JSON:
+{
+  "results": [
+    {
+      "query": "текст запроса",
+      "category": "target|trash",
+      "reason": "краткое объяснение (10-15 слов)",
+      "minusWord": "слово для минусации (только для trash, опционально)"
+    }
+  ]
+}
+
+ВАЖНО:
+- Если не уверен - лучше оставить как target
+- minusWord должно быть одно конкретное слово из запроса`;
+
+    interface ClassifyResult {
+      results: Array<{
+        query: string;
+        category: 'target' | 'trash';
+        reason: string;
+        minusWord?: string;
+      }>;
+    }
+
+    const aiResult = await chatCompletionJson<ClassifyResult>(prompt);
+
+    console.log(`[ClassifyQueries] Classified ${aiResult.results?.length || 0} queries`);
+
+    // Count stats
+    const trashCount = aiResult.results?.filter(r => r.category === 'trash').length || 0;
+    console.log(`[ClassifyQueries] Trash: ${trashCount}, Target: ${(aiResult.results?.length || 0) - trashCount}`);
+
+    res.json({
+      success: true,
+      data: {
+        results: aiResult.results || [],
+      },
+    });
+  } catch (error: any) {
+    console.error('[ClassifyQueries] Failed:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message,
+    });
+  }
+});
+
 export default router;

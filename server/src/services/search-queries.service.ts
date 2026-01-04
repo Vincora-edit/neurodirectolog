@@ -869,6 +869,7 @@ export const searchQueriesService = {
       }
 
       // Process review queries - apply AI minus words
+      const stillReview: QueryAnalysis[] = [];
       for (const q of quickResult.reviewQueries) {
         const minusWord = containsMinusWord(q.query);
         if (minusWord) {
@@ -880,13 +881,13 @@ export const searchQueriesService = {
             suggestedMinusWords: [minusWord],
           });
         } else {
-          finalReview.push(q);
+          stillReview.push(q);
         }
       }
 
-      console.log(`[QuickMinusAnalysis] After AI: target=${finalTarget.length}, trash=${finalTrash.length}, review=${finalReview.length}`);
+      console.log(`[QuickMinusAnalysis] After word analysis: target=${finalTarget.length}, trash=${finalTrash.length}, stillReview=${stillReview.length}`);
 
-      // Step 9: Build minus word suggestions list
+      // Step 9: Build minus word suggestions list (moved up for use in Step 10)
       const allMinusWords = [...quickResult.suggestedMinusWords];
       const existingWords = new Set(allMinusWords.map(m => m.word.toLowerCase()));
 
@@ -906,6 +907,83 @@ export const searchQueriesService = {
           category: 'other',
         });
         existingWords.add(wordLower);
+      }
+
+      // Step 10: Send top review queries to AI for full classification
+      // Only send queries with significant cost that are still unclassified
+      const topReviewQueries = stillReview
+        .filter(q => q.metrics.cost > 3) // Only queries with cost > 3₽
+        .sort((a, b) => b.metrics.cost - a.metrics.cost)
+        .slice(0, 50);
+
+      if (topReviewQueries.length > 0) {
+        console.log(`[QuickMinusAnalysis] Sending ${topReviewQueries.length} review queries to AI for classification`);
+
+        try {
+          const classifyResult = await aiClientService.classifyQueries(
+            topReviewQueries.map(q => ({
+              query: q.query,
+              cost: q.metrics.cost,
+              clicks: q.metrics.clicks,
+              impressions: q.metrics.impressions,
+            })),
+            businessDescription,
+            Array.from(safeWords)
+          );
+
+          // Create lookup map for classification results
+          const classifyMap = new Map<string, { category: 'target' | 'trash'; reason: string; minusWord?: string }>();
+          for (const result of classifyResult.results || []) {
+            classifyMap.set(result.query.toLowerCase(), result);
+          }
+
+          // Apply classification results
+          for (const q of stillReview) {
+            const classification = classifyMap.get(q.query.toLowerCase());
+            if (classification) {
+              if (classification.category === 'trash') {
+                finalTrash.push({
+                  ...q,
+                  category: 'trash',
+                  reason: classification.reason,
+                  suggestedMinusWords: classification.minusWord ? [classification.minusWord] : [],
+                });
+
+                // Add minus word to suggestions if provided
+                if (classification.minusWord && !existingWords.has(classification.minusWord.toLowerCase())) {
+                  allMinusWords.push({
+                    word: classification.minusWord,
+                    reason: classification.reason,
+                    queriesAffected: 1,
+                    potentialSavings: q.metrics.cost,
+                    category: 'other',
+                  });
+                  existingWords.add(classification.minusWord.toLowerCase());
+                }
+              } else {
+                // AI said it's target
+                finalTarget.push({
+                  ...q,
+                  category: 'target',
+                  reason: classification.reason,
+                });
+              }
+            } else {
+              // No classification - keep in review
+              finalReview.push(q);
+            }
+          }
+
+          console.log(`[QuickMinusAnalysis] After query classification: target=${finalTarget.length}, trash=${finalTrash.length}, review=${finalReview.length}`);
+        } catch (classifyError: any) {
+          console.error('[QuickMinusAnalysis] Query classification failed:', classifyError.message);
+          // Fall back - all stillReview go to finalReview
+          finalReview.push(...stillReview);
+        }
+      } else {
+        // No queries to classify - all stillReview go to finalReview
+        finalReview.push(...stillReview);
+        console.log(`[QuickMinusAnalysis] No review queries to classify`);
       }
 
       // Recalculate summary
