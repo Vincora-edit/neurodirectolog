@@ -151,6 +151,73 @@ export function generateAntifraudScript(config: AntifraudConfig): string {
     }).catch(function() {});
   }
 
+  // 12. WebGL отсутствует или ограничен
+  // Вес: +2, False positive: редко (старые устройства)
+  try {
+    var webglCanvas = document.createElement('canvas');
+    var gl = webglCanvas.getContext('webgl') || webglCanvas.getContext('experimental-webgl');
+    if (!gl) {
+      addScore(2, 'webgl_unavailable');
+    } else {
+      // Проверяем renderer - headless часто имеет SwiftShader или пустой
+      var debugInfo = gl.getExtension('WEBGL_debug_renderer_info');
+      if (debugInfo) {
+        var renderer = gl.getParameter(debugInfo.UNMASKED_RENDERER_WEBGL);
+        if (!renderer || /SwiftShader|llvmpipe|Software/i.test(renderer)) {
+          addScore(2, 'webgl_software_renderer');
+        }
+      }
+    }
+  } catch (e) {
+    addScore(1, 'webgl_error');
+  }
+
+  // 13. Низкая глубина цвета экрана
+  // Вес: +1, False positive: почти нет (виртуальные экраны)
+  if (screen.colorDepth && screen.colorDepth < 24) {
+    addScore(1, 'low_color_depth');
+  }
+
+  // 14. Пустой navigator.languages (отдельная проверка)
+  // Вес: +1, False positive: редко
+  if (!navigator.languages || navigator.languages.length === 0) {
+    addScore(1, 'no_languages');
+  }
+
+  // 15. Мобильный UA но нет touch events
+  // Вес: +3, False positive: почти нет
+  var isMobileUA = /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
+  var hasTouch = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+  if (isMobileUA && !hasTouch) {
+    addScore(3, 'mobile_no_touch');
+  }
+
+  // 16. Несоответствие platform и userAgent
+  // Вес: +2, False positive: почти нет
+  var platform = navigator.platform || '';
+  var ua = navigator.userAgent;
+  if ((platform.indexOf('Win') !== -1 && /Mac OS|iPhone|iPad|Android|Linux/i.test(ua)) ||
+      (platform.indexOf('Mac') !== -1 && /Windows|Android|Linux/i.test(ua) && !/iPhone|iPad/i.test(ua))) {
+    addScore(2, 'platform_mismatch');
+  }
+
+  // 17. Отсутствие history length (новая вкладка с автоматизацией)
+  // Вес: +1, False positive: редко
+  if (window.history && window.history.length <= 1 && document.referrer === '') {
+    // Прямой заход без истории - подозрительно только в комбинации
+    // Не добавляем баллы напрямую, но логируем
+    log('Direct visit with no history');
+  }
+
+  // 18. Connection type (экспериментально)
+  // Некоторые боты не имеют connection info
+  if (navigator.connection) {
+    var conn = navigator.connection;
+    if (conn.effectiveType === 'unknown' || conn.rtt === 0) {
+      addScore(1, 'suspicious_connection');
+    }
+  }
+
   // ===== HONEYPOT =====
   ${enableHoneypot ? `
   // Добавляем скрытое поле в формы - боты его заполняют
