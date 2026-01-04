@@ -726,6 +726,185 @@ export const searchQueriesService = {
   },
 
   /**
+   * Hybrid analysis: Quick analysis + AI for complex cases
+   * Best of both worlds: fast + smart
+   */
+  async hybridAnalysis(
+    queries: SearchQuery[],
+    businessDescription: string,
+    targetCpl?: number
+  ): Promise<AnalysisResult> {
+    // Step 1: Run quick analysis on all queries
+    const quickResult = this.quickAnalysis(queries, {
+      maxCpl: targetCpl || 5000,
+      minImpressions: 5,
+    });
+
+    // Step 2: Select "complex cases" for AI review
+    // These are queries where rule-based analysis is uncertain
+    const complexCases: SearchQuery[] = [];
+
+    // 2a. High cost without conversions (AI can determine if it's truly trash or just needs time)
+    const highCostNoConversion = quickResult.trashQueries
+      .filter(q => q.metrics.cost > 500 && q.metrics.clicks >= 3)
+      .slice(0, 50);
+
+    // 2b. Review queries with significant spend (AI can help categorize)
+    const uncertainReview = quickResult.reviewQueries
+      .filter(q => q.metrics.cost > 200)
+      .slice(0, 50);
+
+    // 2c. Top clusters by cost that have mixed categories (target + trash)
+    const mixedClusters = (quickResult.clusters || [])
+      .filter(c => c.targetCount > 0 && c.trashCount > 0 && c.cost > 500)
+      .slice(0, 20);
+
+    // Collect unique queries from complex cases
+    const complexQueryTexts = new Set<string>();
+
+    for (const q of highCostNoConversion) {
+      complexQueryTexts.add(q.query);
+    }
+    for (const q of uncertainReview) {
+      complexQueryTexts.add(q.query);
+    }
+
+    // For mixed clusters, find the actual queries
+    const queryByText = new Map(queries.map(q => [q.query, q]));
+    for (const cluster of mixedClusters) {
+      // Find queries containing this cluster keyword
+      const keyword = cluster.keyword.toLowerCase();
+      for (const q of queries) {
+        if (q.query.toLowerCase().includes(keyword) && q.cost > 100) {
+          complexQueryTexts.add(q.query);
+          if (complexQueryTexts.size >= 150) break;
+        }
+      }
+      if (complexQueryTexts.size >= 150) break;
+    }
+
+    // Build list of queries for AI
+    for (const text of complexQueryTexts) {
+      const q = queryByText.get(text);
+      if (q) complexCases.push(q);
+    }
+
+    console.log(`[HybridAnalysis] Selected ${complexCases.length} complex cases for AI review`);
+
+    // Step 3: If no complex cases or AI not configured, return quick result
+    if (complexCases.length === 0 || !aiClientService.isConfigured()) {
+      return quickResult;
+    }
+
+    // Step 4: Send complex cases to AI
+    try {
+      const aiResult = await aiClientService.analyzeQueries(
+        complexCases,
+        businessDescription,
+        targetCpl
+      );
+
+      console.log(`[HybridAnalysis] AI analyzed ${aiResult.analyzedQueries} queries`);
+
+      // Step 5: Merge AI results back into quick analysis
+      // Create maps for fast lookup
+      const aiTargetSet = new Set(aiResult.targetQueries.map((q: any) => q.query));
+      const aiTrashMap = new Map(aiResult.trashQueries.map((q: any) => [q.query, q]));
+      const aiReviewSet = new Set(aiResult.reviewQueries.map((q: any) => q.query));
+
+      // Update categories based on AI feedback
+      const finalTarget = [...quickResult.targetQueries];
+      const finalTrash = [...quickResult.trashQueries];
+      const finalReview: QueryAnalysis[] = [];
+
+      // Re-categorize review queries
+      for (const q of quickResult.reviewQueries) {
+        if (aiTargetSet.has(q.query)) {
+          // AI says it's target - promote it
+          finalTarget.push({
+            ...q,
+            category: 'target',
+            reason: 'AI: ' + (aiResult.targetQueries.find((t: any) => t.query === q.query)?.reason || q.reason),
+          });
+        } else if (aiTrashMap.has(q.query)) {
+          // AI says it's trash - demote it
+          const aiTrash = aiTrashMap.get(q.query)!;
+          finalTrash.push({
+            ...q,
+            category: 'trash',
+            reason: 'AI: ' + (aiTrash.reason || q.reason),
+            suggestedMinusWords: aiTrash.suggestedMinusWords || [],
+          });
+        } else {
+          // Keep as review
+          finalReview.push(q);
+        }
+      }
+
+      // Re-check some trash queries - AI might disagree
+      const updatedTrash: QueryAnalysis[] = [];
+      for (const q of finalTrash) {
+        if (aiTargetSet.has(q.query)) {
+          // AI says it's actually target!
+          finalTarget.push({
+            ...q,
+            category: 'target',
+            reason: 'AI: ' + (aiResult.targetQueries.find((t: any) => t.query === q.query)?.reason || 'Целевой запрос'),
+          });
+        } else if (aiReviewSet.has(q.query)) {
+          // AI is uncertain - move to review
+          finalReview.push({
+            ...q,
+            category: 'review',
+            reason: 'AI: требует проверки',
+          });
+        } else {
+          updatedTrash.push(q);
+        }
+      }
+
+      // Merge minus words suggestions
+      const allMinusWords = [...quickResult.suggestedMinusWords];
+      const existingWords = new Set(allMinusWords.map(m => m.word.toLowerCase()));
+
+      for (const aiMinus of aiResult.suggestedMinusWords || []) {
+        if (!existingWords.has(aiMinus.word.toLowerCase())) {
+          allMinusWords.push({
+            word: aiMinus.word,
+            reason: 'AI: ' + aiMinus.reason,
+            queriesAffected: aiMinus.queriesAffected || 0,
+            potentialSavings: aiMinus.potentialSavings || 0,
+            category: aiMinus.category || 'other',
+          });
+        }
+      }
+
+      // Recalculate summary
+      const totalCost = queries.reduce((sum, q) => sum + q.cost, 0);
+      const wastedCost = updatedTrash.reduce((sum, q) => sum + q.metrics.cost, 0);
+
+      return {
+        totalQueries: quickResult.totalQueries,
+        targetQueries: finalTarget,
+        trashQueries: updatedTrash,
+        reviewQueries: finalReview,
+        suggestedMinusWords: allMinusWords.sort((a, b) => b.potentialSavings - a.potentialSavings).slice(0, 50),
+        clusters: quickResult.clusters,
+        summary: {
+          totalCost,
+          wastedCost,
+          potentialSavings: wastedCost,
+          avgCplTarget: quickResult.summary.avgCplTarget,
+          avgCplTrash: quickResult.summary.avgCplTrash,
+        },
+      };
+    } catch (aiError: any) {
+      console.error('[HybridAnalysis] AI failed, using quick result:', aiError.message);
+      return quickResult;
+    }
+  },
+
+  /**
    * Save analysis result to ClickHouse
    */
   async saveAnalysis(

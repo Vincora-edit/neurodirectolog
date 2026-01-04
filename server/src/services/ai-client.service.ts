@@ -25,7 +25,7 @@ function getConfig(): AIServiceConfig {
     config = {
       baseUrl: baseUrl.replace(/\/$/, ''), // Remove trailing slash
       secret,
-      timeout: parseInt(process.env.AI_SERVICE_TIMEOUT || '60000'),
+      timeout: parseInt(process.env.AI_SERVICE_TIMEOUT || '120000'),
     };
   }
   return config;

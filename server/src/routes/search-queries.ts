@@ -119,27 +119,19 @@ router.post('/:connectionId/analyze', async (req, res) => {
     }
 
     let analysis;
-    let usedFallback = false;
+    let usedAi = false;
 
     if (useAi && businessDescription) {
-      try {
-        // AI-powered analysis
-        analysis = await searchQueriesService.analyzeQueries(
-          queries,
-          businessDescription,
-          targetCpl
-        );
-      } catch (aiError: any) {
-        // Fallback to quick analysis if AI is unavailable (e.g., region blocked)
-        console.log('[SearchQueries] AI unavailable, falling back to quick analysis:', aiError.message);
-        usedFallback = true;
-        analysis = searchQueriesService.quickAnalysis(queries, {
-          maxCpl: targetCpl || 5000,
-          minImpressions,
-        });
-      }
+      // Use hybrid analysis: quick rules + AI for complex cases
+      // This sends only ~100-150 queries to AI instead of all 47000
+      analysis = await searchQueriesService.hybridAnalysis(
+        queries,
+        businessDescription,
+        targetCpl
+      );
+      usedAi = true;
     } else {
-      // Quick rule-based analysis
+      // Quick rule-based analysis only
       analysis = searchQueriesService.quickAnalysis(queries, {
         maxCpl: targetCpl || 5000,
         minImpressions,
@@ -163,7 +155,7 @@ router.post('/:connectionId/analyze', async (req, res) => {
       data: analysis,
       rawQueriesCount: queries.length,
       filteredCount,
-      ...(usedFallback && { warning: 'AI анализ недоступен в вашем регионе. Использован быстрый анализ.' })
+      usedAi,
     });
   } catch (error: any) {
     console.error('Failed to analyze search queries:', error);
