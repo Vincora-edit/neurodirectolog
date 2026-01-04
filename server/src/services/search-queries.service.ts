@@ -993,6 +993,7 @@ export const searchQueriesService = {
                     queriesAffected: 1,
                     potentialSavings: q.metrics.cost,
                     category: 'other',
+                    exampleQueries: [{ query: q.query, cost: q.metrics.cost, clicks: q.metrics.clicks }],
                   });
                   existingWords.add(classification.minusWord.toLowerCase());
                 }
