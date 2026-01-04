@@ -743,14 +743,15 @@ export const searchQueriesService = {
     targetCpl?: number
   ): Promise<AnalysisResult> {
     // Step 0: Filter out noise - queries that don't have enough data
-    // For weekly analysis we need stricter filtering to focus on actionable data
+    // Balance between removing noise and keeping actionable data
     const significantQueries = queries.filter(q => {
       // Always include queries with conversions - they are valuable
       if (q.conversions > 0) return true;
-      // Filter out queries with <5 impressions AND no clicks (noise)
+      // Include queries with any clicks - they have data
+      if (q.clicks > 0) return true;
+      // Filter out queries with <5 impressions AND no clicks (pure noise)
       if (q.impressions < 5 && q.clicks === 0) return false;
-      // Filter out queries with <2 clicks (not enough data)
-      if (q.clicks < 2 && q.conversions === 0) return false;
+      // Include remaining queries (have impressions but no clicks yet)
       return true;
     });
 
@@ -923,7 +924,12 @@ export const searchQueriesService = {
         if (existingWords.has(cleanWord)) continue;
 
         const stats = wordStats.get(cleanWord);
-        if (!stats) continue;
+        if (!stats) {
+          console.log(`[QuickMinusAnalysis] No stats found for word "${cleanWord}" (original: "${aiMinus.word}")`);
+          continue;
+        }
+
+        console.log(`[QuickMinusAnalysis] Adding minus word "${aiMinus.word}" with ${stats.exampleQueriesWithMetrics.length} example queries`);
 
         allMinusWords.push({
           word: aiMinus.word,
