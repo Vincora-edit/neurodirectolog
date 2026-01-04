@@ -742,10 +742,24 @@ export const searchQueriesService = {
     businessDescription: string,
     targetCpl?: number
   ): Promise<AnalysisResult> {
-    // Step 1: Run quick analysis on all queries (basic rules)
-    const quickResult = this.quickAnalysis(queries, {
+    // Step 0: Filter out noise - queries that don't have enough data
+    // For weekly analysis we need stricter filtering to focus on actionable data
+    const significantQueries = queries.filter(q => {
+      // Always include queries with conversions - they are valuable
+      if (q.conversions > 0) return true;
+      // Filter out queries with <5 impressions AND no clicks (noise)
+      if (q.impressions < 5 && q.clicks === 0) return false;
+      // Filter out queries with <2 clicks (not enough data)
+      if (q.clicks < 2 && q.conversions === 0) return false;
+      return true;
+    });
+
+    console.log(`[QuickMinusAnalysis] Filtered ${queries.length} -> ${significantQueries.length} queries (removed ${queries.length - significantQueries.length} noise)`);
+
+    // Step 1: Run quick analysis on filtered queries (basic rules)
+    const quickResult = this.quickAnalysis(significantQueries, {
       maxCpl: targetCpl || 5000,
-      minImpressions: 3,
+      minImpressions: 5,
     });
 
     // Step 2: Check if AI is available
