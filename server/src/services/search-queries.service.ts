@@ -5,26 +5,8 @@
 
 import { clickhouseService } from './clickhouse.service';
 import { yandexDirectService } from './yandex-direct.service';
-import OpenAI from 'openai';
+import { aiClientService } from './ai-client.service';
 import { v4 as uuidv4 } from 'uuid';
-
-// Lazy initialization of OpenAI client to avoid crash when API key is not set
-let openaiClient: OpenAI | null = null;
-
-function getOpenAI(): OpenAI {
-  if (!openaiClient) {
-    const apiKey = process.env.OPENAI_API_KEY;
-    if (!apiKey) {
-      throw new Error('OPENAI_API_KEY environment variable is not set. AI analysis features are disabled.');
-    }
-    const baseURL = process.env.OPENAI_BASE_URL;
-    openaiClient = new OpenAI({
-      apiKey,
-      ...(baseURL && { baseURL })
-    });
-  }
-  return openaiClient;
-}
 
 export interface SearchQuery {
   query: string;
@@ -265,173 +247,47 @@ export const searchQueriesService = {
   },
 
   /**
-   * Analyze search queries using AI
+   * Analyze search queries using AI (via AI microservice)
    */
   async analyzeQueries(
     queries: SearchQuery[],
     businessDescription: string,
     targetCpl?: number
   ): Promise<AnalysisResult> {
-    // Sort by cost descending to prioritize high-spend queries
-    const sortedQueries = [...queries].sort((a, b) => b.cost - a.cost);
-
-    // Take top 200 queries for AI analysis (to manage token limits)
-    const topQueries = sortedQueries.slice(0, 200);
-
-    // Prepare query data for AI
-    const queryData = topQueries.map(q => ({
-      query: q.query,
-      impressions: q.impressions,
-      clicks: q.clicks,
-      cost: Math.round(q.cost),
-      conversions: q.conversions,
-      ctr: q.ctr.toFixed(2),
-      cpl: q.cpl > 0 ? Math.round(q.cpl) : null,
-    }));
-
-    const prompt = `Ты - эксперт по контекстной рекламе Яндекс.Директ. Проанализируй поисковые запросы для бизнеса.
-
-Бизнес: ${businessDescription}
-${targetCpl ? `Целевой CPL: ${targetCpl}₽` : ''}
-
-Поисковые запросы (отсортированы по затратам):
-${JSON.stringify(queryData, null, 2)}
-
-Категоризируй каждый запрос:
-1. TARGET (целевой) - запросы с коммерческим интентом, соответствующие бизнесу
-2. TRASH (мусор) - нерелевантные запросы, информационные, конкуренты, ошибочные
-3. REVIEW (требует проверки) - неоднозначные запросы
-
-ВАЖНО: Обращай внимание на CTR! Запросы с высокими показами (100+), но очень низким CTR (<1%) или 0 кликов — скорее всего нерелевантные и должны быть помечены как TRASH или REVIEW.
-
-Для TRASH запросов предложи минус-слова.
-
-Верни JSON:
-{
-  "queries": [
-    {
-      "query": "текст запроса",
-      "category": "target|trash|review",
-      "reason": "краткое объяснение",
-      "minusWords": ["слово1", "слово2"]
+    // Check if AI service is configured
+    if (!aiClientService.isConfigured()) {
+      throw new Error('AI service is not configured. Set AI_SERVICE_URL and AI_SERVICE_SECRET.');
     }
-  ],
-  "suggestedMinusWords": [
-    {
-      "word": "минус-слово",
-      "reason": "почему нужно добавить",
-      "category": "irrelevant|low_quality|competitor|informational|other"
-    }
-  ]
-}`;
 
     try {
-      // Check if OpenAI is configured with baseURL for regions where it's blocked
-      const openai = getOpenAI();
+      // Call AI microservice
+      const aiResult = await aiClientService.analyzeQueries(
+        queries,
+        businessDescription,
+        targetCpl
+      );
 
-      const response = await openai.chat.completions.create({
-        model: 'gpt-4o-mini',
-        messages: [{ role: 'user', content: prompt }],
-        temperature: 0.3,
-        response_format: { type: 'json_object' },
-      });
-
-      const content = response.choices[0].message.content;
-      if (!content) {
-        throw new Error('Empty AI response');
-      }
-
-      const aiResult = JSON.parse(content);
-
-      // Build result
-      const targetQueries: QueryAnalysis[] = [];
-      const trashQueries: QueryAnalysis[] = [];
-      const reviewQueries: QueryAnalysis[] = [];
-
-      const queryMap = new Map(topQueries.map(q => [q.query, q]));
-
-      for (const analyzed of aiResult.queries || []) {
-        const original = queryMap.get(analyzed.query);
-        if (!original) continue;
-
-        const analysis: QueryAnalysis = {
-          query: analyzed.query,
-          category: analyzed.category,
-          reason: analyzed.reason,
-          suggestedMinusWords: analyzed.minusWords || [],
-          metrics: {
-            impressions: original.impressions,
-            clicks: original.clicks,
-            cost: original.cost,
-            conversions: original.conversions,
-            ctr: original.ctr,
-            cpl: original.cpl,
-          },
-        };
-
-        switch (analyzed.category) {
-          case 'target':
-            targetQueries.push(analysis);
-            break;
-          case 'trash':
-            trashQueries.push(analysis);
-            break;
-          case 'review':
-            reviewQueries.push(analysis);
-            break;
-        }
-      }
-
-      // Process suggested minus words
-      const minusWordMap = new Map<string, MinusWordSuggestion>();
-
-      for (const mw of aiResult.suggestedMinusWords || []) {
-        // Count affected queries and potential savings
-        let queriesAffected = 0;
-        let potentialSavings = 0;
-
-        for (const trash of trashQueries) {
-          if (trash.query.toLowerCase().includes(mw.word.toLowerCase())) {
-            queriesAffected++;
-            potentialSavings += trash.metrics.cost;
-          }
-        }
-
-        minusWordMap.set(mw.word.toLowerCase(), {
-          word: mw.word,
-          reason: mw.reason,
-          category: mw.category,
-          queriesAffected,
-          potentialSavings,
-        });
-      }
-
-      // Calculate summary
-      const totalCost = queries.reduce((sum, q) => sum + q.cost, 0);
-      const wastedCost = trashQueries.reduce((sum, q) => sum + q.metrics.cost, 0);
-      const potentialSavings = Array.from(minusWordMap.values()).reduce((sum, mw) => sum + mw.potentialSavings, 0);
-
-      const targetWithConversions = targetQueries.filter(q => q.metrics.conversions > 0);
+      // Calculate avg CPL for target and trash
+      const targetWithConversions = aiResult.targetQueries.filter((q: any) => q.metrics?.conversions > 0);
       const avgCplTarget = targetWithConversions.length > 0
-        ? targetWithConversions.reduce((sum, q) => sum + q.metrics.cpl, 0) / targetWithConversions.length
+        ? targetWithConversions.reduce((sum: number, q: any) => sum + (q.metrics?.cpl || 0), 0) / targetWithConversions.length
         : 0;
 
-      const trashWithConversions = trashQueries.filter(q => q.metrics.conversions > 0);
+      const trashWithConversions = aiResult.trashQueries.filter((q: any) => q.metrics?.conversions > 0);
       const avgCplTrash = trashWithConversions.length > 0
-        ? trashWithConversions.reduce((sum, q) => sum + q.metrics.cpl, 0) / trashWithConversions.length
+        ? trashWithConversions.reduce((sum: number, q: any) => sum + (q.metrics?.cpl || 0), 0) / trashWithConversions.length
         : 0;
 
       return {
         totalQueries: queries.length,
-        targetQueries,
-        trashQueries,
-        reviewQueries,
-        suggestedMinusWords: Array.from(minusWordMap.values())
-          .sort((a, b) => b.potentialSavings - a.potentialSavings),
+        targetQueries: aiResult.targetQueries,
+        trashQueries: aiResult.trashQueries,
+        reviewQueries: aiResult.reviewQueries,
+        suggestedMinusWords: aiResult.suggestedMinusWords,
         summary: {
-          totalCost,
-          wastedCost,
-          potentialSavings,
+          totalCost: aiResult.summary.totalCost,
+          wastedCost: aiResult.summary.wastedCost,
+          potentialSavings: aiResult.summary.potentialSavings,
           avgCplTarget,
           avgCplTrash,
         },
