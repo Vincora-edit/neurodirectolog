@@ -795,15 +795,41 @@ export const searchQueriesService = {
         console.log(`[HybridAnalysis] AI trash words: ${Array.from(aiTrashWords).slice(0, 10).join(', ')}`);
       }
 
-      // Step 6: Re-classify queries using AI-found trash words
+      // Step 6: Build safe words set FIRST - words from converting queries
+      // CRITICAL: Never mark a query as trash if it contains words from converting queries
+      const safeWords = new Set<string>();
+      for (const q of queries) {
+        if (q.conversions > 0) {
+          const words = q.query.toLowerCase().split(/\s+/);
+          for (const word of words) {
+            if (word.length > 2) {
+              safeWords.add(word);
+            }
+          }
+        }
+      }
+      console.log(`[HybridAnalysis] Safe words (from converting queries): ${safeWords.size}`);
+
+      // Filter AI trash words - remove any that appear in converting queries
+      const filteredTrashWords = new Set<string>();
+      for (const trashWord of aiTrashWords) {
+        if (safeWords.has(trashWord)) {
+          console.log(`[HybridAnalysis] Filtering out "${trashWord}" - appears in converting queries`);
+        } else {
+          filteredTrashWords.add(trashWord);
+        }
+      }
+      console.log(`[HybridAnalysis] Filtered trash words: ${filteredTrashWords.size} (was ${aiTrashWords.size})`);
+
+      // Step 7: Re-classify queries using FILTERED AI trash words
       const finalTarget: QueryAnalysis[] = [];
       const finalTrash: QueryAnalysis[] = [];
       const finalReview: QueryAnalysis[] = [];
 
-      // Helper to check if query contains any AI trash word
+      // Helper to check if query contains any filtered AI trash word
       const containsAiTrashWord = (query: string): string | null => {
         const lowerQuery = query.toLowerCase();
-        for (const trashWord of aiTrashWords) {
+        for (const trashWord of filteredTrashWords) {
           // Match whole word or phrase
           const regex = new RegExp(`\\b${trashWord.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i');
           if (regex.test(lowerQuery)) {
@@ -823,7 +849,7 @@ export const searchQueriesService = {
         finalTrash.push(q);
       }
 
-      // Process review queries - apply AI trash words
+      // Process review queries - apply filtered AI trash words
       for (const q of quickResult.reviewQueries) {
         const trashWord = containsAiTrashWord(q.query);
         if (trashWord) {
@@ -840,16 +866,30 @@ export const searchQueriesService = {
 
       console.log(`[HybridAnalysis] After AI: target=${finalTarget.length}, trash=${finalTrash.length}, review=${finalReview.length}`);
 
-      // Step 7: Merge minus words
+      // Step 8: Merge minus words with SAFETY CHECK (reusing safeWords from above)
       const allMinusWords = [...quickResult.suggestedMinusWords];
       const existingWords = new Set(allMinusWords.map(m => m.word.toLowerCase()));
 
       for (const aiMinus of aiResult.suggestedMinusWords || []) {
-        if (!existingWords.has(aiMinus.word.toLowerCase())) {
-          // Count how many queries this word affects
+        const wordLower = aiMinus.word.toLowerCase();
+
+        // SAFETY CHECK: Skip if word appears in converting queries
+        if (safeWords.has(wordLower)) {
+          console.log(`[HybridAnalysis] Skipping "${aiMinus.word}" - appears in converting queries`);
+          continue;
+        }
+
+        if (!existingWords.has(wordLower)) {
+          // Count how many queries this word affects (only non-converting!)
           const affectedQueries = queries.filter(q =>
-            q.query.toLowerCase().includes(aiMinus.word.toLowerCase())
+            q.conversions === 0 && q.query.toLowerCase().includes(wordLower)
           );
+
+          if (affectedQueries.length === 0) {
+            console.log(`[HybridAnalysis] Skipping "${aiMinus.word}" - no non-converting queries affected`);
+            continue;
+          }
+
           const savings = affectedQueries.reduce((sum, q) => sum + q.cost, 0);
 
           allMinusWords.push({
@@ -859,7 +899,7 @@ export const searchQueriesService = {
             potentialSavings: savings,
             category: aiMinus.category || 'other',
           });
-          existingWords.add(aiMinus.word.toLowerCase());
+          existingWords.add(wordLower);
         }
       }
 
