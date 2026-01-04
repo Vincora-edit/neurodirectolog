@@ -322,7 +322,7 @@ export const searchQueriesService = {
       stopWords = ['бесплатно', 'скачать', 'торрент', 'своими руками', 'что это'],
       minImpressionsForLowCtr = 100, // Минимум показов для проверки CTR
       lowCtrThreshold = 1.0, // CTR ниже 1% считается низким
-      minImpressions = 5, // Запросы с менее чем 5 показами - статистически незначимы
+      minImpressions = 3, // Запросы с менее чем 3 показами - статистически незначимы
       minCost = 0, // Минимальный расход для учёта запроса
     } = config;
 
@@ -726,8 +726,13 @@ export const searchQueriesService = {
   },
 
   /**
-   * Hybrid analysis: Quick analysis + AI for cluster review
-   * AI analyzes clusters (aggregated data), not individual queries
+   * Hybrid analysis: Quick analysis + AI for finding trash patterns
+   *
+   * Logic:
+   * 1. Quick analysis classifies queries by rules (stop-words, conversions, CPL)
+   * 2. AI analyzes top-50 expensive queries WITHOUT conversions
+   * 3. AI returns trash words/bigrams (e.g., "новости", "изменения 2024")
+   * 4. Apply AI-found trash words to ALL queries
    */
   async hybridAnalysis(
     queries: SearchQuery[],
@@ -737,155 +742,124 @@ export const searchQueriesService = {
     // Step 1: Run quick analysis on all queries
     const quickResult = this.quickAnalysis(queries, {
       maxCpl: targetCpl || 5000,
-      minImpressions: 5,
+      minImpressions: 3,
     });
 
-    // Step 2: Select clusters for AI review
-    // AI works better with aggregated cluster data, not 47000 individual queries
-    const clusters = quickResult.clusters || [];
-
-    // Select problematic clusters:
-    // - Mixed clusters (have both target and trash queries)
-    // - High cost clusters with no conversions
-    // - Clusters with mostly review queries
-    const clustersForAi = clusters
-      .filter(c => {
-        // Mixed clusters - AI can help decide
-        const hasMixed = c.targetCount > 0 && c.trashCount > 0;
-        // High cost, no conversions - potentially wasteful
-        const highCostNoConv = c.cost > 300 && c.conversions === 0;
-        // Mostly uncertain - needs AI opinion
-        const mostlyReview = c.reviewCount > (c.targetCount + c.trashCount);
-        return hasMixed || highCostNoConv || mostlyReview;
-      })
-      .slice(0, 50); // Top 50 clusters
-
-    console.log(`[HybridAnalysis] Selected ${clustersForAi.length} clusters for AI review`);
-
-    // Step 3: If no clusters to review or AI not configured, return quick result
-    if (clustersForAi.length === 0 || !aiClientService.isConfigured()) {
+    // Step 2: Check if AI is available
+    if (!aiClientService.isConfigured()) {
+      console.log('[HybridAnalysis] AI not configured, using quick result only');
       return quickResult;
     }
 
-    // Step 4: Build queries for AI from selected clusters
-    // For each cluster, pick representative queries
-    const complexCases: SearchQuery[] = [];
+    // Step 3: Select top-50 expensive queries WITHOUT conversions for AI analysis
+    // These are the most problematic - spending money but not converting
+    const expensiveNoConversions = queries
+      .filter(q => q.conversions === 0 && q.cost > 0)
+      .sort((a, b) => b.cost - a.cost)
+      .slice(0, 50);
 
-    for (const cluster of clustersForAi) {
-      const keyword = cluster.keyword.toLowerCase();
-      // Find queries matching this cluster, sorted by cost (most expensive first)
-      const clusterQueries = queries
-        .filter(q => q.query.toLowerCase().includes(keyword))
-        .sort((a, b) => b.cost - a.cost)
-        .slice(0, 5); // Top 5 queries per cluster
-
-      for (const q of clusterQueries) {
-        if (!complexCases.find(c => c.query === q.query)) {
-          complexCases.push(q);
-        }
-      }
-
-      if (complexCases.length >= 150) break;
+    if (expensiveNoConversions.length === 0) {
+      console.log('[HybridAnalysis] No expensive queries without conversions, using quick result');
+      return quickResult;
     }
 
-    console.log(`[HybridAnalysis] Sending ${complexCases.length} representative queries to AI`);
+    console.log(`[HybridAnalysis] Sending ${expensiveNoConversions.length} expensive queries (no conversions) to AI`);
+    console.log(`[HybridAnalysis] Top queries: ${expensiveNoConversions.slice(0, 5).map(q => `"${q.query}" (${q.cost.toFixed(0)}₽)`).join(', ')}`);
 
-    // Step 5: Send to AI
+    // Step 4: Send to AI to find trash patterns
     try {
       const aiResult = await aiClientService.analyzeQueries(
-        complexCases,
+        expensiveNoConversions,
         businessDescription,
         targetCpl
       );
 
       console.log(`[HybridAnalysis] AI analyzed ${aiResult.analyzedQueries} queries`);
+      console.log(`[HybridAnalysis] AI found ${aiResult.suggestedMinusWords?.length || 0} minus words`);
 
-      // Step 6: Apply AI decisions to ALL queries in affected clusters
-      const aiTargetSet = new Set(aiResult.targetQueries.map((q: any) => q.query));
-      const aiTrashMap = new Map(aiResult.trashQueries.map((q: any) => [q.query, q]));
+      // Step 5: Build set of AI-found trash words
+      const aiTrashWords = new Set<string>();
+      for (const minus of aiResult.suggestedMinusWords || []) {
+        aiTrashWords.add(minus.word.toLowerCase());
+      }
 
-      // Build keyword-to-decision map based on AI results
-      const keywordDecisions = new Map<string, { decision: 'target' | 'trash' | 'review'; reason: string; minusWords: string[] }>();
-
-      for (const cluster of clustersForAi) {
-        const keyword = cluster.keyword.toLowerCase();
-
-        // Count AI decisions for this cluster's queries
-        let targetVotes = 0;
-        let trashVotes = 0;
-        let trashReason = '';
-        let trashMinusWords: string[] = [];
-
-        for (const q of complexCases) {
-          if (q.query.toLowerCase().includes(keyword)) {
-            if (aiTargetSet.has(q.query)) {
-              targetVotes++;
-            } else if (aiTrashMap.has(q.query)) {
-              trashVotes++;
-              const trashData = aiTrashMap.get(q.query);
-              if (trashData) {
-                trashReason = trashData.reason || '';
-                trashMinusWords = trashData.suggestedMinusWords || [];
-              }
-            }
-          }
-        }
-
-        // Majority vote decides cluster fate
-        if (trashVotes > targetVotes) {
-          keywordDecisions.set(keyword, { decision: 'trash', reason: trashReason, minusWords: trashMinusWords });
-        } else if (targetVotes > trashVotes) {
-          keywordDecisions.set(keyword, { decision: 'target', reason: 'AI: целевой кластер', minusWords: [] });
+      // Also extract trash words from AI's trash queries analysis
+      for (const trashQuery of aiResult.trashQueries || []) {
+        for (const word of trashQuery.suggestedMinusWords || []) {
+          aiTrashWords.add(word.toLowerCase());
         }
       }
 
-      // Apply decisions to queries
-      const finalTarget = [...quickResult.targetQueries];
+      console.log(`[HybridAnalysis] Total AI trash words: ${aiTrashWords.size}`);
+      if (aiTrashWords.size > 0) {
+        console.log(`[HybridAnalysis] AI trash words: ${Array.from(aiTrashWords).slice(0, 10).join(', ')}`);
+      }
+
+      // Step 6: Re-classify queries using AI-found trash words
+      const finalTarget: QueryAnalysis[] = [];
       const finalTrash: QueryAnalysis[] = [];
       const finalReview: QueryAnalysis[] = [];
 
-      // Re-process trash and review queries based on AI cluster decisions
+      // Helper to check if query contains any AI trash word
+      const containsAiTrashWord = (query: string): string | null => {
+        const lowerQuery = query.toLowerCase();
+        for (const trashWord of aiTrashWords) {
+          // Match whole word or phrase
+          const regex = new RegExp(`\\b${trashWord.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i');
+          if (regex.test(lowerQuery)) {
+            return trashWord;
+          }
+        }
+        return null;
+      };
+
+      // Process target queries - they stay target (have conversions)
+      for (const q of quickResult.targetQueries) {
+        finalTarget.push(q);
+      }
+
+      // Process trash queries - they stay trash
       for (const q of quickResult.trashQueries) {
-        let moved = false;
-        for (const [keyword, decision] of keywordDecisions) {
-          if (q.query.toLowerCase().includes(keyword) && decision.decision === 'target') {
-            finalTarget.push({ ...q, category: 'target', reason: 'AI: ' + decision.reason });
-            moved = true;
-            break;
-          }
-        }
-        if (!moved) finalTrash.push(q);
+        finalTrash.push(q);
       }
 
+      // Process review queries - apply AI trash words
       for (const q of quickResult.reviewQueries) {
-        let decided = false;
-        for (const [keyword, decision] of keywordDecisions) {
-          if (q.query.toLowerCase().includes(keyword)) {
-            if (decision.decision === 'target') {
-              finalTarget.push({ ...q, category: 'target', reason: 'AI: ' + decision.reason });
-            } else if (decision.decision === 'trash') {
-              finalTrash.push({ ...q, category: 'trash', reason: 'AI: ' + decision.reason, suggestedMinusWords: decision.minusWords });
-            }
-            decided = true;
-            break;
-          }
+        const trashWord = containsAiTrashWord(q.query);
+        if (trashWord) {
+          finalTrash.push({
+            ...q,
+            category: 'trash',
+            reason: `AI: содержит "${trashWord}"`,
+            suggestedMinusWords: [trashWord],
+          });
+        } else {
+          finalReview.push(q);
         }
-        if (!decided) finalReview.push(q);
       }
 
-      // Merge minus words
+      console.log(`[HybridAnalysis] After AI: target=${finalTarget.length}, trash=${finalTrash.length}, review=${finalReview.length}`);
+
+      // Step 7: Merge minus words
       const allMinusWords = [...quickResult.suggestedMinusWords];
       const existingWords = new Set(allMinusWords.map(m => m.word.toLowerCase()));
 
       for (const aiMinus of aiResult.suggestedMinusWords || []) {
         if (!existingWords.has(aiMinus.word.toLowerCase())) {
+          // Count how many queries this word affects
+          const affectedQueries = queries.filter(q =>
+            q.query.toLowerCase().includes(aiMinus.word.toLowerCase())
+          );
+          const savings = affectedQueries.reduce((sum, q) => sum + q.cost, 0);
+
           allMinusWords.push({
             word: aiMinus.word,
-            reason: 'AI: ' + aiMinus.reason,
-            queriesAffected: aiMinus.queriesAffected || 0,
-            potentialSavings: aiMinus.potentialSavings || 0,
+            reason: aiMinus.reason || 'AI: нецелевой запрос',
+            queriesAffected: affectedQueries.length,
+            potentialSavings: savings,
             category: aiMinus.category || 'other',
           });
+          existingWords.add(aiMinus.word.toLowerCase());
         }
       }
 
