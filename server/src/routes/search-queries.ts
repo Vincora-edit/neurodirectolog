@@ -214,18 +214,23 @@ router.get('/:connectionId/history', async (req, res) => {
     const { connectionId } = req.params;
     const { limit = '10' } = req.query;
 
+    // Sanitize inputs to prevent SQL injection
+    const safeConnectionId = connectionId.replace(/[^a-zA-Z0-9-]/g, '');
+    const safeUserId = userId.replace(/[^a-zA-Z0-9-_]/g, '');
+    const safeLimit = Math.min(Math.max(parseInt(limit as string) || 10, 1), 100);
+
     const history = await clickhouseService.query(`
       SELECT *
       FROM search_query_analyses
-      WHERE connection_id = '${connectionId}'
-        AND user_id = '${userId}'
+      WHERE connection_id = '${safeConnectionId}'
+        AND user_id = '${safeUserId}'
       ORDER BY created_at DESC
-      LIMIT ${parseInt(limit as string)}
+      LIMIT ${safeLimit}
     `);
 
     res.json({ success: true, data: history });
   } catch (error: any) {
-    console.error('Failed to get analysis history:', error);
+    console.error('[SearchQueries] Failed to get analysis history:', error);
     res.status(500).json({ success: false, error: error.message });
   }
 });
@@ -236,7 +241,7 @@ router.get('/:connectionId/history', async (req, res) => {
  */
 router.post('/manual/analyze', async (req, res) => {
   try {
-    const { queries, businessDescription, targetCpl, useAi = false } = req.body;
+    const { queries, businessDescription } = req.body;
 
     if (!queries || !Array.isArray(queries) || queries.length === 0) {
       return res.status(400).json({ success: false, error: 'queries array is required' });
@@ -245,7 +250,7 @@ router.post('/manual/analyze', async (req, res) => {
     // Convert manual queries to SearchQuery format
     const searchQueries = queries.map((q: any) => ({
       query: q.query || '',
-      impressions: q.impressions || 0,
+      impressions: q.impressions || 100, // Default impressions for manual queries
       clicks: q.clicks || 0,
       cost: q.cost || 0,
       conversions: q.conversions || 0,
@@ -256,23 +261,20 @@ router.post('/manual/analyze', async (req, res) => {
 
     let analysis;
 
-    if (useAi && businessDescription) {
-      // AI-powered analysis
-      analysis = await searchQueriesService.analyzeQueries(
+    if (businessDescription) {
+      // AI-powered quick minus analysis
+      analysis = await searchQueriesService.quickMinusAnalysis(
         searchQueries,
-        businessDescription,
-        targetCpl
+        businessDescription
       );
     } else {
-      // Quick rule-based analysis
-      analysis = searchQueriesService.quickAnalysis(searchQueries, {
-        maxCpl: targetCpl || 5000,
-      });
+      // Basic rule-based analysis only
+      analysis = searchQueriesService.quickAnalysis(searchQueries, {});
     }
 
     res.json({ success: true, data: analysis });
   } catch (error: any) {
-    console.error('Failed to analyze manual queries:', error);
+    console.error('[SearchQueries] Failed to analyze manual queries:', error);
     res.status(500).json({ success: false, error: error.message });
   }
 });
