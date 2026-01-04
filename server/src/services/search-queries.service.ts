@@ -831,8 +831,30 @@ export const searchQueriesService = {
 
     console.log(`[QuickMinusAnalysis] Found ${wordStats.size} unique words in non-converting queries`);
 
-    // Step 5: Select top words by cost for AI analysis
+    // Commercial words that should NEVER be minused - filter them out before AI
+    const NEVER_MINUS_WORDS = new Set([
+      // Commercial verbs
+      'сделать', 'сделаю', 'делать', 'делаю',
+      'оформить', 'оформление', 'оформления', 'оформлению',
+      'получить', 'получение', 'получения', 'получению',
+      'купить', 'покупка', 'покупки',
+      'заказать', 'заказ', 'заказа',
+      'помочь', 'помощь', 'помощи', 'помощью',
+      'стоить', 'стоит', 'стоимость', 'стоимости',
+      'цена', 'цены', 'ценой', 'ценам',
+      'консультация', 'консультации', 'консультацию',
+      // Question words
+      'как', 'что', 'где', 'сколько', 'какие', 'какой', 'какая', 'когда', 'почему', 'зачем',
+      // Common service words
+      'услуги', 'услуга', 'услугу', 'услуг',
+      'документы', 'документ', 'документа', 'документов',
+      'нужно', 'нужны', 'нужен', 'нужна',
+      'можно', 'могу',
+    ]);
+
+    // Step 5: Select top words by cost for AI analysis (excluding never-minus words)
     const topWords = Array.from(wordStats.entries())
+      .filter(([word]) => !NEVER_MINUS_WORDS.has(word.toLowerCase()))
       .map(([word, stats]) => ({ word, ...stats }))
       .sort((a, b) => b.totalCost - a.totalCost)
       .slice(0, 100); // Top 100 by cost
