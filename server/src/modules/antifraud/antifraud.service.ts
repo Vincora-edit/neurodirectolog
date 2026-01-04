@@ -12,6 +12,7 @@ export interface AntifraudSettings {
   metrikaId: string;
   threshold: number;
   enableHoneypot: boolean;
+  enableCrmTracking: boolean;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -55,6 +56,7 @@ export const antifraudService = {
         metrikaId,
         threshold: 5,
         enableHoneypot: true,
+        enableCrmTracking: true,
         createdAt: new Date(),
         updatedAt: new Date(),
       };
@@ -74,13 +76,14 @@ export const antifraudService = {
 
       await clickhouseService.exec(`
         INSERT INTO antifraud_settings (
-          connection_id, enabled, metrika_id, threshold, enable_honeypot, created_at, updated_at
+          connection_id, enabled, metrika_id, threshold, enable_honeypot, enable_crm_tracking, created_at, updated_at
         ) VALUES (
           '${merged.connectionId}',
           ${merged.enabled ? 1 : 0},
           '${merged.metrikaId || ''}',
           ${merged.threshold || 5},
           ${merged.enableHoneypot !== false ? 1 : 0},
+          ${merged.enableCrmTracking !== false ? 1 : 0},
           now(),
           now()
         )
@@ -134,6 +137,7 @@ export const antifraudService = {
       metrikaId: settings.metrikaId,
       threshold: settings.threshold,
       enableHoneypot: settings.enableHoneypot,
+      enableCrmTracking: settings.enableCrmTracking,
       debug: options?.debug || false,
     };
 
@@ -151,6 +155,7 @@ export const antifraudService = {
   generateStandaloneScript(metrikaId: string, options?: {
     threshold?: number;
     enableHoneypot?: boolean;
+    enableCrmTracking?: boolean;
     minified?: boolean;
     debug?: boolean;
   }): string {
@@ -158,6 +163,7 @@ export const antifraudService = {
       metrikaId,
       threshold: options?.threshold || 5,
       enableHoneypot: options?.enableHoneypot !== false,
+      enableCrmTracking: options?.enableCrmTracking !== false,
       debug: options?.debug || false,
     };
 
@@ -212,6 +218,24 @@ export const antifraudService = {
 | Цель | Когда срабатывает |
 |------|-------------------|
 | ndf_bot_detected | Когда score >= ${5} (порог) |
+
+### Интеграция с CRM
+
+Скрипт автоматически добавляет скрытые поля во все формы на сайте.
+При отправке формы эти поля попадут в вашу CRM вместе с заявкой.
+
+| Поле в CRM | Описание |
+|------------|----------|
+| ndf_bot_score | Числовой скор подозрительности (0 = чисто, 5+ = бот) |
+| ndf_is_bot | "yes" или "no" - является ли посетитель ботом |
+| ndf_checks | Какие проверки сработали (через запятую) |
+| ndf_timestamp | Время отправки формы (ISO формат) |
+
+**Как анализировать в CRM:**
+1. Создайте фильтр по полю ndf_is_bot = "yes"
+2. Посмотрите, сколько таких заявок превратились в клиентов
+3. Если все заявки с ndf_is_bot = "yes" - мусор, значит антифрод работает правильно
+4. Если есть реальные клиенты с ndf_is_bot = "yes" - возможно нужно увеличить порог
 `.trim();
   },
 
@@ -223,6 +247,7 @@ export const antifraudService = {
       metrikaId: row.metrika_id || '',
       threshold: parseInt(row.threshold) || 5,
       enableHoneypot: row.enable_honeypot === 1 || row.enable_honeypot === true,
+      enableCrmTracking: row.enable_crm_tracking === 1 || row.enable_crm_tracking === true || row.enable_crm_tracking === undefined,
       createdAt: new Date(row.created_at),
       updatedAt: new Date(row.updated_at),
     };

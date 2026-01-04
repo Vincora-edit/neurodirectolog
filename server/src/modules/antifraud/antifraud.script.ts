@@ -9,6 +9,7 @@ export interface AntifraudConfig {
   metrikaId: string;
   threshold?: number; // Score threshold for bot detection (default: 5)
   enableHoneypot?: boolean;
+  enableCrmTracking?: boolean; // Add hidden fields to forms for CRM tracking
   debug?: boolean;
 }
 
@@ -20,6 +21,7 @@ export function generateAntifraudScript(config: AntifraudConfig): string {
     metrikaId,
     threshold = 5,
     enableHoneypot = true,
+    enableCrmTracking = true,
     debug = false
   } = config;
 
@@ -194,6 +196,87 @@ export function generateAntifraudScript(config: AntifraudConfig): string {
     }
   }, true);
   ` : '// Honeypot disabled'}
+
+  // ===== CRM TRACKING =====
+  ${enableCrmTracking ? `
+  // Добавляем скрытые поля для передачи в CRM
+  // Эти поля автоматически попадут в CRM вместе с заявкой
+  var crmTrackingStyle = document.createElement('style');
+  crmTrackingStyle.textContent = '.ndf-crm{position:absolute!important;left:-9999px!important;opacity:0!important;pointer-events:none!important;height:0!important;width:0!important;overflow:hidden!important}';
+  document.head.appendChild(crmTrackingStyle);
+
+  function addCrmFields(form) {
+    // Не добавляем повторно
+    if (form.querySelector('input[name="ndf_bot_score"]')) return;
+
+    // Создаём контейнер для скрытых полей
+    var container = document.createElement('div');
+    container.className = 'ndf-crm';
+
+    // Поле: bot score (числовой)
+    var scoreField = document.createElement('input');
+    scoreField.type = 'hidden';
+    scoreField.name = 'ndf_bot_score';
+    scoreField.value = score.toString();
+    container.appendChild(scoreField);
+
+    // Поле: is_bot (да/нет)
+    var botField = document.createElement('input');
+    botField.type = 'hidden';
+    botField.name = 'ndf_is_bot';
+    botField.value = score >= THRESHOLD ? 'yes' : 'no';
+    container.appendChild(botField);
+
+    // Поле: какие проверки сработали
+    var checksField = document.createElement('input');
+    checksField.type = 'hidden';
+    checksField.name = 'ndf_checks';
+    checksField.value = checks.map(function(c) { return c.reason; }).join(',');
+    container.appendChild(checksField);
+
+    // Поле: метка времени
+    var tsField = document.createElement('input');
+    tsField.type = 'hidden';
+    tsField.name = 'ndf_timestamp';
+    tsField.value = new Date().toISOString();
+    container.appendChild(tsField);
+
+    form.appendChild(container);
+    log('CRM fields added to form');
+  }
+
+  // Функция обновления значений перед отправкой
+  function updateCrmFields(form) {
+    var scoreField = form.querySelector('input[name="ndf_bot_score"]');
+    var botField = form.querySelector('input[name="ndf_is_bot"]');
+    var checksField = form.querySelector('input[name="ndf_checks"]');
+
+    if (scoreField) scoreField.value = score.toString();
+    if (botField) botField.value = score >= THRESHOLD ? 'yes' : 'no';
+    if (checksField) checksField.value = checks.map(function(c) { return c.reason; }).join(',');
+  }
+
+  // Добавляем поля во все существующие формы
+  document.querySelectorAll('form').forEach(addCrmFields);
+
+  // Следим за новыми формами
+  var crmObserver = new MutationObserver(function(mutations) {
+    mutations.forEach(function(mutation) {
+      mutation.addedNodes.forEach(function(node) {
+        if (node.tagName === 'FORM') addCrmFields(node);
+        if (node.querySelectorAll) {
+          node.querySelectorAll('form').forEach(addCrmFields);
+        }
+      });
+    });
+  });
+  crmObserver.observe(document.body, { childList: true, subtree: true });
+
+  // Обновляем значения перед отправкой (score мог измениться)
+  document.addEventListener('submit', function(e) {
+    updateCrmFields(e.target);
+  }, true);
+  ` : '// CRM tracking disabled'}
 
   // ===== ОТПРАВКА РЕЗУЛЬТАТОВ =====
 
