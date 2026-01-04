@@ -2,12 +2,10 @@ import { useState, useEffect } from 'react';
 import { useMutation } from '@tanstack/react-query';
 import {
   Search,
-  Target,
   Trash2,
   HelpCircle,
   Download,
   Loader2,
-  CheckCircle,
   XCircle,
   AlertCircle,
   ChevronDown,
@@ -19,10 +17,7 @@ import {
   TrendingDown,
   Upload,
   Zap,
-  BarChart3,
-  Users,
-  MousePointer,
-  Eye,
+  Bug,
 } from 'lucide-react';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001/api';
@@ -48,22 +43,7 @@ interface MinusWordSuggestion {
   queriesAffected: number;
   potentialSavings: number;
   category: string;
-}
-
-interface QueryCluster {
-  keyword: string;
-  queries: number;
-  impressions: number;
-  clicks: number;
-  cost: number;
-  conversions: number;
-  ctr: number;
-  cpl: number;
-  avgCpc: number;
-  targetCount: number;
-  trashCount: number;
-  reviewCount: number;
-  isBigram?: boolean;
+  confidence?: 'high' | 'medium' | 'low';
 }
 
 interface AnalysisResult {
@@ -72,7 +52,6 @@ interface AnalysisResult {
   trashQueries: QueryAnalysis[];
   reviewQueries: QueryAnalysis[];
   suggestedMinusWords: MinusWordSuggestion[];
-  clusters?: QueryCluster[];
   summary: {
     totalCost: number;
     wastedCost: number;
@@ -121,6 +100,17 @@ const fetchKpi = async (connectionId: string): Promise<{ targetCpl: number } | n
   return null;
 };
 
+// Helper: Find queries containing a word
+const findQueriesWithWord = (queries: QueryAnalysis[], word: string): QueryAnalysis[] => {
+  const cleanWord = word.replace(/^[!"]+|[!"]+$/g, '').toLowerCase();
+  return queries.filter(q => {
+    const lowerQuery = q.query.toLowerCase();
+    // Check if word is in query (as whole word)
+    const regex = new RegExp(`\\b${cleanWord.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`, 'i');
+    return regex.test(lowerQuery);
+  });
+};
+
 export default function SearchQueriesPage() {
   // Source mode
   const [sourceMode, setSourceMode] = useState<SourceMode>('auto');
@@ -136,12 +126,12 @@ export default function SearchQueriesPage() {
   // Common state
   const [useAi, setUseAi] = useState(false);
   const [businessDescription, setBusinessDescription] = useState('');
-  const [briefDescription, setBriefDescription] = useState<string | null>(null); // From project brief
+  const [briefDescription, setBriefDescription] = useState<string | null>(null);
   const [targetCpl, setTargetCpl] = useState<number | undefined>();
   const [analysisResult, setAnalysisResult] = useState<AnalysisResult | null>(null);
-  const [activeTab, setActiveTab] = useState<'target' | 'trash' | 'review' | 'clusters'>('trash');
+  const [activeTab, setActiveTab] = useState<'trash' | 'review' | 'debug'>('trash');
   const [selectedMinusWords, setSelectedMinusWords] = useState<Set<string>>(new Set());
-  const [expandedQueries, setExpandedQueries] = useState<Set<string>>(new Set());
+  const [expandedWords, setExpandedWords] = useState<Set<string>>(new Set());
   const [analysisWarning, setAnalysisWarning] = useState<string | null>(null);
   const [filteredInfo, setFilteredInfo] = useState<{ raw: number; filtered: number } | null>(null);
 
@@ -163,7 +153,6 @@ export default function SearchQueriesPage() {
   // Load brief and KPI when connection changes
   useEffect(() => {
     if (activeConnectionId) {
-      // Load brief for business description
       fetchBrief(activeConnectionId).then((brief) => {
         if (brief) {
           setBriefDescription(brief.description);
@@ -176,7 +165,6 @@ export default function SearchQueriesPage() {
         }
       });
 
-      // Load KPI for targetCpl
       fetchKpi(activeConnectionId).then((kpi) => {
         if (kpi?.targetCpl && kpi.targetCpl > 0) {
           setTargetCpl(kpi.targetCpl);
@@ -240,7 +228,6 @@ export default function SearchQueriesPage() {
   // Manual mode mutation
   const manualAnalyzeMutation = useMutation({
     mutationFn: async () => {
-      // Parse queries from text
       const lines = manualQueries.split('\n').filter((line) => line.trim());
       const queries = lines.map((line) => {
         const parts = line.split(/[,\t]/).map((p) => p.trim());
@@ -320,41 +307,35 @@ export default function SearchQueriesPage() {
     setSelectedMinusWords(newSet);
   };
 
-  const toggleQueryExpand = (query: string) => {
-    const newSet = new Set(expandedQueries);
-    if (newSet.has(query)) {
-      newSet.delete(query);
+  const toggleWordExpand = (word: string) => {
+    const newSet = new Set(expandedWords);
+    if (newSet.has(word)) {
+      newSet.delete(word);
     } else {
-      newSet.add(query);
+      newSet.add(word);
     }
-    setExpandedQueries(newSet);
+    setExpandedWords(newSet);
   };
 
-  const getCategoryIcon = (category: 'target' | 'trash' | 'review') => {
-    switch (category) {
-      case 'target':
-        return <CheckCircle className="text-green-500" size={18} />;
-      case 'trash':
-        return <XCircle className="text-red-500" size={18} />;
-      case 'review':
-        return <AlertCircle className="text-amber-500" size={18} />;
-    }
-  };
-
-  const getActiveQueries = (): QueryAnalysis[] => {
+  // Get minus words for display based on tab
+  const getMinusWordsForTab = () => {
     if (!analysisResult) return [];
-    switch (activeTab) {
-      case 'target':
-        return analysisResult.targetQueries;
-      case 'trash':
-        return analysisResult.trashQueries;
-      case 'review':
-        return analysisResult.reviewQueries;
-      case 'clusters':
-        return []; // Clusters tab doesn't show queries
-      default:
-        return [];
+    const allWords = analysisResult.suggestedMinusWords;
+
+    if (activeTab === 'trash') {
+      // High confidence - confirmed trash
+      return allWords.filter(mw => mw.confidence === 'high' || !mw.confidence);
+    } else if (activeTab === 'review') {
+      // Medium/low confidence - need review
+      return allWords.filter(mw => mw.confidence === 'medium' || mw.confidence === 'low');
     }
+    return [];
+  };
+
+  // Get all queries (trash + review) for finding examples
+  const getAllQueries = (): QueryAnalysis[] => {
+    if (!analysisResult) return [];
+    return [...analysisResult.trashQueries, ...analysisResult.reviewQueries];
   };
 
   return (
@@ -413,7 +394,6 @@ export default function SearchQueriesPage() {
       {/* Analysis Form */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
         {sourceMode === 'auto' ? (
-          /* Auto mode form */
           connectionsLoading ? (
             <div className="flex items-center justify-center py-8">
               <Loader2 className="animate-spin text-purple-600" size={24} />
@@ -429,7 +409,6 @@ export default function SearchQueriesPage() {
             </div>
           ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-            {/* Connection selector */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Аккаунт</label>
               <select
@@ -445,7 +424,6 @@ export default function SearchQueriesPage() {
               </select>
             </div>
 
-            {/* Date range */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Период</label>
               <select
@@ -461,7 +439,6 @@ export default function SearchQueriesPage() {
               </select>
             </div>
 
-            {/* Target CPL */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Целевой CPL</label>
               <input
@@ -473,7 +450,6 @@ export default function SearchQueriesPage() {
               />
             </div>
 
-            {/* AI Toggle */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Метод</label>
               <button
@@ -491,10 +467,8 @@ export default function SearchQueriesPage() {
           </div>
           )
         ) : (
-          /* Manual mode form */
           <div className="space-y-4 mb-6">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {/* Target CPL */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Целевой CPL</label>
                 <input
@@ -506,7 +480,6 @@ export default function SearchQueriesPage() {
                 />
               </div>
 
-              {/* AI Toggle */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Метод</label>
                 <button
@@ -655,278 +628,181 @@ export default function SearchQueriesPage() {
             </div>
           </div>
 
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            {/* Queries List */}
-            <div className="lg:col-span-2 bg-white rounded-xl shadow-sm border border-gray-200">
-              {/* Tabs */}
-              <div className="flex border-b border-gray-200">
-                <button
-                  onClick={() => setActiveTab('trash')}
-                  className={`flex-1 flex items-center justify-center gap-2 px-4 py-3 text-sm font-medium transition-colors ${
-                    activeTab === 'trash'
-                      ? 'text-red-600 border-b-2 border-red-600'
-                      : 'text-gray-500 hover:text-gray-700'
-                  }`}
-                >
-                  <Trash2 size={16} />
-                  Мусор ({analysisResult.trashQueries.length})
-                </button>
-                <button
-                  onClick={() => setActiveTab('review')}
-                  className={`flex-1 flex items-center justify-center gap-2 px-4 py-3 text-sm font-medium transition-colors ${
-                    activeTab === 'review'
-                      ? 'text-amber-600 border-b-2 border-amber-600'
-                      : 'text-gray-500 hover:text-gray-700'
-                  }`}
-                >
-                  <HelpCircle size={16} />
-                  Проверить ({analysisResult.reviewQueries.length})
-                </button>
-                <button
-                  onClick={() => setActiveTab('target')}
-                  className={`flex-1 flex items-center justify-center gap-2 px-4 py-3 text-sm font-medium transition-colors ${
-                    activeTab === 'target'
-                      ? 'text-green-600 border-b-2 border-green-600'
-                      : 'text-gray-500 hover:text-gray-700'
-                  }`}
-                >
-                  <Target size={16} />
-                  Целевые ({analysisResult.targetQueries.length})
-                </button>
-                {analysisResult.clusters && analysisResult.clusters.length > 0 && (
-                  <button
-                    onClick={() => setActiveTab('clusters')}
-                    className={`flex-1 flex items-center justify-center gap-2 px-4 py-3 text-sm font-medium transition-colors ${
-                      activeTab === 'clusters'
-                        ? 'text-blue-600 border-b-2 border-blue-600'
-                        : 'text-gray-500 hover:text-gray-700'
-                    }`}
-                  >
-                    <BarChart3 size={16} />
-                    Кластеры ({analysisResult.clusters.length})
-                  </button>
-                )}
-              </div>
-
-              {/* Content based on active tab */}
-              {activeTab === 'clusters' ? (
-                /* Clusters view */
-                <div className="divide-y divide-gray-100 max-h-[600px] overflow-y-auto">
-                  {analysisResult.clusters?.map((cluster, index) => (
-                    <div key={index} className="p-4 hover:bg-gray-50">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-3">
-                          <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${
-                            cluster.isBigram ? 'bg-purple-50' : 'bg-blue-50'
-                          }`}>
-                            <span className={`text-lg font-bold ${
-                              cluster.isBigram ? 'text-purple-600' : 'text-blue-600'
-                            }`}>
-                              {cluster.isBigram ? '2' : cluster.keyword.charAt(0).toUpperCase()}
-                            </span>
-                          </div>
-                          <div>
-                            <div className="flex items-center gap-2">
-                              <p className="font-semibold text-gray-900">{cluster.keyword}</p>
-                              {cluster.isBigram && (
-                                <span className="px-1.5 py-0.5 text-xs rounded bg-purple-100 text-purple-600">
-                                  биграмма
-                                </span>
-                              )}
-                            </div>
-                            <p className="text-sm text-gray-500">{cluster.queries} запросов</p>
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          {cluster.targetCount > 0 && (
-                            <span className="px-2 py-0.5 text-xs rounded bg-green-100 text-green-700">
-                              {cluster.targetCount} целевых
-                            </span>
-                          )}
-                          {cluster.trashCount > 0 && (
-                            <span className="px-2 py-0.5 text-xs rounded bg-red-100 text-red-700">
-                              {cluster.trashCount} мусор
-                            </span>
-                          )}
-                          {cluster.reviewCount > 0 && (
-                            <span className="px-2 py-0.5 text-xs rounded bg-amber-100 text-amber-700">
-                              {cluster.reviewCount} проверить
-                            </span>
-                          )}
-                        </div>
-                      </div>
-
-                      <div className="mt-3 grid grid-cols-5 gap-4 text-center">
-                        <div className="bg-gray-50 rounded-lg p-2">
-                          <div className="flex items-center justify-center gap-1 text-gray-400 mb-1">
-                            <Eye size={12} />
-                            <span className="text-xs">Показы</span>
-                          </div>
-                          <p className="font-semibold text-gray-900">
-                            {cluster.impressions.toLocaleString('ru-RU')}
-                          </p>
-                        </div>
-                        <div className="bg-gray-50 rounded-lg p-2">
-                          <div className="flex items-center justify-center gap-1 text-gray-400 mb-1">
-                            <MousePointer size={12} />
-                            <span className="text-xs">Клики</span>
-                          </div>
-                          <p className="font-semibold text-gray-900">
-                            {cluster.clicks.toLocaleString('ru-RU')}
-                          </p>
-                        </div>
-                        <div className="bg-gray-50 rounded-lg p-2">
-                          <div className="flex items-center justify-center gap-1 text-gray-400 mb-1">
-                            <DollarSign size={12} />
-                            <span className="text-xs">Расход</span>
-                          </div>
-                          <p className="font-semibold text-gray-900">
-                            {cluster.cost.toLocaleString('ru-RU', { maximumFractionDigits: 0 })}₽
-                          </p>
-                        </div>
-                        <div className="bg-gray-50 rounded-lg p-2">
-                          <div className="flex items-center justify-center gap-1 text-gray-400 mb-1">
-                            <Users size={12} />
-                            <span className="text-xs">Конв.</span>
-                          </div>
-                          <p className={`font-semibold ${cluster.conversions > 0 ? 'text-green-600' : 'text-gray-400'}`}>
-                            {cluster.conversions}
-                          </p>
-                        </div>
-                        <div className="bg-gray-50 rounded-lg p-2">
-                          <div className="flex items-center justify-center gap-1 text-gray-400 mb-1">
-                            <Target size={12} />
-                            <span className="text-xs">CPL</span>
-                          </div>
-                          <p className={`font-semibold ${cluster.cpl > 0 ? 'text-gray-900' : 'text-gray-400'}`}>
-                            {cluster.cpl > 0 ? `${Math.round(cluster.cpl)}₽` : '—'}
-                          </p>
-                        </div>
-                      </div>
-
-                      <div className="mt-2 flex items-center gap-4 text-xs text-gray-500">
-                        <span>CTR: {cluster.ctr.toFixed(2)}%</span>
-                        <span>Ср. CPC: {cluster.avgCpc.toLocaleString('ru-RU', { maximumFractionDigits: 0 })}₽</span>
-                      </div>
-                    </div>
-                  ))}
-
-                  {(!analysisResult.clusters || analysisResult.clusters.length === 0) && (
-                    <div className="p-8 text-center text-gray-500">
-                      Нет кластеров для анализа
-                    </div>
-                  )}
-                </div>
-              ) : (
-                /* Query list */
-                <div className="divide-y divide-gray-100 max-h-[600px] overflow-y-auto">
-                  {getActiveQueries().map((query, index) => (
-                    <div key={index} className="p-4 hover:bg-gray-50">
-                      <div
-                        className="flex items-start gap-3 cursor-pointer"
-                        onClick={() => toggleQueryExpand(query.query)}
-                      >
-                        {getCategoryIcon(query.category)}
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center justify-between gap-2">
-                            <p className="font-medium text-gray-900 truncate">{query.query}</p>
-                            {expandedQueries.has(query.query) ? (
-                              <ChevronUp size={16} className="text-gray-400" />
-                            ) : (
-                              <ChevronDown size={16} className="text-gray-400" />
-                            )}
-                          </div>
-                          <p className="text-sm text-gray-500 mt-1">{query.reason}</p>
-                          <div className="flex items-center gap-4 mt-2 text-xs text-gray-400">
-                            <span>{query.metrics.clicks} кликов</span>
-                            <span>{query.metrics.cost.toLocaleString('ru-RU')}₽</span>
-                            <span>{query.metrics.conversions} конв.</span>
-                            {query.metrics.cpl > 0 && (
-                              <span>CPL: {Math.round(query.metrics.cpl)}₽</span>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Expanded content */}
-                      {expandedQueries.has(query.query) && query.suggestedMinusWords.length > 0 && (
-                        <div className="mt-3 ml-8 p-3 bg-gray-50 rounded-lg">
-                          <p className="text-sm font-medium text-gray-700 mb-2">
-                            Предложенные минус-слова:
-                          </p>
-                          <div className="flex flex-wrap gap-2">
-                            {query.suggestedMinusWords.map((word, i) => (
-                              <button
-                                key={i}
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  toggleMinusWord(word);
-                                }}
-                                className={`px-2 py-1 text-sm rounded transition-colors ${
-                                  selectedMinusWords.has(word)
-                                    ? 'bg-red-100 text-red-700 border border-red-300'
-                                    : 'bg-white text-gray-600 border border-gray-200 hover:border-red-300'
-                                }`}
-                              >
-                                -{word}
-                              </button>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  ))}
-
-                  {getActiveQueries().length === 0 && (
-                    <div className="p-8 text-center text-gray-500">
-                      Нет запросов в этой категории
-                    </div>
-                  )}
-                </div>
-              )}
+          {/* Main Content - Minus Words as Primary View */}
+          <div className="bg-white rounded-xl shadow-sm border border-gray-200">
+            {/* Tabs */}
+            <div className="flex border-b border-gray-200">
+              <button
+                onClick={() => setActiveTab('trash')}
+                className={`flex-1 flex items-center justify-center gap-2 px-4 py-3 text-sm font-medium transition-colors ${
+                  activeTab === 'trash'
+                    ? 'text-red-600 border-b-2 border-red-600'
+                    : 'text-gray-500 hover:text-gray-700'
+                }`}
+              >
+                <Trash2 size={16} />
+                Мусор ({analysisResult.suggestedMinusWords.filter(mw => mw.confidence === 'high' || !mw.confidence).length})
+              </button>
+              <button
+                onClick={() => setActiveTab('review')}
+                className={`flex-1 flex items-center justify-center gap-2 px-4 py-3 text-sm font-medium transition-colors ${
+                  activeTab === 'review'
+                    ? 'text-amber-600 border-b-2 border-amber-600'
+                    : 'text-gray-500 hover:text-gray-700'
+                }`}
+              >
+                <HelpCircle size={16} />
+                Проверить ({analysisResult.suggestedMinusWords.filter(mw => mw.confidence === 'medium' || mw.confidence === 'low').length})
+              </button>
+              <button
+                onClick={() => setActiveTab('debug')}
+                className={`flex items-center justify-center gap-2 px-4 py-3 text-sm font-medium transition-colors ${
+                  activeTab === 'debug'
+                    ? 'text-blue-600 border-b-2 border-blue-600'
+                    : 'text-gray-500 hover:text-gray-700'
+                }`}
+              >
+                <Bug size={16} />
+                Все запросы ({analysisResult.reviewQueries.length})
+              </button>
             </div>
 
-            {/* Minus Words Panel */}
-            <div className="bg-white rounded-xl shadow-sm border border-gray-200">
-              <div className="p-4 border-b border-gray-200">
-                <div className="flex items-center justify-between">
-                  <h3 className="font-semibold text-gray-900">Минус-слова</h3>
-                  <span className="text-sm text-gray-500">{selectedMinusWords.size} выбрано</span>
+            {/* Content */}
+            {activeTab === 'debug' ? (
+              /* Debug view - all review queries for manual inspection */
+              <div className="divide-y divide-gray-100 max-h-[600px] overflow-y-auto">
+                <div className="p-4 bg-blue-50 text-sm text-blue-800">
+                  <strong>Режим отладки:</strong> Все запросы из категории "Проверить".
+                  Используйте для поиска пропущенных минус-слов.
                 </div>
-              </div>
-
-              <div className="p-4 max-h-[500px] overflow-y-auto">
-                <div className="space-y-2">
-                  {analysisResult.suggestedMinusWords.map((mw, index) => (
-                    <div
-                      key={index}
-                      className={`p-3 rounded-lg border cursor-pointer transition-colors ${
-                        selectedMinusWords.has(mw.word)
-                          ? 'bg-red-50 border-red-200'
-                          : 'bg-gray-50 border-gray-200 hover:border-red-200'
-                      }`}
-                      onClick={() => toggleMinusWord(mw.word)}
-                    >
-                      <div className="flex items-center justify-between mb-1">
-                        <span className="font-medium text-gray-900">-{mw.word}</span>
-                        <span className="text-sm text-red-600">
-                          -{mw.potentialSavings.toLocaleString('ru-RU')}₽
-                        </span>
+                {analysisResult.reviewQueries
+                  .sort((a, b) => b.metrics.cost - a.metrics.cost)
+                  .map((query, index) => (
+                  <div key={index} className="p-4 hover:bg-gray-50">
+                    <div className="flex items-start gap-3">
+                      <AlertCircle className="text-amber-500 flex-shrink-0 mt-0.5" size={18} />
+                      <div className="flex-1 min-w-0">
+                        <p className="font-medium text-gray-900">{query.query}</p>
+                        <p className="text-sm text-gray-500 mt-1">{query.reason}</p>
+                        <div className="flex items-center gap-4 mt-2 text-xs text-gray-400">
+                          <span>{query.metrics.clicks} кликов</span>
+                          <span>{query.metrics.cost.toLocaleString('ru-RU')}₽</span>
+                          <span>{query.metrics.conversions} конв.</span>
+                        </div>
                       </div>
-                      <p className="text-xs text-gray-500">{mw.reason}</p>
-                      <p className="text-xs text-gray-400 mt-1">
-                        Затронет {mw.queriesAffected} запросов
-                      </p>
                     </div>
-                  ))}
-                </div>
+                  </div>
+                ))}
               </div>
+            ) : (
+              /* Minus words view */
+              <div className="divide-y divide-gray-100 max-h-[600px] overflow-y-auto">
+                {getMinusWordsForTab().length === 0 ? (
+                  <div className="p-8 text-center text-gray-500">
+                    {activeTab === 'trash'
+                      ? 'Нет подтверждённых минус-слов'
+                      : 'Нет слов для проверки'}
+                  </div>
+                ) : (
+                  getMinusWordsForTab().map((mw, index) => {
+                    const relatedQueries = findQueriesWithWord(getAllQueries(), mw.word);
+                    const isExpanded = expandedWords.has(mw.word);
 
-              <div className="p-4 border-t border-gray-200">
+                    return (
+                      <div key={index} className="border-b border-gray-100 last:border-b-0">
+                        <div
+                          className={`p-4 cursor-pointer transition-colors ${
+                            selectedMinusWords.has(mw.word)
+                              ? 'bg-red-50'
+                              : 'hover:bg-gray-50'
+                          }`}
+                        >
+                          <div className="flex items-start gap-3">
+                            <input
+                              type="checkbox"
+                              checked={selectedMinusWords.has(mw.word)}
+                              onChange={() => toggleMinusWord(mw.word)}
+                              className="mt-1 h-4 w-4 text-red-600 rounded border-gray-300"
+                            />
+                            <div
+                              className="flex-1 min-w-0"
+                              onClick={() => toggleWordExpand(mw.word)}
+                            >
+                              <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-2">
+                                  <XCircle className="text-red-500" size={18} />
+                                  <span className="font-semibold text-gray-900">-{mw.word}</span>
+                                  {mw.confidence === 'medium' && (
+                                    <span className="px-1.5 py-0.5 text-xs rounded bg-amber-100 text-amber-700">
+                                      проверить
+                                    </span>
+                                  )}
+                                  {mw.confidence === 'low' && (
+                                    <span className="px-1.5 py-0.5 text-xs rounded bg-gray-100 text-gray-600">
+                                      возможно
+                                    </span>
+                                  )}
+                                </div>
+                                <div className="flex items-center gap-3">
+                                  <span className="text-red-600 font-medium">
+                                    -{mw.potentialSavings.toLocaleString('ru-RU')}₽
+                                  </span>
+                                  {isExpanded ? (
+                                    <ChevronUp size={16} className="text-gray-400" />
+                                  ) : (
+                                    <ChevronDown size={16} className="text-gray-400" />
+                                  )}
+                                </div>
+                              </div>
+                              <p className="text-sm text-gray-600 mt-1">{mw.reason}</p>
+                              <p className="text-xs text-gray-400 mt-1">
+                                Затронет {mw.queriesAffected} запросов
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Expanded: show queries containing this word */}
+                        {isExpanded && relatedQueries.length > 0 && (
+                          <div className="bg-gray-50 border-t border-gray-200 p-4">
+                            <p className="text-sm font-medium text-gray-700 mb-3">
+                              Запросы с этим словом:
+                            </p>
+                            <div className="space-y-2 max-h-[200px] overflow-y-auto">
+                              {relatedQueries.slice(0, 20).map((q, qi) => (
+                                <div key={qi} className="flex items-center justify-between p-2 bg-white rounded border border-gray-200">
+                                  <span className="text-sm text-gray-800 truncate flex-1">{q.query}</span>
+                                  <div className="flex items-center gap-3 text-xs text-gray-500 ml-2">
+                                    <span>{q.metrics.clicks} кл.</span>
+                                    <span>{q.metrics.cost.toFixed(0)}₽</span>
+                                  </div>
+                                </div>
+                              ))}
+                              {relatedQueries.length > 20 && (
+                                <p className="text-xs text-gray-400 text-center">
+                                  ...и ещё {relatedQueries.length - 20} запросов
+                                </p>
+                              )}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+            )}
+
+            {/* Export Footer */}
+            <div className="p-4 border-t border-gray-200 bg-gray-50">
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-gray-600">
+                  Выбрано минус-слов: <strong>{selectedMinusWords.size}</strong>
+                </span>
                 <button
                   onClick={handleExport}
                   disabled={selectedMinusWords.size === 0}
-                  className="w-full flex items-center justify-center gap-2 bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
+                  className="flex items-center gap-2 bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
                 >
                   <Download size={18} />
                   Экспорт ({selectedMinusWords.size})

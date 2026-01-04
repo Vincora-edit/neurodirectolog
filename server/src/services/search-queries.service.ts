@@ -41,6 +41,7 @@ export interface MinusWordSuggestion {
   queriesAffected: number;
   potentialSavings: number;
   category: 'irrelevant' | 'low_quality' | 'competitor' | 'informational' | 'other';
+  confidence?: 'high' | 'medium' | 'low';
 }
 
 export interface QueryCluster {
@@ -894,7 +895,6 @@ export const searchQueriesService = {
       for (const aiMinus of minusWords) {
         const wordLower = aiMinus.word.toLowerCase();
         if (existingWords.has(wordLower)) continue;
-        if (aiMinus.confidence === 'low') continue; // Skip low confidence
 
         const stats = wordStats.get(wordLower);
         if (!stats) continue;
@@ -905,6 +905,7 @@ export const searchQueriesService = {
           queriesAffected: stats.queriesCount,
           potentialSavings: stats.totalCost,
           category: 'other',
+          confidence: aiMinus.confidence, // Pass confidence to frontend
         });
         existingWords.add(wordLower);
       }
