@@ -4,8 +4,8 @@
  */
 
 import express from 'express';
-import { alertsService } from '../services/alerts.service';
-import { authenticate } from '../middleware/auth';
+import { alertsService } from './alerts.service';
+import { authenticate } from '../../middleware/auth';
 
 const router = express.Router();
 

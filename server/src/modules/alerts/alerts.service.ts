@@ -3,7 +3,7 @@
  * Система уведомлений о критических изменениях в кампаниях
  */
 
-import { clickhouseService } from './clickhouse.service';
+import { clickhouseService } from '../../services/clickhouse.service';
 import { v4 as uuidv4 } from 'uuid';
 
 export interface Alert {

@@ -3,8 +3,8 @@
  * Интеграция с Telegram для уведомлений и быстрых отчётов
  */
 
-import { clickhouseService } from './clickhouse.service';
-import { alertsService } from './alerts.service';
+import { clickhouseService } from '../../services/clickhouse.service';
+import { alertsService } from '../alerts/alerts.service';
 
 // Telegram Bot API base URL
 const TELEGRAM_API_BASE = 'https://api.telegram.org/bot';

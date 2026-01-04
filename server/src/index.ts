@@ -37,7 +37,7 @@ import campaignRouter from './routes/campaign';
 import creativesRouter from './routes/creatives';
 import adsRouter from './routes/ads';
 import strategyRouter from './routes/strategy';
-import minusWordsRouter from './routes/minusWords';
+import { minusWordsRouter } from './modules/minus-words';
 import authRouter from './routes/auth';
 import projectsRouter from './routes/projects';
 import analyticsRouter from './routes/analytics';
@@ -46,9 +46,10 @@ import yandexRouter from './routes/yandex';
 import adminRouter from './routes/admin';
 import publicSharesRouter from './routes/public-shares';
 import publicDashboardRouter from './routes/public-dashboard';
-import alertsRouter from './routes/alerts';
-import searchQueriesRouter from './routes/search-queries';
-import telegramRouter from './routes/telegram';
+import { alertsRouter } from './modules/alerts';
+import { searchQueriesRouter } from './modules/search-queries';
+import { telegramRouter } from './modules/telegram';
+import { antifraudRouter } from './modules/antifraud';
 import { startSyncJob } from './jobs/sync.job';
 import { redisService } from './services/redis.service';
 import { queueService } from './services/queue.service';
@@ -143,6 +144,7 @@ app.use('/api/public/dashboard', apiLimiter, publicDashboardRouter);
 app.use('/api/alerts', apiLimiter, alertsRouter);
 app.use('/api/search-queries', apiLimiter, searchQueriesRouter);
 app.use('/api/telegram', telegramRouter); // No rate limit for webhook
+app.use('/api/antifraud', apiLimiter, antifraudRouter);
 
 // Error handling
 app.use(errorHandler);

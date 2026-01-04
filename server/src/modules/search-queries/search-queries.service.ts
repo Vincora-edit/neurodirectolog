@@ -3,9 +3,9 @@
  * Анализ поисковых запросов и автоматическое формирование минус-слов
  */
 
-import { clickhouseService } from './clickhouse.service';
-import { yandexDirectService } from './yandex-direct.service';
-import { aiClientService } from './ai-client.service';
+import { clickhouseService } from '../../services/clickhouse.service';
+import { yandexDirectService } from '../../services/yandex-direct.service';
+import { aiClientService } from '../../services/ai-client.service';
 import { v4 as uuidv4 } from 'uuid';
 
 export interface SearchQuery {

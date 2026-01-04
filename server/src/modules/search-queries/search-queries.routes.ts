@@ -4,9 +4,9 @@
  */
 
 import express from 'express';
-import { searchQueriesService } from '../services/search-queries.service';
-import { clickhouseService } from '../services/clickhouse.service';
-import { authenticate } from '../middleware/auth';
+import { searchQueriesService } from './search-queries.service';
+import { clickhouseService } from '../../services/clickhouse.service';
+import { authenticate } from '../../middleware/auth';
 
 const router = express.Router();
 

@@ -4,8 +4,8 @@
  */
 
 import express from 'express';
-import { telegramService } from '../services/telegram.service';
-import { authenticate } from '../middleware/auth';
+import { telegramService } from './telegram.service';
+import { authenticate } from '../../middleware/auth';
 
 const router = express.Router();
 

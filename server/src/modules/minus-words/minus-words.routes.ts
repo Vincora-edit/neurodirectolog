@@ -1,9 +1,9 @@
 import { Router } from 'express';
-import { authenticate } from '../middleware/auth';
-import { openAIService } from '../services/openai.service';
-import { minusWordsService } from '../services/minusWords.service';
-import { excelService } from '../services/excel.service';
-import { createError } from '../middleware/errorHandler';
+import { authenticate } from '../../middleware/auth';
+import { openAIService } from '../../services/openai.service';
+import { minusWordsService } from './minus-words.service';
+import { excelService } from '../../services/excel.service';
+import { createError } from '../../middleware/errorHandler';
 
 const router = Router();
 

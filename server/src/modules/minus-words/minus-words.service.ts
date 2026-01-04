@@ -1,4 +1,4 @@
-import { openAIService } from './openai.service';
+import { openAIService } from '../../services/openai.service';
 
 export interface SearchQuery {
   query: string;
